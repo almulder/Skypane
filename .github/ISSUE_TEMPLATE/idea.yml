@@ -1,0 +1,26 @@
+name: "An idea"
+description: "Tip: Send feedback in the Skypane Manager files this for you, with the version filled in."
+labels: ["idea", "needs-triage"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What's your idea?
+      description: In your own words. Please leave out names, addresses and passwords.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: What would it help with?
+      description: What you're trying to do today, and what gets in the way.
+  - type: textarea
+    id: where
+    attributes:
+      label: Where would you look for it?
+      placeholder: "e.g. on the panel, in the layout builder, in Manager -> Devices"
+  - type: input
+    id: version
+    attributes:
+      label: Skypane version
+      description: Manager -> the small tag under the Skypane name (e.g. v3.0.0 · sha-1234567)

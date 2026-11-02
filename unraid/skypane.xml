@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>skypane</Name>
+  <Repository>ghcr.io/almulder/skypane:latest</Repository>
+  <Registry>https://github.com/users/almulder/packages/container/package/skypane</Registry>
+  <Network>br0</Network>
+  <MyIP></MyIP>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/almulder/Skypane/issues</Support>
+  <Project>https://github.com/almulder/Skypane</Project>
+  <Overview>Skypane - a wall-panel dashboard for your Hubitat home: it serves the panel pages (http://IP/ = the main panel, http://IP/kitchen etc. = other panels), keeps every panel's settings in /data, and runs the Hubitat bridge, the camera video, an MQTT broker and the guest Wi-Fi code.[br][br]
+NETWORK: br0 with its own fixed IP. Type the IP you picked in "Fixed IP address" (a free address outside your router's DHCP range, e.g. 192.168.1.50). With PORT=80 the main panel is then simply http://IP/ .[br][br]
+FIRST: right after the first start, open the Manager (the WebUI button, http://IP/manage ) and create its login - whoever opens it first creates the owner's username and password, so do it before anyone else on your network can.[br][br]
+SETUP: everything else is set in the Manager: Hubitat (Maker API), cameras (optional), the time zone, the panels. Nothing secret is in this template.[br][br]
+FORGOT THE OWNER PASSWORD, or the Manager says the login is locked: open the Unraid terminal (top right) and run[br]
+docker exec -it skypane python service/reset_login.py[br]
+It clears only that password - the logins, settings, devices and panels stay. Type a new password right there, or use the one-time code it prints on the sign-in page ("I have a sign-in code", within an hour).[br][br]
+Secrets are kept in /data/private, never shown in logs or sent to a browser. LAN only - do not port-forward it. Install guide: https://github.com/almulder/Skypane/blob/main/docs/install-unraid.md</Overview>
+  <Category>HomeAutomation: Tools:</Category>
+  <WebUI>http://[IP]:[PORT:80]/manage/</WebUI>
+  <TemplateURL/>
+  <Icon>https://skypane.huskyserver.us/assets/skypane-icon.png</Icon>
+  <ExtraParams>--sysctl net.ipv4.ip_unprivileged_port_start=0 --cap-drop=ALL --security-opt=no-new-privileges</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DonateText>Enjoying Skypane? A coffee helps keep it going.</DonateText>
+  <DonateLink>https://buymeacoffee.com/almulder</DonateLink>
+  <Requires/>
+
+  <Config Name="Data (settings, backups, house files)" Target="/data" Default="/mnt/user/appdata/skypane" Mode="rw" Description="Everything Skypane keeps: the panels' settings (panels/), automatic backups (backups/), house files (house/), and private/ (keep private): the Manager logins and the house settings with their keys and tokens, the camera stream config, the MQTT logins, the guest Wi-Fi state; mosquitto/ = the built-in broker's saved messages." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/skypane</Config>
+  <Config Name="Web port" Target="PORT" Default="80" Mode="" Description="Port the pages and the Manager are served on. 80 = the panel is just http://IP/ (allowed for the non-root container by the --sysctl in Extra Parameters). Use 8088 if you remove that. If you change it, also change the WebUI field (Advanced View) from 80 to the same number, or the WebUI button opens the wrong port." Type="Variable" Display="always" Required="false" Mask="false">80</Config>
+</Container>

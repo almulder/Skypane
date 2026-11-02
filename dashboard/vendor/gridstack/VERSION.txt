@@ -1,0 +1,3 @@
+gridstack.js 13.3.0 (MIT) from the npm package gridstack@13.3.0
+(tarball sha256 8843fdccc540d3b22dd837e0616e206a74ab6daca39d0258882f0e8aa45135a6).
+Only the Manager loads it (the layout builder); panels draw plain CSS Grid.

@@ -1,0 +1,110 @@
+/* Skypane Manager — the shared parts (v2.3.0, option 7): buttons, cards, grouped rows, the segmented switch, the
+   view switch, pills, status dots, popovers, the switch, and the side layout (a side card pinned to the right edge,
+   the main area fluid —). kit.js builds the ones that need code. Colours: tokens.css. */
+
+/* ---------- buttons ---------- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 32px; padding: 0 12px; border-radius: 7px;
+  border: 1px solid var(--line-2); background: var(--surface); font-weight: 550; font-size: 13px; box-shadow: var(--shadow); white-space: nowrap;
+  color: var(--text); backdrop-filter: var(--blur); cursor: pointer; }
+.btn:hover { background: var(--hover); }
+.btn.pri { background: var(--pri); border-color: transparent; color: #fff; box-shadow: var(--pri-sh); }
+.btn.pri:hover { background: var(--pri-h); }
+.btn.ghost { border-color: transparent; box-shadow: none; background: none; color: var(--t2); backdrop-filter: none; }
+.btn.ghost:hover { background: var(--hover); color: var(--text); }
+.btn.danger { color: var(--bad); }
+.btn.sm { height: 28px; padding: 0 10px; font-size: 12.5px; }
+.btn:disabled { opacity: .45; pointer-events: none; }
+
+/* ---------- cards (the old pages' .card too: one look for both) ---------- */
+.card { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow);
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); }
+.card > h3.ch { margin: 0; padding: 13px 16px; font-size: 13.5px; font-weight: 600; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
+.card > h3.ch small { font-weight: 400; color: var(--t3); margin-left: auto; font-size: 12.5px; }
+.card .pad { padding: 14px 16px; }
+
+/* ---------- grouped rows (settings-style: a label on the left, its control on the right) ---------- */
+.gh { margin: 26px 0 8px 2px; font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--t3); display: flex; align-items: center; gap: 8px; }
+.gh:first-child { margin-top: 0; }
+.gh .r { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 12px; }
+.grp { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur); overflow: hidden; }
+.grp-row { display: flex; align-items: center; gap: 20px; min-height: 54px; padding: 10px 16px; border-top: 1px solid var(--line); }
+.grp > .grp-row:first-child { border-top: 0; }
+.grp-row .rl { flex: 1 1 0; min-width: 0; }
+.grp-row .rl b { display: block; font-weight: 500; font-size: 13.5px; }
+.grp-row .rl small { display: block; color: var(--t3); font-size: 12.5px; margin-top: 1px; }
+.grp-row .rc { flex: 0 1 46%; min-width: 200px; display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.grp-row .rc > select, .grp-row .rc > input { width: 100%; max-width: 560px; }
+.grp-row.link { cursor: pointer; } .grp-row.link:hover { background: var(--hover); }
+.gf { margin: 8px 2px 0; font-size: 12.5px; color: var(--t3); }
+@media (max-width: 1279px) { .grp-row .rc { flex-basis: 50%; min-width: 170px; } }
+
+/* ---------- the segmented switch (the old pages mark the chosen one .cur, the new ones .on) ---------- */
+.seg { display: inline-flex; padding: 2px; gap: 2px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line); flex-wrap: wrap; }
+.seg button { border: 0; background: none; padding: 0 11px; min-height: 26px; border-radius: 6px; font-size: 12.5px; color: var(--t2); font-weight: 500; white-space: nowrap; box-shadow: none; }
+.seg button:hover { color: var(--text); }
+.seg button.on, .seg button.cur { background: var(--surface); color: var(--text); box-shadow: var(--shadow), 0 0 0 1px var(--line); }
+:root[data-theme=dark] .seg button.on, :root[data-theme=dark] .seg button.cur { background: var(--hover); }
+:root[data-theme=night] .seg button.on, :root[data-theme=night] .seg button.cur { background: rgba(255, 255, 255, .16); box-shadow: none; color: #fff; }
+.seg button .i, .seg button .ic { color: inherit; }
+.seg button.cur .ic, .seg button.on .ic { color: var(--acc); }
+
+/* ---------- the view switch: the same place on every page with two views (Shell.page … views) ---------- */
+.ph { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 20px; min-height: 40px; }
+.ph h1 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -.02em; line-height: 1.25; }
+.ph p { margin: 4px 0 0; color: var(--t2); font-size: 13.5px; max-width: 640px; text-wrap: pretty; }
+.ph .sp { flex: 1; }
+.vsw { display: inline-flex; padding: 2px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--line); flex: none; }
+.vsw button { display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 12px 0 10px; border: 0; border-radius: 7px; background: none; font-size: 13px;
+  font-weight: 550; color: var(--t2); white-space: nowrap; cursor: pointer; }
+.vsw button:hover { color: var(--text); }
+.vsw button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow), 0 0 0 1px var(--line); }
+.vsw button.on .i { color: var(--acc); }
+:root[data-theme=night] .vsw button.on { background: rgba(167, 139, 250, .26); box-shadow: none; color: #fff; }
+.shell-vsw { display: flex; justify-content: flex-end; margin: -6px 0 14px; }
+
+/* ---------- pills, status dots, tags ---------- */
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 99px; font-size: 11.5px; font-weight: 600;
+  background: var(--ok-soft); color: var(--ok); white-space: nowrap; }
+.pill.warn { background: var(--warn-soft); color: var(--warn); } .pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.idle { background: var(--surface-2); color: var(--t2); } .pill.acc { background: var(--acc-soft); color: var(--acc-text); }
+i.dot, span.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none; display: inline-block; }
+i.dot.warn, span.dot.warn { background: var(--warn); } i.dot.bad, span.dot.bad { background: var(--bad); } i.dot.idle, span.dot.idle { background: var(--idle); }
+
+/* ---------- popovers (fixed, on <body>: above the page, the top bar and the rail) ---------- */
+.pop { position: fixed; z-index: var(--z-pop); background: var(--pop); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-lg);
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); color: var(--text); }
+:root[data-theme=night] .pop { background: rgba(37, 24, 91, .96); }
+
+/* ---------- the switch (role="switch") ---------- */
+.sw { width: 36px; height: 20px; border-radius: 99px; background: var(--line-2); position: relative; flex: none; border: 0; padding: 0; transition: background .15s; cursor: pointer; }
+.sw::after { content: ""; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .3); transition: left .15s; }
+.sw.on { background: var(--acc); }
+:root[data-theme=night] .sw.on { background: linear-gradient(135deg, #b49bff, #7c3aed); }
+.sw.on::after { left: 18px; }
+
+/* ---------- theme cards (Appearance) ---------- */
+.thc { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 14px 16px; }
+.thc button { border: 1px solid var(--line-2); border-radius: 12px; padding: 8px; background: var(--surface); text-align: left; color: var(--text); font-weight: 550; font-size: 13px; cursor: pointer; }
+.thc button:hover { border-color: var(--t3); }
+.thc button.on { border-color: var(--acc); box-shadow: 0 0 0 3px var(--acc-soft); }
+.thc .sw3 { display: block; height: 70px; border-radius: 7px; margin-bottom: 8px; position: relative; overflow: hidden; border: 1px solid rgba(128, 128, 150, .25); }
+.thc .sw3 i { position: absolute; display: block; border-radius: 3px; }
+.thc .sw3.light { background: #f6f6f8; } .thc .sw3.light i.a { background: #efeff3; } .thc .sw3.light i.b { background: #fff; border: 1px solid #e4e4ea; } .thc .sw3.light i.c { background: #6d4aff; }
+.thc .sw3.dark { background: #0e0e12; } .thc .sw3.dark i.a { background: #131318; } .thc .sw3.dark i.b { background: #17171d; border: 1px solid #26262f; } .thc .sw3.dark i.c { background: #8b6dff; }
+.thc .sw3.night { background: linear-gradient(180deg, #0f0830 0%, #221459 50%, #4b2f9e 85%, #8a63c9 100%); }
+.thc .sw3.night i.a { background: rgba(22, 13, 60, .62); } .thc .sw3.night i.b { background: rgba(32, 20, 80, .52); border: 1px solid rgba(255, 255, 255, .14); } .thc .sw3.night i.c { background: #b39dff; }
+.thc .sw3 i.a { left: 0; top: 0; bottom: 0; width: 18%; } .thc .sw3 i.b { left: 26%; top: 18%; right: 8%; bottom: 18%; } .thc .sw3 i.c { left: 32%; top: 30%; width: 26%; height: 9px; }
+@media (max-width: 700px) { .thc { grid-template-columns: 1fr; } }
+
+/* ---------- the side layout: main fluid, the side card pinned to the right edge (kit.js sideLayout) ---------- */
+.side-layout { display: grid; grid-template-columns: minmax(0, 1fr) clamp(300px, 22vw, 400px); gap: clamp(18px, 2vw, 32px); align-items: start; }
+.side-layout > aside { position: sticky; top: calc(var(--top-h) + 20px); display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.side-layout > .side-main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+@media (max-width: 1279px) { .side-layout { grid-template-columns: minmax(0, 1fr) 280px; gap: 18px; } }
+@media (max-width: 899px) { .side-layout { grid-template-columns: minmax(0, 1fr); } .side-layout > aside { position: static; } }
+
+/* ---------- the builder on a phone: not here ---------- */
+.phone-note { display: flex; gap: 12px; align-items: center; padding: 14px 16px; border-radius: 12px; border: 1px dashed var(--line-2); color: var(--t2); background: var(--surface); }
+.phone-note .i { color: var(--acc); }
+.btn[aria-disabled=true] { opacity: .5; cursor: not-allowed; } .btn[aria-busy=true] { cursor: progress; }   /* (v2.4.1: still focusable — a tooltip / the focus stay) */

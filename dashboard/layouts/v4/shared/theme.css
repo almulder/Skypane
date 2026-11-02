@@ -1,0 +1,1693 @@
+/* Shared look for all three layouts: purple night glass (from the reference picture). */
+:root {
+  --text: #f3efff;
+  --muted: #a99fd0;
+  --faint: #8982ad;   /* (4.5 : 1 on the glass — themes.js faintFor) */
+  --glass: rgba(28, 19, 60, 0.6);
+  --glass-strong: rgba(36, 24, 78, 0.72);
+  --glass-line: rgba(255, 255, 255, 0.09);
+  --accent: #8b5cf6;
+  --accent-2: #a78bfa;
+  --accent-grad: linear-gradient(135deg, #986ff5 0%, #7c3aed 100%);   /* (white text on it AA — themes.js gradFor) */
+  --on-glow: 0 0 28px rgba(167, 139, 250, 0.45);
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --bad: #fb7185;
+  --cool: #38bdf8;
+  --heat: #fb923c;
+  --radius: 24px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+html, body { touch-action: pan-x pan-y; }   /* no pinch zoom on a wall panel (a two-finger brush left it stuck at 5×) */
+html, body { overscroll-behavior: none; }   /* a sideways swipe past the edge must not go Back (it left the panel blank) */
+body {
+  color: var(--text);
+  font: 18px/1.35 "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  background: #0b0820 url("background.svg") center / cover no-repeat fixed;
+  overflow: hidden;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; padding: 0; }
+button:active { transform: scale(0.96); }
+
+.glass {
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--radius);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  box-shadow: 0 10px 40px rgba(5, 2, 20, 0.35);
+}
+.label { font-size: 14px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.muted { color: var(--muted); }
+.num { font-variant-numeric: tabular-nums; }
+.ic { display: block; flex: none; }
+/* a garage door on its icon (grid.js garageIcon): up when open, down when closed, sliding for its travel time between */
+.gd-fill { fill: currentColor; opacity: .14; }
+.gd-car { opacity: 0; transition: opacity .6s; }
+.gd-open .gd-car, .gd-opening .gd-car, .gd-closing .gd-car { opacity: .55; }
+.gd-open .gd-door { transform: translateY(-8px); }
+.gd-opening .gd-door { animation: gd-up linear forwards; }
+.gd-closing .gd-door { animation: gd-down linear forwards; }
+.gd-lamp { opacity: 0; fill: #f59e0b; }
+.gd-opening .gd-lamp, .gd-closing .gd-lamp { animation: gd-blink 1s steps(2) infinite; }
+@keyframes gd-up { from { transform: translateY(0); } to { transform: translateY(-8px); } }
+@keyframes gd-down { from { transform: translateY(-8px); } to { transform: translateY(0); } }
+@keyframes gd-blink { 0% { opacity: 1; } 50% { opacity: 0; } }
+
+/* person avatar */
+.avatar {
+  width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center;
+  font-weight: 700; font-size: 22px; color: #fff; position: relative;
+}
+.avatar::after {
+  content: ""; position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; border-radius: 50%;
+  border: 3px solid #1b1240; background: var(--ok);
+}
+.avatar.away { filter: grayscale(0.8) brightness(0.7); }
+.avatar.away::after { background: var(--faint); }
+
+/* toggle switch */
+.switch { width: 64px; height: 36px; border-radius: 999px; background: rgba(255,255,255,.12); position: relative; flex: none; transition: background .25s; }
+.switch::after { content: ""; position: absolute; top: 4px; left: 4px; width: 28px; height: 28px; border-radius: 50%; background: #d6ceff; transition: left .25s; }
+.switch.on { background: var(--accent-grad); box-shadow: var(--on-glow); }
+.switch.on::after { left: 32px; background: #fff; }
+
+/* pill chips */
+.chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: rgba(255,255,255,.08); font-size: 15px; }
+.chip.ok { color: var(--ok); } .chip.warn { color: var(--warn); background: rgba(251,191,36,.12); } .chip.bad { color: #fda4af; background: rgba(251,113,133,.12); }   /* (lighter rose: ≥ 4.5 : 1 on the dark glass) */
+
+/* layout switcher for showing the three versions */
+.layout-switch { position: fixed; right: 18px; bottom: 14px; display: flex; gap: 6px; z-index: 50; opacity: .55; }
+.layout-switch a { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-size: 14px; font-weight: 700;
+  color: var(--text); text-decoration: none; background: rgba(255,255,255,.1); }
+.layout-switch a.cur { background: var(--accent); }
+
+/* ---------- round 2 shared pieces ---------- */
+/* big clock (from layout 2) */
+.bigclock { font-size: 150px; font-weight: 200; line-height: .9; letter-spacing: -4px; }
+.bigclock small { font-size: 40px; letter-spacing: 0; color: var(--muted); margin-left: 8px; font-weight: 300; }
+
+/* small pills: who's home + inside/outside (from layout 3) */
+.pills { display: flex; gap: 12px; flex-wrap: wrap; }
+.pill { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-radius: 18px; }
+.pill .v { font-size: 30px; font-weight: 300; line-height: 1; }
+.pill .v sup { font-size: 14px; color: var(--muted); }
+.pill .k { font-size: 13px; color: var(--muted); line-height: 1.2; }
+.pill .live { color: var(--ok); font-size: 11px; letter-spacing: 1px; }
+.pill.faces { gap: 10px; }
+.pill.faces .avatar::after { width: 14px; height: 14px; }
+
+/* status card (windows / doors) — tap for the list */
+.status, .card.status { display: flex; flex-direction: row; align-items: center; gap: 16px; text-align: left; width: 100%; }
+.status .big { width: 60px; height: 60px; border-radius: 18px; display: grid; place-items: center; background: rgba(52,211,153,.14); color: var(--ok); flex: none; }
+.status.warn .big { background: rgba(251,191,36,.16); color: var(--warn); }
+.status .t { font-size: 20px; font-weight: 600; }
+.status .s { color: var(--muted); font-size: 14px; }
+.status .go { margin-left: auto; color: var(--faint); }
+
+/* week calendar (from layout 2) with event dots + day picking */
+.wk { display: flex; align-items: stretch; gap: 6px; }
+.wk-nav { width: 40px; border-radius: 14px; display: grid; place-items: center; color: var(--muted); background: rgba(255,255,255,.05); }
+.wk-day { flex: 1; padding: 8px 0 6px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--muted); font-size: 14px; }
+.wk-day b { font-size: 24px; color: var(--text); font-weight: 500; }
+.wk-day.today b { color: var(--accent-2); }
+.wk-day.sel { background: linear-gradient(rgba(0,0,0,.28), rgba(0,0,0,.28)), var(--accent-grad); color: #fff; box-shadow: var(--on-glow); }   /* (darkened: white text ≥ 4.5 : 1 on every theme's accent) */
+.wk-day.sel b { color: #fff; }
+.wk-dots { display: flex; gap: 3px; height: 7px; }
+.wk-dots i { width: 7px; height: 7px; border-radius: 50%; }
+.wk-day.sel .wk-dots i { box-shadow: 0 0 0 1.5px rgba(255,255,255,.8); }
+.ag-head { display: flex; align-items: center; justify-content: space-between; min-height: 34px; }
+.ag { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.ag-ev { display: flex; align-items: center; gap: 14px; padding: 8px 10px; border-radius: 16px; background: rgba(255,255,255,.04); }
+.ag-ev[style*="--calc"] { box-shadow: inset 4px 0 0 var(--calc); }   /* (the event's calendar colour) */
+.avatar.ic .ic { color: inherit; }   /* (the colour from UI.face: dark on a light person colour) */
+.ag-ic { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; flex: none; }
+.ag-t { width: 84px; color: var(--muted); font-size: 15px; flex: none; }
+.ag-n { display: flex; flex-direction: column; font-size: 18px; }
+.ag-n small { color: var(--faint); font-size: 13px; }
+.ag-none { color: var(--faint); padding: 20px 4px; }
+.ag.up .ag-ev { background: none; padding: 4px 10px; text-align: left; }
+.ag.up .ag-n { font-size: 16px; }
+/* (the coming-up rows a little lower than the day's own: the next one still fits under a full day — portrait Classic) */
+.ag.up { gap: 4px; } .ag.up .ag-ev { padding: 2px 10px; } .ag.up .ag-n { line-height: 1.15; } .ag.up .ag-ic { width: 36px; height: 36px; border-radius: 12px; }
+
+/* weather location tabs */
+.loc { display: flex; gap: 6px; flex-wrap: wrap; }
+.loc-t { padding: 7px 14px; border-radius: 12px; background: rgba(255,255,255,.07); color: var(--muted); font-size: 15px; display: flex; align-items: center; gap: 6px; }
+.loc-t.sel { background: var(--accent-grad); color: #fff; }
+.loc-t.add { padding: 7px 10px; }
+.loc-x { opacity: .7; display: grid; }
+
+/* room dock (from layout 2) */
+.dock { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); padding: 10px; display: flex; gap: 6px; border-radius: 28px; z-index: 20; }
+.dock button { width: 104px; height: 74px; border-radius: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: var(--muted); font-size: 13px; position: relative; }
+.dock button.cur { background: var(--accent-grad); color: #fff; box-shadow: var(--on-glow); }
+.dock button .n { position: absolute; top: 6px; right: 14px; min-width: 20px; height: 20px; border-radius: 10px; background: var(--warn); color: #241a00; font-size: 12px; font-weight: 700; display: grid; place-items: center; }
+.dock .sep { width: 1px; background: var(--glass-line); margin: 10px 4px; }
+/* (a long room name: two lines at most, then "…" — it grew to three and the last was cut by the bar's edge) */
+.dock .dl { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; max-width: 100%; padding: 0 4px; line-height: 1.15; text-align: center; }
+
+/* pop-up */
+.popup-host { position: fixed; inset: 0; z-index: 100; display: none; align-items: center; justify-content: center; background: rgba(6,3,18,.55); }
+.popup-host.show { display: flex; animation: fade .2s ease both; }
+.popup { width: min(760px, calc(100vw - 24px)); max-height: 84vh; padding: 26px 30px; display: flex; flex-direction: column; gap: 16px; background: var(--glass-strong); }
+.popup.wide { width: min(1100px, calc(100vw - 24px)); }
+.popup-head { display: flex; align-items: center; justify-content: space-between; }
+.popup-head h2 { margin: 0; font-size: 30px; font-weight: 500; }
+.popup-x { width: 52px; height: 52px; border-radius: 16px; background: rgba(255,255,255,.08); display: grid; place-items: center; }
+.popup-body { overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+.pgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.prow { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 16px; background: rgba(255,255,255,.06); text-align: left; }
+.prow.ok .ic { color: var(--ok); } .prow.bad { background: rgba(251,191,36,.12); } .prow.bad .ic, .prow.bad .ps { color: var(--warn); }
+.prow .pn { flex: 1; font-size: 18px; } .prow .ps { font-size: 15px; color: var(--muted); }
+.pbtn { padding: 8px 18px; border-radius: 12px; background: var(--accent-grad); font-weight: 600; font-size: 15px; }
+.phint { color: var(--faint); font-size: 14px; margin: 10px 0 0; }
+.pdemo button { margin: 4px 6px 0 0; padding: 4px 10px; border-radius: 8px; background: rgba(255,255,255,.08); font-size: 13px; }
+.psearch { display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; border-radius: 16px; background: rgba(255,255,255,.08); margin-bottom: 8px; }
+.psearch input { flex: 1; background: none; border: 0; outline: 0; color: var(--text); font: inherit; font-size: 20px; }
+
+/* ---------- round 3 ---------- */
+/* month calendar */
+.cal-toggle { display: flex; gap: 4px; background: rgba(255,255,255,.06); padding: 4px; border-radius: 12px; }
+.cal-toggle button { padding: 6px 14px; border-radius: 9px; color: var(--muted); font-size: 14px; min-height: 38px; }
+.cal-toggle button.cur { background: linear-gradient(rgba(0,0,0,.22), rgba(0,0,0,.22)), var(--accent-grad); color: #fff; }
+.mo-head { display: flex; align-items: center; justify-content: space-between; }
+.mo-head b { font-size: 20px; font-weight: 500; }
+/* (the grid: cal-mo — plain .mo is an icon motion's halo, motions.css) */
+.cal-mo { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; text-align: center; }
+.cal-mo .dow { color: var(--faint); font-size: 12px; font-weight: 600; padding-bottom: 2px; }
+.cal-mo button { padding: 5px 0 4px; border-radius: 12px; font-size: 16px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.cal-mo button.other { color: var(--faint); }
+.cal-mo button.today { color: var(--accent-2); font-weight: 700; }
+.cal-mo button.sel { background: var(--accent-grad); color: #fff; box-shadow: var(--on-glow); }
+.cal-mo .wk-dots { height: 6px; } .cal-mo .wk-dots i { width: 6px; height: 6px; }
+
+/* alarm status near the clock */
+.alarm-pill { display: inline-flex; align-items: center; gap: 10px; padding: 8px 16px 8px 12px; border-radius: 999px; font-size: 17px; font-weight: 600; }
+.alarm-pill small { font-weight: 400; color: var(--muted); font-size: 14px; }
+.still { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 12px; background: rgba(255,120,30,.18); color: #fdba74; font-size: 15px; }
+/* alerts from Hubitat (hubalerts.js): level 2 a quiet line, level 3 amber; × dismisses on this panel.
+   Each line sits on a near-solid card colour (--glass-solid, Settings → Look): the moon / sun and the clouds behind
+   must never show through the words (no backdrop blur — too slow over the animated sky, see .glass). */
+.still.hub { display: flex; margin-top: 6px; }
+.still.hub.l2 { background: linear-gradient(rgba(255,255,255,.08), rgba(255,255,255,.08)), var(--glass-solid); color: var(--text); }
+.still.hub.l3 { background: linear-gradient(rgba(251,191,36,.2), rgba(251,191,36,.2)), var(--glass-solid); color: #fde68a; }
+.still.hub.l4 { background: linear-gradient(rgba(251,113,133,.26), rgba(251,113,133,.26)), var(--glass-solid); color: #fecdd3; }
+.still.hub span { flex: 1; min-width: 0; }
+/* the × : a 44 px touch target that doesn't make the line taller */
+.hub-x { background: none; border: 0; color: inherit; cursor: pointer; width: 44px; height: 44px; margin: -10px -12px -10px 0; display: grid; place-items: center; border-radius: 10px; flex: none; }
+/* "Dismiss all" (2+ lines): one compact button under them, on the right */
+.hub-all { display: flex; justify-content: flex-end; margin-top: 6px; }
+.hub-allbtn { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px 0 12px; border-radius: 12px; white-space: nowrap; font-size: 15px;
+  color: var(--text); background: linear-gradient(rgba(255,255,255,.1), rgba(255,255,255,.1)), var(--glass-solid); border: 1px solid var(--glass-line); }
+/* the one level 1–3 alert on screen (hubalerts.js drawNote): a note above the dock on every page, × dismisses it */
+.hub-toast { position: fixed; left: 50%; bottom: calc(var(--dock-b, 112px) + 16px); transform: translateX(-50%); z-index: 60; width: max-content; max-width: min(640px, 90vw); display: flex; align-items: center; gap: 12px;
+  padding: 12px 8px 12px 18px; border-radius: 14px; background: rgba(20,14,44,.94); border: 1px solid var(--glass-line); color: var(--text); font-size: 17px; }
+.hub-toast .hub-tt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hub-toast .hub-x { margin: 0; }
+.hub-toast.l3 { border-color: rgba(251,191,36,.7); background: linear-gradient(rgba(251,191,36,.16), rgba(251,191,36,.16)), rgba(20,14,44,.96); }
+.hub-toast.l3 small { color: #fbbf24; }
+.hub-toast small, .hub-row small { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+/* Home's "Notifications · N" button and the list it opens */
+button.still.hub.hub-list { width: 100%; align-items: center; gap: 10px; font: inherit; text-align: left; cursor: pointer; border: 0; }
+.hub-rows { display: flex; flex-direction: column; gap: 8px; }
+.hub-row { display: flex; align-items: center; gap: 10px; padding: 10px 6px 10px 14px; border-radius: 12px; background: rgba(255,255,255,.06); border-left: 4px solid rgba(255,255,255,.25); }
+.hub-row.l3 { border-left-color: #fbbf24; } .hub-row.l4 { border-left-color: #fb923c; } .hub-row.l5 { border-left-color: #f43f5e; }
+.hub-row .hub-rt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.hub-row .hub-x { margin: 0; }
+/* (v3.0.0) weather warnings from a Hubitat weather device: their icon, "+N more", and the weather card's ribbon */
+.hub-ri { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: rgba(255,255,255,.08); color: #fde68a; }
+.hub-more { font-weight: 500; color: var(--muted); }
+.hub-row.dim { opacity: .6; }
+.wx-warn { display: flex; align-items: center; gap: 8px; width: 100%; margin: 0 0 4px; padding: 4px 10px; min-height: 34px; border-radius: 10px; text-align: left; flex: none;
+  font-size: 14px; font-weight: 600; color: #fff; background: rgba(251, 191, 36, .22); border: 1px solid rgba(251, 191, 36, .55); }
+.wx-warn span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wx-warn.l2 { background: rgba(56, 189, 248, .18); border-color: rgba(56, 189, 248, .5); }
+.wx-warn.l4 { background: rgba(251, 146, 60, .3); border-color: rgba(251, 146, 60, .7); }
+.wx-warn.l5 { background: rgba(244, 63, 94, .35); border-color: rgba(244, 63, 94, .8); }
+.wx-warn.dim { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.18); color: var(--muted); font-weight: 500; }
+.wx-src { font-size: 11px; line-height: 1.2; color: var(--faint); margin-top: 2px; max-width: 16em; }   /* (under the condition word: no room taken from the card) */
+.card-head .wx-warn { flex: 1 1 160px; width: auto; min-width: 0; margin: 0; }   /* (in the card's head row, beside the tabs: the card keeps its size) */
+.alert-lvl { font-size: 16px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.75); }
+/* a tap while the hub isn't connected (data.js) */
+.hub-off-toast { position: fixed; left: 50%; bottom: calc(var(--dock-b, 112px) + 16px); transform: translateX(-50%); z-index: 70; padding: 12px 20px; border-radius: 14px; pointer-events: none;
+  background: rgba(20,14,44,.94); border: 1px solid var(--glass-line); color: var(--text); font-size: 17px; animation: hubOff 2.6s ease both; }
+@keyframes hubOff { 0% { opacity: 0; } 10%, 80% { opacity: 1; } 100% { opacity: 0; } }
+.hub-toast b { font-size: 17px; }
+.alert-layer.l4 .alert-card { border-color: rgba(255,140,0,.7); }
+
+/* dock: alarm button + small gear + child-lock */
+.dock .alarm-btn { color: #fff; }
+.dock .alarm-btn.armed { background: rgba(251,113,133,.25); color: var(--bad); }
+.dock .alarm-btn.disarmed { color: var(--ok); }
+.gear { position: fixed; right: 16px; bottom: 16px; width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; color: var(--faint); background: rgba(255,255,255,.06); z-index: 25; }
+/* the settings gear is the room bar's last button (it sat apart in a corner, on content or on the bar's own arrow);
+   the corner one stays only without a bar (a new panel's dockOff, a panel address not set up yet) */
+.dock .dock-gear { width: 52px; flex: none; color: var(--faint); }
+/* alerts waiting in the list (hubalerts.js): a bell on the bar, on every page that has no Notifications line */
+.dock .dock-bell { width: 60px; flex: none; color: var(--warn); }
+.dock .dock-bell.l4 { color: var(--bad); }
+.dock .dock-bell .n { right: 6px; }
+.dock .dock-bell.l4 .n { background: var(--bad); color: #fff; }
+html:not(.dock-off):not(.not-set-up) body > .gear, html.design .dock-gear { display: none; }
+.layout-switch { right: auto; left: 18px; }
+body.child-locked main, body.child-locked .dock button:not(.alarm-btn):not(.dock-gear):not(.dock-handle) { pointer-events: none; }
+body.child-locked .dock button:not(.alarm-btn):not(.dock-gear):not(.dock-handle) { opacity: .45; }
+.lock-badge { position: fixed; right: 70px; bottom: 22px; z-index: 25; display: none; }
+body.child-locked .lock-badge { display: inline-flex; }
+
+/* keypad */
+.kp-status { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 22px; font-weight: 600; flex-wrap: wrap; }
+.kp-status small { flex-basis: 100%; text-align: center; color: var(--muted); font-weight: 400; font-size: 14px; }
+.kp-dots { display: flex; justify-content: center; gap: 18px; margin: 14px 0 4px; }
+.kp-dots i { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--accent-2); }
+.kp-dots i.on { background: var(--accent-2); }
+.kp-dots.err { animation: shake .35s; } .kp-dots.err i { border-color: var(--bad); }
+@keyframes shake { 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }
+.kp-err { text-align: center; color: var(--muted); font-size: 15px; min-height: 20px; }
+.kp { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: 400px; margin: 8px auto 0; }
+.kp button { height: 78px; border-radius: 22px; background: rgba(255,255,255,.08); font-size: 32px; font-weight: 300; display: grid; place-items: center; }
+.kp button.fn { font-size: 17px; color: var(--muted); }
+.kp-opts { display: flex; gap: 16px; justify-content: center; margin: 18px 0; }
+.kp-opt { width: 210px; height: 150px; border-radius: 24px; background: rgba(255,255,255,.08); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; font-size: 20px; font-weight: 600; }
+.kp-opt.bad { background: rgba(251,113,133,.2); color: #fecdd3; } .kp-opt.warn { background: rgba(251,191,36,.18); color: #fde68a; } .kp-opt.ok { background: rgba(52,211,153,.18); color: #a7f3d0; }
+.popup:has(.kp) { width: min(560px, calc(100vw - 24px)); }
+
+/* safety / intrusion overlay */
+.alert-layer { position: fixed; inset: 0; z-index: 102; /* above settings + look-confirm; the keypad hides it while open */ display: grid; place-items: center; background: rgba(60,0,10,.55); animation: alertbg 1.2s ease-in-out infinite alternate; }
+@keyframes alertbg { from { background: rgba(60,0,10,.45); } to { background: rgba(140,0,20,.6); } }
+.alert-card { width: min(760px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow-y: auto; padding: 36px 40px; border-radius: 32px; background: rgb(40,6,14); border: 2px solid rgba(251,113,133,.6); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; box-shadow: 0 0 80px rgba(255,0,40,.45); }
+.alert-icon { width: 120px; height: 120px; border-radius: 50%; display: grid; place-items: center; background: rgba(251,113,133,.2); color: #fda4af; margin-bottom: 10px; }
+.alert-t { font-size: 40px; font-weight: 700; color: #fff; }
+.alert-w { font-size: 24px; color: #fecdd3; margin-bottom: 8px; }
+.alert-btn { margin-top: 18px; padding: 22px 34px; border-radius: 22px; background: #fff; color: #7f1d1d; font-size: 24px; font-weight: 700; display: flex; align-items: center; gap: 12px; }
+.alert-hint { color: #fda4af; font-size: 15px; margin-top: 10px; max-width: 560px; }
+
+/* settings page */
+/* (the window pinned near the top, not centred: switching tabs doesn't make the tab bar jump; no sideways scroll) */
+.settings-layer { position: fixed; inset: 0; z-index: 95; display: none; place-items: start center; padding-top: 4vh; box-sizing: border-box; background: rgba(6,3,18,.6); }
+.settings-layer.show { display: grid; }
+.set-pin { width: min(620px, calc(100vw - 24px)); padding: 30px 34px; display: flex; flex-direction: column; gap: 16px; background: var(--glass-strong); }
+.set-pin h2, .set-head h2 { margin: 0; display: flex; align-items: center; gap: 12px; font-weight: 500; font-size: 30px; }
+.set-pin .row { display: flex; gap: 12px; justify-content: flex-end; }
+.set-page { width: min(1760px, calc(100vw - 32px)); max-height: 92vh; padding: 26px 30px; display: flex; flex-direction: column; gap: 18px; background: var(--glass-strong);
+  overflow-x: hidden; overflow-y: auto; color-scheme: dark; scrollbar-color: rgba(255,255,255,.3) transparent; box-sizing: border-box; }
+.set-page .seg { flex-wrap: wrap; } .set-grid > *, .set-grid section > * { min-width: 0; max-width: 100%; } .set-page .gw-card { box-sizing: border-box; } .set-page .gw-preview .gw-card { width: auto; max-width: 600px; flex-wrap: wrap; } .set-page .gw-preview .gw-txt { min-width: 0; }
+/* (the title, its ✕ and the tabs stay at the top while the page scrolls — on a smaller screen too) */
+.set-head { display: flex; justify-content: space-between; align-items: center; position: sticky; top: -26px; z-index: 3; margin: -26px -30px 0; padding: 26px 30px 12px;
+  background: var(--glass-opaque); border-radius: inherit; flex-wrap: wrap; row-gap: 18px; }
+.set-head .set-tabs { flex-basis: 100%; }
+.set-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+.set-grid section { padding: 18px 20px; border-radius: 22px; background: rgba(255,255,255,.05); display: flex; flex-direction: column; gap: 14px; }
+.set-grid h3 { margin: 0; font-size: 15px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 17px; }
+.set-row.col { flex-direction: column; align-items: stretch; }
+.set-row.wrap { flex-wrap: wrap; justify-content: flex-start; }
+.set-row input[type=range] { flex: 1; max-width: 220px; }
+.swatches, .bgs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.sw { height: 52px; border-radius: 14px; font-weight: 600; font-size: 15px; border: 3px solid transparent; }
+.sw.cur { border-color: #fff; }
+.bg { padding: 12px 6px; border-radius: 12px; background: rgba(255,255,255,.07); font-size: 14px; }
+.bg.cur { background: var(--accent-grad); } .bg:disabled { opacity: .45; }
+.ledpip { width: 14px; height: 14px; border-radius: 50%; display: inline-block; box-shadow: 0 0 8px currentColor; }
+.bigbtn { padding: 16px 22px; border-radius: 16px; background: rgba(255,255,255,.08); font-size: 18px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.bigbtn.primary { background: var(--accent-grad); box-shadow: var(--on-glow); }
+.seg { display: flex; gap: 6px; background: rgba(255,255,255,.06); padding: 5px; border-radius: 14px; }
+.seg button { flex: 1; padding: 9px 12px; border-radius: 10px; color: var(--muted); font-size: 14px; }
+.seg button.cur { background: var(--accent-grad); color: #fff; }
+input[type=range] { -webkit-appearance: none; appearance: none; height: 34px; background: transparent; }
+input[type=range]::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: rgba(255,255,255,.15); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 28px; height: 28px; margin-top: -10px; border-radius: 50%; background: #fff; }
+
+/* ---------- round 3 home layout (shared by the three versions) ---------- */
+main.home, main.roomview { position: absolute; inset: var(--dock-t, 0) var(--dock-r, 0) var(--dock-b, 112px) var(--dock-l, 0); padding: 24px 32px 12px; }
+main.home { display: grid; grid-template-columns: 1.08fr 1fr 0.95fr; gap: 22px; }
+.col { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
+.card { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.clockbox .greet { color: var(--text); font-size: 19px; text-shadow: 0 2px 10px rgba(0,0,0,.4); }
+.clockbox .date { font-size: 25px; font-weight: 300; text-shadow: 0 2px 10px rgba(0,0,0,.4); }
+.bigclock { font-size: 138px; text-shadow: 0 4px 30px rgba(0,0,0,.35); }
+.alarm-pill { align-self: flex-start; }
+.alarm-badge { width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; color: var(--c); border: 3px solid var(--c); background: rgba(10,6,25,.45);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--c) 45%, transparent); flex: none; }
+.clockrow { display: flex; align-items: center; gap: 20px; }
+.alarm-sub { color: var(--muted); font-size: 16px; margin-top: 4px; }
+.alarm-banner { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-radius: 16px; text-align: left; width: 100%;
+  background: color-mix(in srgb, var(--c) 22%, rgba(15,10,35,.7)); border: 1px solid color-mix(in srgb, var(--c) 55%, transparent); color: var(--c); }
+.alarm-banner b { letter-spacing: 1.5px; } .alarm-banner span { color: var(--muted); font-size: 14px; } .alarm-banner .go { margin-left: auto; }
+
+/* weather (style 2: glossy) */
+.wx .loc-t { padding: 6px 12px; font-size: 14px; min-height: 40px; }   /* (a finger tall on the wall) */
+.wx-now { display: flex; align-items: center; gap: 12px; }
+.wx-now .t { font-size: 72px; font-weight: 200; line-height: 1; }
+.wx-now .t sup { font-size: 24px; color: var(--muted); }
+.wx-meta { margin-left: auto; text-align: right; color: var(--muted); font-size: 14px; line-height: 1.6; white-space: nowrap; }   /* (a line each: never word by word) */
+.wx-days { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; flex: 1; }
+.wx-day { border-radius: 20px; background: linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.02)); border: 1px solid var(--glass-line);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 8px 0; }
+.wx-day .d { font-size: 15px; color: var(--muted); font-weight: 600; }
+.wx-day .hl { display: flex; gap: 8px; align-items: baseline; }
+.wx-day .hl b { font-size: 22px; font-weight: 500; } .wx-day .hl span { color: var(--muted); font-size: 16px; }
+.wx-day .rain { font-size: 12px; color: #7dd3fc; }
+.wx-day.today { background: linear-gradient(180deg, color-mix(in srgb, var(--accent-2) 35%, transparent), rgba(124,58,237,.1)); }
+.wx-rows { display: flex; flex-direction: column; gap: 2px; }
+/* the weather card on a grid page (round 2: readable at its normal size): a shorter "now" row and day tiles, so it
+   needs less shrinking; its place tabs stay a finger tall (36 px on screen) whatever the card's scale */
+.gc-weather .card.wx { gap: 8px; padding: 14px 16px; }
+.gc-weather .wx-now svg.wx { width: 64px; height: 64px; } .gc-weather .wx-now .t { font-size: 56px; }
+.gc-weather .wx-day { gap: 2px; padding: 4px 0; border-radius: 16px; } .gc-weather .wx-day svg.wx { width: 40px; height: 40px; }
+.gc-weather .wx-days { gap: 8px; }
+.gc-weather .loc-t { min-height: max(30px, calc(36px / var(--gfit, 1))); min-width: calc(44px / var(--gfit, 1)); justify-content: center; }
+.dayrow { display: grid; grid-template-columns: 62px 44px 40px 1fr 40px; align-items: center; gap: 10px; padding: 2px 6px; border-radius: 12px; }
+.dayrow:first-child { background: rgba(255,255,255,.07); }
+.dayrow .d { font-weight: 600; } .dayrow .lo { color: var(--muted); text-align: right; }
+.range { position: relative; height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); }
+.range i { position: absolute; top: 0; bottom: 0; border-radius: 3px; background: linear-gradient(90deg, #38bdf8, #c4b5fd, #fb923c); }
+
+/* calendar */
+.cal { flex: 1; overflow: hidden; }
+
+/* thermostat (halo) */
+.nest { align-items: center; gap: 8px; }
+.nest-dial { position: relative; width: 270px; height: 270px; touch-action: none; }
+/* the dial takes the room its card has (the card is a size container): never wider or taller than the card leaves
+   for it; a short card (Classic at 1280 × 800, a 4 × 4 grid card) puts the mode buttons beside it instead of under it
+   (also when Text size makes the card narrower inside: under them the dial was a dot) */
+.nest { container-type: size; --nest-ctl: 116px; }
+.nest:has(.modes.fans) { --nest-ctl: 156px; }
+.nest-in { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+.nest-ctl { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
+.nest-in .nest-dial { flex: none; width: min(270px, 100cqw, 100cqh - var(--nest-ctl)); height: min(270px, 100cqw, 100cqh - var(--nest-ctl)); }
+@container (max-height: 320px) and (min-width: 180px) {
+  .nest-in { flex-direction: row; gap: 14px; }
+  .nest-in .nest-dial { width: min(270px, 100cqh - 36px, 100cqw - 124px); height: min(270px, 100cqh - 36px, 100cqw - 124px); }
+  .nest-ctl { flex: 1; min-width: 0; }
+  .nest-ctl .nest-hint { display: none; }
+  .nest .nest-ctl .modes { display: grid; grid-template-columns: 1fr 1fr; }
+  .nest .nest-ctl .modes button { padding: 8px 0; min-height: 38px; }
+}
+.nest-dial .face, .nest-dial svg { width: 100%; height: 100%; }
+.nest-adj { position: absolute; top: 50%; width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-grad); box-shadow: var(--on-glow); transform: translateY(-50%); }
+.nest-adj.down { left: 18px; } .nest-adj.up { right: 18px; }
+.nest-hint { font-size: 13px; color: var(--faint); }
+.nest .modes { display: flex; gap: 6px; width: 100%; }
+.nest .modes button { flex: 1; padding: 9px 0; border-radius: 999px; color: var(--muted); font-size: 15px; border: 1px solid var(--glass-line); }
+.nest .modes button.cur { color: #fff; border-color: transparent; background: rgba(167,139,250,.3); }
+.nest .modes button.cur.heat { background: linear-gradient(135deg, #ff8a3d, #e8590c); }
+.nest .modes button.cur.cool { background: linear-gradient(135deg, #4aa3ff, #0b5ed7); }
+.nest .modes button.cur.fan { background: linear-gradient(135deg, #34d399, #059669); }
+/* (a card that shows the thermostat's fan too: a second, smaller row) */
+.nest .modes.fans button, .gt-m.fans button { padding: 6px 0; font-size: 13px; }
+.gt-m.fans { margin-top: -4px; } .gt-m button.cur.fan { background: linear-gradient(135deg, #34d399, #059669); }
+
+/* locks + openings */
+.lockrow { display: flex; align-items: center; gap: 12px; padding: 6px 12px; border-radius: 13px; background: rgba(255,255,255,.05); font-size: 16px; }
+.lockrow .n { flex: 1; } .lockrow .ic { color: var(--ok); }
+.lockrow.unlocked { background: rgba(251,113,133,.1); } .lockrow.unlocked .ic { color: var(--bad); }
+.lockrow.unknown { background: rgba(251,113,133,.1); } .lockrow.unknown .ic, .lockrow.unknown .state { color: var(--bad); }
+.lockrow.unknown { cursor: pointer; }
+.tile.unk .st, .tile.unk .icn, .rc.unk .st { color: var(--bad); }
+.lockrow .state { font-size: 14px; color: var(--muted); }
+.lockrow button { padding: 5px 16px; border-radius: 10px; background: linear-gradient(rgba(0,0,0,.22), rgba(0,0,0,.22)), var(--accent-grad); color: #fff; font-size: 14px; font-weight: 600; }
+.lockrow button.ghost { background: rgba(255, 255, 255, .1); color: var(--text); margin-left: 8px; }
+.locks { gap: 7px; }
+.locks .lock-list { min-height: 0; overflow-y: auto; }   /* (a short card scrolls its locks instead of spilling) */
+.twin { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }   /* (minmax 0: a long word wraps, never pushes the column out) */
+.twin .status > div:not(.big) { min-width: 0; }
+.twin .status { padding: 12px 14px; gap: 12px; }
+.twin .status .big { width: 46px; height: 46px; border-radius: 14px; }
+.twin .status .t { font-size: 17px; }
+.twin.temps .pill { padding: 8px 16px; }      /* inside / outside under the thermostat */
+
+/* room view */
+main.roomview .room { height: 100%; display: flex; flex-direction: column; gap: 20px; }
+.room-head { display: flex; align-items: center; gap: 14px; }
+.room-head h1 { margin: 0 8px 0 0; font-size: 54px; font-weight: 400; text-shadow: 0 2px 14px rgba(0,0,0,.4); }
+.room-clock { margin-left: auto; font-size: 56px; font-weight: 200; text-shadow: 0 2px 14px rgba(0,0,0,.4); }
+.room-clock small { font-size: 22px; color: var(--muted); margin-left: 4px; }
+.allbtns { display: flex; gap: 12px; align-items: center; }
+.allbtns .alarm-pill { margin-left: auto; }
+.tiles { display: grid; grid-template-columns: repeat(5, 1fr); grid-auto-rows: 180px; gap: 18px; }
+.tile { padding: 20px; display: flex; flex-direction: column; justify-content: space-between; text-align: left; }
+.tile .top { display: flex; justify-content: space-between; }
+.tile .icn, .item .icn { width: 56px; height: 56px; border-radius: 18px; display: grid; place-items: center; background: rgba(255,255,255,.08); color: var(--muted); }
+.tile .n, .item .n, .rc .n { font-size: 20px; font-weight: 600; } .tile .st, .item .st, .rc .st { font-size: 15px; color: var(--muted); }
+.tile.on, .item.on, .rc.on { background: color-mix(in srgb, var(--accent) 40%, rgba(28,19,60,.6)); box-shadow: var(--on-glow); }
+.tile.on .icn, .item.on .icn { background: #fff; color: var(--accent); }
+.list { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.item { display: flex; align-items: center; gap: 18px; padding: 16px 20px; text-align: left; }
+.item .grow, .rc .grow { flex: 1; }
+.circles { display: grid; grid-template-columns: repeat(6, 1fr); gap: 22px 18px; }
+.circ { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.circ .b { width: 132px; height: 132px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.08); border: 1px solid var(--glass-line); color: var(--muted); }
+.circ.on .b { background: radial-gradient(circle at 35% 30%, var(--accent-2), var(--accent) 70%); color: #fff; box-shadow: var(--on-glow); border-color: transparent; }
+.circ .n { font-size: 18px; font-weight: 600; } .circ .s { font-size: 14px; color: var(--muted); margin-top: -6px; }
+.rowctl { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: auto; }
+/* portrait (the list room style): the fan and shade cards stacked, not wider than the screen; a long name ellipsises */
+@media (max-aspect-ratio: 1/1) {
+  .rowctl { grid-template-columns: minmax(0, 1fr); margin-top: 0; }
+  .room-head { min-width: 0; flex-wrap: wrap; row-gap: 10px; } .room-head .chip { white-space: nowrap; }
+  .room-head h1 { min-width: 0; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
+.rc { padding: 16px 20px; display: flex; align-items: center; gap: 16px; }
+.fx-label { position: fixed; right: 70px; bottom: 26px; z-index: 25; font-size: 12px; color: var(--faint); }
+
+/* live sky behind everything */
+body.sky-on { background: #0b0820; }
+#sky, #fx { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+#sky { z-index: 0; } #fx { z-index: 30; pointer-events: none; }
+.mtn { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: bottom; pointer-events: none; z-index: 1; }
+main, .dock { z-index: 5; }
+/* No real blur over the animated sky: on a wall tablet, backdrop blur dropped it to ~9 fps (vs ~55 without).
+   "Frosted" is faked with a more solid tint + a soft top highlight instead. */
+.glass {
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  background: linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,0) 40%), var(--glass);
+}
+:root { --glass: rgba(30, 20, 64, 0.72); --glass-strong: rgba(30, 20, 64, 0.94); --glass-solid: rgba(30, 20, 64, 0.94); --glass-opaque: rgb(30, 20, 64); } /* Settings → Look overrides these */
+/* (pop-ups, the PIN window, Settings and "Are you sure?" carry .glass too: they keep a solid colour whatever the
+   Card transparency — the page behind must not read through the keys and rows) */
+.popup.glass, .set-pin.glass, .set-page.glass, .confirm.glass { background: linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,0) 40%), var(--glass-opaque); }
+
+/* ---------- round 4 ---------- */
+body.sky-on { color: var(--text); }
+.land { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
+.land svg, .land img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: bottom; }
+.land img.bg-own { object-position: center; }
+html.no-sky #sky { display: none; }   /* (the owner's picture fills the screen; nothing is drawn there) */
+main.home { padding-top: 46px; }                       /* everything a bit lower, from the greeting down */
+main.home .card { zoom: var(--ui-scale, 1); }          /* Settings → Text size */
+main.camview { position: absolute; inset: var(--dock-t, 0) var(--dock-r, 0) var(--dock-b, 112px) var(--dock-l, 0); padding: 46px 32px 12px; } /* clear of the Rounds bar */
+.clockbox { display: flex; flex-direction: column; gap: 2px; }
+
+/* dock: Alarm · Home · Cameras fixed, rooms scroll sideways */
+.dock { max-width: calc(100vw - 230px); align-items: stretch; }
+.dock-fixed { display: flex; gap: 6px; flex: none; }
+.dock-rail { position: relative; display: flex; flex: 0 1 auto; min-width: 0; min-height: 0; }
+/* (the fade at an end only while there are more rooms past it — app.js dockEdges sets more-prev / more-next) */
+.dock-rooms { --fp: 0px; --fn: 0px; --hp: 0px; --hn: 0px; flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; gap: 6px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
+  overscroll-behavior: contain; user-select: none; -webkit-user-select: none; scroll-padding: 0 88px;   /* (a room snaps clear of the arrows) */
+  /* (under an arrow — --hp / --hn, the arrow's width — nothing shows: a room's name peeked out beside the disc; then the fade) */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, transparent var(--hp), #000 var(--fp), #000 calc(100% - var(--fn)), transparent calc(100% - var(--hn)), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, transparent var(--hp), #000 var(--fp), #000 calc(100% - var(--fn)), transparent calc(100% - var(--hn)), transparent 100%); }
+.dock-rail.more-prev .dock-rooms { --fp: 88px; --hp: 44px; }
+.dock-rail.more-next .dock-rooms { --fn: 88px; --hn: 44px; }
+.dock-rooms.dragging { scroll-snap-type: none; cursor: grabbing; }
+.dock-rooms.dragging button { cursor: grabbing; }
+.dock-rooms::-webkit-scrollbar { display: none; }
+.dock-rooms button { flex: none; scroll-snap-align: start; -webkit-user-drag: none; }
+/* the round arrows at the ends: a 48 px wide target the bar's height, the arrow in a small disc; fade / slide in */
+.dock .dock-more { position: absolute; z-index: 3; top: 0; bottom: 0; width: 48px; height: auto; padding: 0; border-radius: 16px; gap: 0;
+  display: flex; align-items: center; justify-content: center; color: var(--text); background: none; box-shadow: none;
+  opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; }
+.dock .dock-more.prev { left: 0; transform: translateX(-6px); }
+.dock .dock-more.next { right: 0; transform: translateX(6px); }
+.dock .dock-more span { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--glass-opaque, var(--glass-strong)); border: 1px solid var(--glass-line); box-shadow: 0 2px 10px rgba(0,0,0,.35); }   /* (solid: a room's badge under it doesn't show through) */
+.dock .dock-more svg { width: 22px; height: 22px; }
+.dock-rail.more-prev .dock-more.prev, .dock-rail.more-next .dock-more.next { opacity: 1; pointer-events: auto; transform: none; }
+.dock .dock-more:active span { transform: scale(.92); }
+#dock.reorder .dock-more { display: none; }
+@media (prefers-reduced-motion: reduce) { .dock .dock-more, .dock .dock-more span { transition: none; } }
+/* rearranging the room buttons (press and hold one): they wiggle; the one being dragged is lifted */
+#dock.reorder .dock-rooms { touch-action: none; scroll-snap-type: none; }
+#dock.reorder .dock-rooms button { animation: dock-wiggle .28s ease-in-out infinite alternate; will-change: transform; }
+html.anim-paused #dock.reorder .dock-rooms button { animation-play-state: paused; }
+#dock.reorder .dock-rooms button:nth-child(2n) { animation-delay: -.14s; }
+#dock.reorder .dock-rooms button.lifted { animation: none; transform: scale(1.12); background: rgba(255,255,255,.18); z-index: 2; }
+@keyframes dock-wiggle { from { transform: rotate(-2.5deg); } to { transform: rotate(2.5deg); } }
+.reorder-done { flex: none; color: #fff; background: var(--accent, #7c3aed) !important; }
+.dock .alarm-btn.armed { background: rgba(251,113,133,.28); color: #fecdd3; box-shadow: 0 0 22px rgba(251,113,133,.35); }
+
+/* settings, round 4 */
+.set-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.set-tabs button { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 14px; background: rgba(255,255,255,.06); color: var(--muted); font-size: 16px; }
+.set-tabs button.cur { background: var(--accent-grad); color: #fff; }
+.set-grid.one { grid-template-columns: 1fr; } .set-grid.two { grid-template-columns: 1fr 1fr; } .set-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+/* a smaller screen (a 1280 × 800 tablet): fewer columns, nothing wider than the page */
+@media (max-width: 1500px) { .set-grid, .set-grid.three { grid-template-columns: repeat(2, minmax(0, 1fr)); } .set-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .set-grid, .set-grid.two, .set-grid.three { grid-template-columns: minmax(0, 1fr); } .set-page { padding: 20px 16px; }
+  .set-head { margin: -20px -16px 0; padding: 20px 16px 8px; top: -20px; } }
+.set-row.small { font-size: 15px; padding: 2px 0; }
+/* Settings → Panel → MQTT for devices → Show login */
+.mq { display: flex; flex-direction: column; gap: 12px; min-width: min(560px, 80vw); }
+.mq-row { display: flex; align-items: center; gap: 10px; }
+.mq-l { width: 90px; color: var(--dim, rgba(255,255,255,.65)); font-size: 15px; }
+.mq-v { flex: 1; min-width: 0; font: 16px/1.3 ui-monospace, Consolas, monospace; color: inherit; background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.12); border-radius: 10px; padding: 8px 10px; user-select: text; -webkit-user-select: text; }
+.mq-note { font-size: 14px; opacity: .75; margin: 4px 0 0; }
+.mq .row { display: flex; justify-content: flex-end; }
+.sensor-list { max-height: 520px; overflow: auto; padding-right: 6px; }
+.fontgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.fontgrid button { padding: 10px 6px; border-radius: 12px; background: rgba(255,255,255,.07); font-size: 16px; }
+.fontgrid button.cur { background: var(--accent-grad); color: #fff; }
+.clock-preview { min-height: 170px; display: grid; place-items: center; border-radius: 18px; background: rgba(0,0,0,.18); overflow: hidden; }
+.apply-box { display: flex; gap: 12px; justify-content: flex-end; margin-top: auto; }
+.txt { background: rgba(255,255,255,.08); border: 1px solid var(--glass-line); border-radius: 12px; color: var(--text); font: inherit; font-size: 16px; padding: 10px 12px; }
+.num-in { display: inline-flex; align-items: center; gap: 6px; } .num-in .txt { width: 90px; text-align: right; }
+.dot-btn { width: 34px; height: 34px; border-radius: 50%; border: 2px solid #fff; }
+.roomgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.roomrow { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 14px; background: rgba(255,255,255,.05); }
+.roomrow span { flex: 1; } .roomrow.off { opacity: .5; }
+.confirm-layer { position: fixed; inset: 0; z-index: 99; display: grid; place-items: center; background: rgba(6,3,18,.45); }
+.confirm { width: 620px; padding: 30px 34px; display: flex; flex-direction: column; gap: 10px; background: var(--glass-strong); text-align: center; }
+.confirm h2 { margin: 0; font-size: 30px; font-weight: 500; } .confirm p { font-size: 19px; color: var(--muted); } .confirm b { font-size: 30px; color: var(--text); }
+.confirm .row { display: flex; gap: 14px; justify-content: center; }
+.tiles { overflow: auto; align-content: start; }
+
+/* review fixes */
+#fx { z-index: 3; }                           /* effects behind the cards and clock, so they never hide text */
+html.fx-front #fx { z-index: 10; }            /* …except on Home: in front of cards + dock, under every overlay (85+) */
+html.fx-test #fx { z-index: 97; }             /* Settings → Weather effects preview: over the settings window (95), under popups (100) */
+/* panel PIN pad + "Are you sure?" (pinpad.js) */
+.pp, .pp-confirm { display: flex; flex-direction: column; align-items: center; gap: 14px; min-width: min(420px, 100%); }
+.pp-confirm p, .pp-text { font-size: 19px; color: var(--muted); text-align: center; max-width: 520px; margin: 0; }
+.pp-confirm .row { display: flex; gap: 14px; }
+.pp-dots { display: flex; gap: 14px; height: 22px; align-items: center; }
+.pp-dots i { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--muted); }
+.pp-dots i.on { background: var(--text); border-color: var(--text); }
+.pp-msg { min-height: 22px; color: var(--bad); font-size: 16px; }
+.pp-keys { display: grid; grid-template-columns: repeat(3, 96px); gap: 12px; }
+.pp-k { height: 76px; border-radius: 20px; background: rgba(255,255,255,.08); font-size: 30px; font-weight: 500; }
+.pp-k.fn { font-size: 26px; color: var(--muted); } .pp-k.ok { background: var(--accent-grad); color: #fff; font-size: 22px; }
+.pp-k:disabled { opacity: .5; }
+.pp-cancel { color: var(--muted); font-size: 17px; padding: 8px 18px; }
+/* Settings → Rooms → Devices: what each Hubitat device is (main panel) */
+.ov-list { display: flex; flex-direction: column; gap: 8px; max-height: 520px; overflow: auto; padding-right: 6px; }
+.ov-list { min-width: 640px; }
+.ov-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px 10px; align-items: center; padding: 10px 12px; border-radius: 14px; background: rgba(255,255,255,.05); }
+.ov-row .pn { grid-column: 1 / -1; font-size: 16px; } /* the name on its own line, the choices under it */
+.ov-row select { background: rgba(255,255,255,.08); color: var(--text); border: 1px solid var(--glass-line); border-radius: 10px; padding: 8px; font: inherit; font-size: 15px; }
+.ov-row select option { background: #1d1440; }
+.ov-pin { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); }
+.ov-pin input { width: 20px; height: 20px; }
+.ov-sub { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
+/* Settings → Weather effects: one card per category, a name to preview + an on/off switch per condition */
+.fx-grid section { gap: 8px; }
+.fx-row { font-size: 16px; }
+.fx-name { flex: 1; text-align: left; padding: 7px 12px; border-radius: 12px; background: rgba(255,255,255,.06); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.fx-name small { color: var(--faint); font-size: 12px; }
+.fx-name.cur { background: var(--accent-grad); color: #fff; } .fx-name.cur small { color: rgba(255,255,255,.75); }
+.fx-heavy .fx-name { opacity: .5; }
+.fx-label { right: auto; left: 50%; bottom: auto; top: 40px; transform: translateX(-50%); }
+.lock-badge { right: 16px; bottom: auto; top: 10px; }
+/* weather kept compact; the guest Wi-Fi QR card sits under it and takes the rest of the column */
+main.home .col .wx { flex: none; gap: 10px; }
+main.home { grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr) minmax(0, 0.95fr); } /* long text can't widen a column */
+main.home .col, main.home .gw-card { min-width: 0; }
+main.home .col .wx.solo { flex: 1; }        /* QR card hidden → weather takes the space again */
+main.home .part { display: contents; }        /* app.js wraps each home card so re-renders replace only changed cards */
+.set-page .seg button { white-space: nowrap; }
+main.home .col .wx-days { flex: none; height: 122px; }
+main.home .col .wx-day { gap: 0; padding: 4px 0; }
+main.home .col .wx-day .wx { width: 44px; height: 44px; }
+main.home .col .gw-card { flex: none; margin-top: auto; }  /* natural ~240 px, sits at the bottom of the column */
+/* up/down arrows inside the dial, in the ring's gap at the bottom (beside it they stuck out of the card) */
+.nest-adj.up, .nest-adj.down { width: max(40px, 18%); height: max(40px, 18%); top: auto; bottom: 1%; }
+.nest-adj.up { left: auto; right: 31%; transform: rotate(-90deg); }
+.nest-adj.down { left: 31%; right: auto; transform: rotate(90deg); }
+
+.fade-in { animation: fade .35s ease both; }
+@keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* test views (Room Test 1/2/3, see app.js "test views"): same area as the camera page; the view styles its inside */
+main.testview { position: absolute; inset: var(--dock-t, 0) var(--dock-r, 0) var(--dock-b, 112px) var(--dock-l, 0); padding: 46px 32px 12px; overflow: hidden; }
+.dock-rooms button.test { outline: 2px dashed rgba(255,255,255,.28); outline-offset: -6px; }
+/* "More in this room": appliances, speakers, sensors (app.js things) */
+.things { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; flex: none; max-height: 220px; overflow: auto; }
+.things .label { width: 100%; }
+.thing { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-radius: 16px; min-width: 240px; max-width: 460px; }
+.thing .n { font-size: 18px; } .thing .st { font-size: 15px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 380px; }
+.thing.warn { box-shadow: inset 0 0 0 2px #f59e0b; } .thing.warn .st { color: #fbbf24; }
+.thing.bad { box-shadow: inset 0 0 0 2px #f43f5e; } .thing.bad .st { color: #fb7185; }
+/* room layouts (app.js "room layouts"): same area as the camera page; the switcher sits right of the Rounds bar */
+main.roomlayout { position: absolute; inset: var(--dock-t, 0) var(--dock-r, 0) var(--dock-b, 112px) var(--dock-l, 0); padding: 46px 32px 12px; overflow: hidden; }
+#layout-switch { position: fixed; top: 8px; left: calc(50% + 130px); z-index: 60; display: flex; align-items: center; gap: 4px;
+  padding: 3px 6px 3px 12px; border-radius: 999px; background: rgba(15, 12, 35, .55); font-size: 12px; color: var(--muted); }
+#layout-switch button { border: 0; border-radius: 999px; padding: 4px 10px; font: inherit; color: var(--text); background: rgba(255,255,255,.08); }
+#layout-switch button.cur { background: var(--accent-grad); color: #fff; }
+#layout-switch[hidden] { display: none; }                         /* only on room pages */
+body.child-locked #layout-switch { pointer-events: none; opacity: .5; }
+
+/* the performance test's note (app.js App.perfTest): above everything, no blur (it would cost what it measures) */
+.perf-note { position: fixed; left: 50%; top: 24px; transform: translateX(-50%); z-index: 9999; max-width: min(760px, 92vw);
+  display: flex; flex-direction: column; gap: 6px; padding: 16px 22px; border-radius: 18px; background: rgba(12, 8, 30, .92);
+  color: var(--text); font-size: 18px; box-shadow: 0 12px 40px rgba(0, 0, 0, .5); pointer-events: none; }
+.perf-note b { font-size: 20px; }
+.perf-note i { font-style: normal; color: var(--muted); }
+.perf-note.done { pointer-events: auto; }
+
+/* ---------- Home layouts and room page styles (Manager → Panels → Look & layout) ---------- */
+main.home.lay-agenda { grid-template-columns: 1fr 1.08fr 0.95fr; }
+main.home.lay-duo { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
+main.home.lay-security { grid-template-columns: 1.08fr 1fr 0.95fr; }
+main.home.lay-minimal { grid-template-columns: minmax(0, 760px); justify-content: center; }
+main.home.lay-minimal .bigclock { font-size: 168px; }
+/* ---------- the layout builder's Home page (release 2: grid.js; Manager → Panels → Look & layout → Custom) ----------
+   Plain CSS Grid. No blurred shadows or filters (they cost the panel its frame rate over the moving sky): elevation is
+   drawn with hard-edged offsets and a top highlight. */
+main.lay-custom { grid-template-columns: repeat(var(--g-cols, 12), minmax(0, 1fr)); grid-template-rows: repeat(var(--g-rows, 8), minmax(0, 1fr));
+  gap: var(--g-gap, 14px); padding: 24px 28px 12px; }
+/* the fine grid (version 2): 96 × 64 cells without gaps, each card inset by half the gap (the builder's handles do the same) */
+main.lay-custom.fine, main.roomview.lay-custom.fine { gap: 0; padding: 17px 21px 5px; }
+main.lay-custom.fine > .gc { margin: calc(var(--g-gap, 14px) / 2); }
+/* (sp: cards at their true size — the gap is the spacing the builder keeps between them, not an inset) */
+main.lay-custom.fine.sp > .gc { margin: 0; }
+main.lay-custom.fine.sp, main.roomview.lay-custom.fine.sp { padding: 24px 28px 12px; }
+/* "Join touching cards" (overlapping cards): the seam has no border, no gap and square corners, and the card behind ends
+   where the one in front begins (--jb / --jt / --jr / --jl: cells trimmed, grid.js joins) — the two read as one card */
+main.lay-custom.fine > .gc.j-b { margin-bottom: calc(var(--g-rh, 0px) * var(--jb, 0)); border-bottom-color: transparent; border-bottom-left-radius: 0; border-bottom-right-radius: 0; box-shadow: none; }
+main.lay-custom.fine > .gc.j-t { margin-top: calc(var(--g-rh, 0px) * var(--jt, 0)); border-top-color: transparent; border-top-left-radius: 0; border-top-right-radius: 0; }
+main.lay-custom.fine > .gc.j-r { margin-right: calc(var(--g-cw, 0px) * var(--jr, 0)); border-right-color: transparent; border-top-right-radius: 0; border-bottom-right-radius: 0; box-shadow: none; }
+main.lay-custom.fine > .gc.j-l { margin-left: calc(var(--g-cw, 0px) * var(--jl, 0)); border-left-color: transparent; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.gc { position: relative; min-width: 0; min-height: 0; overflow: hidden; border-radius: var(--gr, var(--radius)); background: var(--glass);
+  border: 1px solid var(--glass-line); transition: transform .12s; }
+.gc[style*="--ga"] { background: rgba(var(--glass-rgb), var(--ga)); }
+.gc.nb { border-color: transparent; }
+.gc.e0 { box-shadow: none; }
+/* raised: the light comes from the top left, so the card's edge shows on its right and bottom */
+.gc.e1 { box-shadow: 2px 2px 0 rgba(0,0,0,.22); }
+.gc.e2 { box-shadow: 4px 4px 0 rgba(0,0,0,.28), inset 1px 1px 0 rgba(255,255,255,.08); }
+.gc.e3 { box-shadow: 7px 7px 0 rgba(0,0,0,.32), 10px 12px 22px rgba(0,0,0,.28), inset 1px 1px 0 rgba(255,255,255,.14); }
+.gc.hi { border-color: var(--ghi, var(--accent)); box-shadow: inset 0 0 0 2px var(--ghi, var(--accent)); }
+.gc.gc-hide { visibility: hidden; }
+/* the builder's canvas only: a card whose "Only show it when…" doesn't match now — faded, dashed, with a note */
+.gc.gc-cond { opacity: .45; border-style: dashed; border-color: var(--muted); }
+/* (a small tag in the top-right corner, out of the way of the card's own words; the builder's rules say when it shows) */
+.gc.gc-cond::after { content: attr(data-cond); position: absolute; right: 6px; top: 6px; z-index: 3; padding: 1px 7px; border-radius: 99px;
+  background: rgba(0,0,0,.6); color: #fff; font-size: 11px; white-space: nowrap; pointer-events: none; }
+.gc.act { cursor: pointer; touch-action: pan-y; }
+.gc.act.pressed { transform: scale(.97); }
+.gc-in { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; zoom: var(--gtx, 1); }
+.gc-in > .card, .gc-in > section, .gc-in > .twin, .gc-in > .gw-card { flex: 1; min-height: 0; margin: 0; }
+.gc .card.glass, .gc .pill.glass { background: none; border: 0; box-shadow: none; }
+.gc .twin { display: flex; gap: 0; }
+.gc .twin > * { flex: 1; }
+.gc-clock .gc-in, .gc-people .gc-in, .gc-temps .gc-in, .gc-alerts .gc-in, .gc-text .gc-in, .gc-value .gc-in { padding: 14px 18px; }
+.gc-clock .gc-in { justify-content: center; }
+.gc .ic { zoom: var(--gic, 1); }
+.gc-t { font-size: 14px; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; margin-bottom: 6px; }
+.gc-dev { display: flex; align-items: center; gap: 14px; padding: 14px 18px; height: 100%; }
+.gc-dev .gc-n { font-size: 19px; font-weight: 600; }
+.gc-dev .gc-s { color: var(--muted); font-size: 15px; margin-top: 2px; }
+.gc.on .gc-dev .ic, .gc.on .gc-btn .ic { color: var(--gcc, var(--accent-2)); }
+.gc.on { background: rgba(var(--glass-rgb), calc(var(--ga, .72) + .1)); border-color: var(--gcc, var(--accent)); }
+.gc-val { display: flex; align-items: baseline; gap: 8px; flex: 1; align-items: center; }
+.gc-val .ic { color: var(--gcc, var(--accent-2)); align-self: center; }
+.gc-val b { font-size: 52px; font-weight: 300; line-height: 1; }
+.gc-val small { color: var(--muted); font-size: 20px; }
+.gc-text { display: flex; flex-direction: column; gap: 6px; font-size: 20px; line-height: 1.35; flex: 1; min-height: 0; }
+.gc-text .ic { color: var(--gcc, var(--accent-2)); }
+.gc-text b { font-size: 15px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.gc-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; height: 100%; padding: 10px; text-align: center; }
+.gc-btn span { font-size: 18px; font-weight: 600; }
+.gc-btn small { color: var(--muted); font-size: 14px; }
+.gc-btn .ic { color: var(--gcc, var(--text)); }
+.gc-pic { width: 100%; height: 100%; display: block; }
+/* a camera card: the camera (or view) live, filling the card */
+.gc-cam { position: absolute; inset: 0; display: flex; }
+.gc-cam .cam-grid { flex: 1; gap: 4px; }
+.gc-cam .cam-tile { border-radius: 0; border: 0; }
+/* several devices on one card: a list, or tiles */
+.gc-devs { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; overflow: hidden; }
+:is(.gc-group, .gc-roomdevs, .gc-roomopen, .gc-scenes, .gc-notices, .gc-status, .gc-batteries, .gc-power, .gc-roomcams, .gc-modes) .gc-in > .gc-t { padding: 12px 16px 0; margin-bottom: 0; }
+.gc-group .gc-t + .gc-devs { padding-top: 6px; }
+.gc-gi { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,.04); cursor: pointer; touch-action: pan-y; min-height: 0; }
+.gc-gi .gc-n { flex: 1; min-width: 0; font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gc-gi .gc-s { color: var(--muted); font-size: 14px; }
+.gc-gi .ic { color: var(--muted); flex: none; }
+.gc-gi.on { background: rgba(var(--glass-rgb), .5); box-shadow: inset 0 0 0 1px var(--gcc, var(--accent)); }
+.gc-gi.on .ic { color: var(--gcc, var(--accent-2)); }
+.gc-gi.pressed { transform: scale(.97); }
+.gc-devs.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); grid-auto-rows: 1fr; }
+/* (a tile is never shorter than what's in it — the rows grow, so the card's fit sees it and draws smaller; a long name
+   takes two lines at most, a long state one) */
+.gc-devs.tiles .gc-gi { flex-direction: column; justify-content: center; text-align: center; gap: 4px; min-height: auto; min-width: 0; }
+.gc-devs.tiles .gc-n { font-size: 15px; white-space: normal; flex: none; max-width: 100%; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.gc-devs.tiles .gc-s { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gc-empty { margin: auto; color: var(--muted); font-size: 15px; }
+.gc-art { display: inline-grid; place-items: center; flex: none; position: relative; }
+/* (a room page's drawing: its own fixed size there — here it fills the space the card gives it) */
+.gc-art .rlG-solo { position: absolute; inset: 0; width: auto; height: auto; padding: 0; background: none; border: 0; border-radius: 0; cursor: inherit; }
+.gc-up { object-fit: contain; flex: none; }
+/* (an own picture is drawn a bit bigger than a line icon: never taller than its card — it was cut off at the top) */
+.gc-dev > .gc-up, .gc-btn > .gc-up, .gc-disc > .gc-up { max-height: 100%; width: auto !important; aspect-ratio: 1; }
+/* more than fits: the list scrolls, its title stays — or, with "Shrink to fit", everything is drawn smaller */
+.cal-body, .lock-list { display: flex; flex-direction: column; gap: 12px; }
+.lock-list { gap: 7px; }
+.gc .card { overflow: hidden; }
+.gc .cal-body, .gc .lock-list, .gc-devs, .gc .wx-days, .gc-text > div { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.gc .wx-days { flex: 1 1 auto; }
+.gc ::-webkit-scrollbar { width: 6px; height: 6px; }
+.gc ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .25); border-radius: 3px; }
+.gc ::-webkit-scrollbar-track { background: transparent; }
+.gc.fit .gc-in { right: auto; bottom: auto; width: calc(100% / var(--gfit, 1)); height: calc(100% / var(--gfit, 1)); transform: scale(var(--gfit, 1)); transform-origin: 0 0; }
+.gc.fit:not(.scroll) .cal-body, .gc.fit:not(.scroll) .lock-list, .gc.fit:not(.scroll) .gc-devs, .gc.fit:not(.scroll) .wx-days, .gc.fit:not(.scroll) .gc-text > div { overflow: hidden; }
+/* "Fit the width, scroll": the whole inside scrolls as one (a short card shows its top; scroll for the rest) and the
+   title row stays pinned — lists stop squeezing themselves into what's left (a calendar's week strip used to cover it) */
+.gc.fit.scroll .gc-in { overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+.gc.fit.scroll .gc-in > * { height: auto; min-height: 100%; overflow: visible; }
+.gc.fit.scroll .cal-body, .gc.fit.scroll .lock-list, .gc.fit.scroll .gc-devs, .gc.fit.scroll .wx-days, .gc.fit.scroll .gc-text > div,
+.gc.fit.scroll .ls-list, .gc.fit.scroll .nt-board { flex: none; overflow: visible; min-height: auto; }
+.gc.fit.scroll .card-head, .gc.fit.scroll .gc-t { position: sticky; top: 0; z-index: 2; background: var(--glass-strong); margin-top: -1px; }
+/* a long list that would get too small to read (Grid.fit: data-lscroll): readable, and it scrolls under its title */
+.gc[data-lscroll] .gc-in { overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+.gc[data-lscroll] .gc-devs { flex: none; overflow: visible; min-height: auto; }
+.gc[data-lscroll] .gc-t { position: sticky; top: 0; z-index: 2; background: var(--glass-strong); margin-top: -1px; }
+/* the Energy flow's title: in from the rounded corner like the other cards' titles */
+.gc-energy .gc-in > .gc-t { padding: 12px 16px 0; margin-bottom: 0; }
+/* a room's own grid (roomGrid): its header, its devices, doors / locks, cameras, appliances */
+main.roomview.lay-custom { display: grid; gap: var(--g-gap, 14px); padding-top: 18px; }
+.gc-rh { display: flex; align-items: center; gap: 16px; height: 100%; padding: 12px 20px; }
+.gc-rh .ic { color: var(--gcc, var(--accent-2)); }
+/* (the name and its chips on one row: under each other they didn't fit the 1-high header card — cut at both ends) */
+.gc-rht { flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px; }
+.gc-rht h2 { margin: 0; flex: 0 1 auto; min-width: 0; font-size: 30px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gc-rht .gc-rhc { flex-wrap: nowrap; overflow: hidden; }
+.gc-rhc { display: flex; gap: 8px; flex-wrap: wrap; }
+.gc-rhb { display: flex; gap: 8px; flex: none; }
+.gc-rhb button { display: flex; align-items: center; gap: 6px; padding: 10px 16px; border-radius: 14px; background: var(--accent-grad); color: #fff; font-size: 15px; }
+.gc-rhb button.ghost { background: rgba(255, 255, 255, .1); }
+.gc-cams { display: grid; gap: 4px; }
+.gc-cams.n2 { grid-template-columns: 1fr 1fr; } .gc-cams.n3, .gc-cams.n4 { grid-template: 1fr 1fr / 1fr 1fr; }
+.gc-cams > .cam-grid { min-height: 0; }
+.gc-things { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px; }
+/* card styles (grid.js): device square / icon, value chip / gauge, thermostat big / compact, people avatars */
+.gc-sq { display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; height: 100%; padding: 14px 16px; }
+.gc-sq .gc-disc { margin-bottom: auto; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .08); }
+.gc.on .gc-sq .gc-disc { background: var(--gcc, var(--accent)); } .gc.on .gc-sq .gc-disc .ic { color: #fff; }
+.gc-sqrow .gc-disc { flex: none; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .08); }
+.gc.on .gc-sqrow .gc-disc { background: var(--gcc, var(--accent)); } .gc.on .gc-sqrow .gc-disc .ic { color: #fff; }
+.gc-sq .gc-n { font-size: 18px; font-weight: 600; } .gc-sq .gc-s { color: var(--muted); font-size: 14px; }
+.gc-ico small { color: var(--muted); font-size: 14px; }
+.gc-chipv { display: flex; align-items: center; gap: 10px; height: 100%; padding: 0 18px; font-size: 17px; }
+.gc-chipv span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.gc-chipv b { font-size: 26px; font-weight: 400; } .gc-chipv small { color: var(--muted); }
+.gc-chipv .ic { color: var(--gcc, var(--accent-2)); }
+.gc-gauge { flex: 1; min-height: 0; position: relative; display: flex; align-items: flex-end; justify-content: center; }
+.gc-gauge svg { width: 100%; height: 100%; max-height: 100%; }
+.gc-gauge .gg-bg, .gc-gauge .gg-fg { fill: none; stroke-width: 10; stroke-linecap: round; }
+.gc-gauge .gg-bg { stroke: rgba(255, 255, 255, .1); } .gc-gauge .gg-fg { stroke: var(--gcc, var(--accent-2)); }
+.gc-gauge .gg-v { position: absolute; bottom: 4%; display: flex; align-items: baseline; gap: 4px; }
+.gc-gauge .gg-v b { font-size: 36px; font-weight: 300; } .gc-gauge .gg-v small { color: var(--muted); }
+.gt { display: flex; height: 100%; padding: 14px 18px; }
+.gt-compact { align-items: center; gap: 12px; }
+.gt-compact .ic { color: var(--gcc, var(--accent-2)); }
+.gt-now { flex: 1; display: flex; flex-direction: column; } .gt-now b { font-size: 32px; font-weight: 300; } .gt-now small, .gt-set small { color: var(--muted); font-size: 13px; }
+.gt-set { display: flex; flex-direction: column; align-items: center; } .gt-set b { font-size: 30px; }
+.gt-set.heat b { color: #fb923c; } .gt-set.cool b { color: #38bdf8; }
+.gt-b { width: 46px; height: 46px; border-radius: 50%; font-size: 26px; line-height: 1; background: rgba(255, 255, 255, .1); color: var(--text); flex: none; }
+.gt-big { flex-direction: column; gap: 10px; }
+.gt-row { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.gt-big .gt-set b { font-size: 64px; font-weight: 200; } .gt-big .gt-b { width: 64px; height: 64px; font-size: 34px; }
+.gt-m { display: flex; gap: 6px; } .gt-m button { flex: 1; padding: 8px 0; border-radius: 999px; color: var(--muted); font-size: 14px; border: 1px solid var(--glass-line); }
+.gt-m button.cur { background: var(--accent-grad); color: #fff; border-color: transparent; }
+.gt-m button.cur.heat { background: linear-gradient(135deg, #fb923c, #ea580c); } .gt-m button.cur.cool { background: linear-gradient(135deg, #38bdf8, #0284c7); }
+.gc-ppl { display: flex; align-items: center; justify-content: space-evenly; gap: 10px; height: 100%; padding: 10px; flex-wrap: wrap; }
+.gc-pp { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 15px; }
+.gc-pp .avatar { box-shadow: 0 0 0 3px var(--ok); } .gc-pp.away .avatar { box-shadow: 0 0 0 3px rgba(255, 255, 255, .2); opacity: .6; }
+.gc-pp small { color: var(--muted); font-size: 12px; }
+/* a slider tile (device style "slider"): the fill is the level; it moves with transform only */
+.gc-sl { position: relative; height: 100%; touch-action: pan-y; }
+.gc-slf { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(var(--glass-rgb), .2), var(--gcc, var(--accent))); opacity: .55; transform-origin: 0 50%; }
+.gc-sl .gc-dev { position: relative; }
+/* scenes, modes, safety, notifications, countdown, bin day */
+.gc-scenes { flex: 1; min-height: 0; display: flex; gap: 8px; padding: 10px 12px; overflow: auto; }
+.gc-scenes.row { flex-wrap: wrap; align-content: center; } .gc-scenes.list { flex-direction: column; }
+.gc-sc { flex: 1 1 90px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 64px; padding: 8px;
+  border-radius: 14px; background: rgba(255, 255, 255, .07); cursor: pointer; touch-action: pan-y; font-size: 14px; font-weight: 600; text-align: center; }
+.gc-scenes.list .gc-sc { flex-direction: row; justify-content: flex-start; flex: none; min-height: 0; }
+.gc-sc .ic { color: var(--gcc, var(--accent-2)); } .gc-sc.pressed { transform: scale(.95); background: rgba(var(--glass-rgb), .6); }
+.gc-modes { display: flex; flex-direction: column; justify-content: center; height: 100%; padding: 10px 12px; gap: 6px; }
+.md-seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.md-seg button { flex: 1 1 80px; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 6px; border-radius: 14px;
+  background: rgba(255, 255, 255, .07); color: var(--muted); font-size: 13px; }
+.md-seg button.cur { background: var(--accent-grad); color: #fff; } .md-seg button.cur .ic { color: #fff; }
+.md-chip { display: flex; align-items: center; gap: 10px; font-size: 18px; flex-wrap: wrap; }
+.md-chip details { width: 100%; } .md-chip summary { color: var(--muted); font-size: 13px; cursor: pointer; }
+.gc-safe { display: flex; align-items: center; gap: 14px; height: 100%; padding: 12px 18px; }
+.gc-safe b { display: block; font-size: 20px; } .gc-safe small { color: var(--muted); font-size: 14px; }
+.gc-safe.ok .ic { color: var(--ok); } .gc-safe.bad .ic, .gc-safe.bad b { color: var(--bad); }
+.gc-safe.warn .ic, .gc-safe.warn b { color: var(--warn); }
+.gc.alarm { border-color: var(--bad); background: rgba(251, 113, 133, .16); }
+.gc-nt { display: grid; grid-template-columns: 6px 1fr auto; grid-template-rows: auto auto; align-items: center; gap: 0 10px; padding: 8px 10px;
+  border-radius: 12px; background: rgba(255, 255, 255, .05); }
+.gc-nt > i { grid-row: 1 / 3; width: 6px; height: 100%; border-radius: 3px; background: var(--muted); }
+.gc-nt.l3 > i { background: var(--warn); } .gc-nt.l4 > i { background: #fb923c; } .gc-nt.l5 > i { background: var(--bad); } .gc-nt.l2 > i { background: var(--accent-2); }
+.gc-nt small { grid-column: 2; color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gc-nt button { grid-row: 1 / 3; grid-column: 3; padding: 6px 10px; border-radius: 10px; background: rgba(255, 255, 255, .1); color: var(--text); }
+.gc-cd { display: flex; align-items: center; justify-content: center; gap: 14px; height: 100%; padding: 10px; text-align: center; }
+.gc-cd > div { display: flex; flex-direction: column; } .gc-cd b { font-size: 56px; font-weight: 300; line-height: 1; }
+.gc-cd small { color: var(--muted); font-size: 15px; } .gc-cd span { font-size: 18px; font-weight: 600; margin-top: 4px; }
+.gc-cd .ic { color: var(--gcc, var(--accent-2)); }
+.gc-bins { display: flex; align-items: center; gap: 10px; height: 100%; padding: 12px 18px; }
+.gc-bins b { display: block; font-size: 19px; } .gc-bins small { color: var(--muted); font-size: 14px; }
+.gc-bin .ic { color: var(--bin); } .gc-bins > .ic { color: var(--muted); }
+/* alarm (HSM), lock with slide to unlock, garage door */
+.al { display: flex; flex-direction: column; justify-content: center; gap: 10px; height: 100%; padding: 12px 16px; }
+.al-st { display: flex; align-items: center; gap: 10px; } .al-st b { font-size: 22px; }
+.al-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.al-btns button { flex: 1 1 90px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px; border-radius: 14px;
+  background: rgba(255, 255, 255, .08); color: var(--text); font-size: 14px; font-weight: 600; }
+.al-btns button.bad { background: rgba(251, 113, 133, .2); } .al-btns button.warn { background: rgba(251, 191, 36, .18); } .al-btns button.ok { background: rgba(52, 211, 153, .18); }
+.al-hint { color: var(--muted); }
+.al-badge { cursor: pointer; align-items: flex-start; }
+.gc.armed { border-color: var(--bad); }
+.lk, .gr { display: flex; align-items: center; gap: 14px; padding: 12px 18px; }
+.lk b, .gr b { display: block; font-size: 20px; } .lk small, .gr small { color: var(--muted); font-size: 14px; }
+.gc-lock .lk { flex: 1; } .lk-shut .lk .ic { color: var(--ok); } .lk-open .lk .ic, .lk-open .lk b { color: var(--bad); }
+.lk-track { position: relative; margin: 0 14px 12px; height: 54px; border-radius: 27px; background: rgba(255, 255, 255, .08); display: flex; align-items: center;
+  justify-content: center; color: var(--muted); font-size: 15px; touch-action: none; overflow: hidden; }
+.lk-thumb { position: absolute; left: 4px; top: 4px; width: 46px; height: 46px; border-radius: 50%; background: var(--accent-grad); display: grid; place-items: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .35); cursor: grab; z-index: 1; }
+.lk-thumb .ic { color: #fff; }
+.gc-lock .gc-in { justify-content: space-between; }
+.gr { height: 100%; } .gc-garage.on b { color: var(--warn); }
+/* a picture with live values / a garage of 1-3 doors (grid.js spot) */
+.spc { height: 100%; display: flex; align-items: center; gap: 14px; padding: 10px 14px; position: relative; }
+.sp-below, .sp-solo { flex-direction: column; justify-content: center; text-align: center; gap: 6px; }
+.sp-pic { flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.sp-pic small { color: var(--muted); font-size: 13px; }
+/* the picture grows with the card: a share of the card's own size (cq units; an older browser keeps the 60 px) */
+.gc-spot .gc-in { container-type: size; }
+.sp-beside .sp-pic > :is(svg.ic, .gc-art, .gc-up) { height: min(70cqh, 42cqw) !important; width: auto !important; max-width: 48cqw; }
+.sp-below .sp-pic > :is(svg.ic, .gc-art, .gc-up) { height: min(52cqh, 75cqw) !important; width: auto !important; max-width: 90cqw; }
+.sp-solo .sp-pic > :is(svg.ic, .gc-art, .gc-up) { height: min(72cqh, 85cqw) !important; width: auto !important; max-width: 90cqw; }
+.sp-pic > .gc-art { aspect-ratio: 1.6 / 1.85; } .sp-pic > .gc-up { aspect-ratio: 1; }
+.sp-side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.sp-below .sp-side { width: 100%; }
+.sp-t { font-weight: 600; font-size: 16px; }
+.sp-vals { display: flex; flex-direction: column; gap: 3px; }
+.sp-r { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; min-height: 26px; }
+.sp-r > span { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-r > b { font-weight: 600; white-space: nowrap; }
+/* a lock's row: its name keeps its room (it tells you which lock) — "tap to lock" gives way first */
+.sp-lk > span { flex: 0 0 auto; max-width: 60%; }
+.sp-lk > b { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.sp-r > b > small { font-size: .78em; font-weight: 400; }
+.sp-r.warn > b, .sp-lk.open > b { color: var(--warn); }
+.sp-sw { cursor: pointer; } .sp-sw > b { display: none; }
+.sp-tg { flex: none; width: 40px; height: 22px; border-radius: 11px; background: rgba(255, 255, 255, .14); position: relative; transition: background .25s; }
+.sp-tg::after { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .25s; }
+.sp-sw.on .sp-tg { background: var(--accent); } .sp-sw.on .sp-tg::after { transform: translateX(18px); }
+.sp-sw.pressed, .sp-lk.pressed { opacity: .7; }
+.sp-trk.lk-track { margin: 0; height: 30px; flex: 0 1 150px; min-width: 110px; font-size: 12px; }
+.sp-trk .lk-thumb { width: 24px; height: 24px; left: 3px; top: 3px; }
+.sp-pop { position: absolute; z-index: 3; left: 50%; top: 50%; transform: translate(-50%, -50%); min-width: 200px; max-width: 92%; padding: 12px 14px;
+  border-radius: 16px; background: var(--card-solid, #2a2150); box-shadow: 0 12px 30px rgba(0, 0, 0, .5); display: flex; flex-direction: column; gap: 4px; text-align: left; }
+.spc [data-gdoor] { cursor: pointer; }
+/* a blank card (grid.js blank): the owner's pieces, each in its own box (shares of the card: they move and grow with
+   it); each piece is a size container, so a picture, a toggle or a garage fills the box it was given */
+.bk { position: relative; width: 100%; height: 100%; }
+.bk-none { display: grid; place-items: center; }
+.bk-none .gc-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 10px; font-size: 14px; }
+.bk-p { position: absolute; box-sizing: border-box; padding: 3px 6px; overflow: hidden; container-type: size; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; min-width: 0; min-height: 0; }
+.bk-p.pressed { opacity: .7; }
+.bk-pic { flex: 1; min-height: 0; width: 100%; container-type: size; display: grid; place-items: center; }
+.bk-pic > :is(svg.ic, .gc-up) { width: auto !important; height: min(100cqh, 100cqw) !important; aspect-ratio: 1; }
+.bk-pic > .gc-art { width: auto !important; height: min(100cqh, 100cqw * 1.85 / 1.6) !important; aspect-ratio: 1.6 / 1.85; }
+.bk-icon > small, .bk-gar > small { flex: none; color: var(--muted); font-size: clamp(11px, 14cqh, 18px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.bk-icon.on .ic, .bk-light.on .ic { color: var(--gcc, var(--accent-2)); }
+/* a light: its picture over its name (a wide, low box: side by side) */
+.bk-light { cursor: pointer; border-radius: 14px; }
+.bk-light.on { background: rgba(var(--glass-rgb), .45); box-shadow: inset 0 0 0 1px var(--gcc, var(--accent)); }
+.bk-lt { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-align: center; min-width: 0; }
+.bk-lt > :is(svg.ic, .gc-up) { flex: none; width: auto !important; height: min(52cqh, 60cqw) !important; aspect-ratio: 1; }
+.bk-lt > .gc-art { flex: none; width: auto !important; height: min(56cqh, 52cqw) !important; aspect-ratio: 1.6 / 1.85; }
+.bk-lt > div { min-width: 0; max-width: 100%; }
+/* (names get smaller with a narrow box before they're cut, and break between words — inside a word only when one word alone is too wide) */
+.bk-lt b { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: clamp(10px, min(14cqh, 11cqw), 22px); line-height: 1.15; overflow: hidden; overflow-wrap: break-word; hyphens: auto; }
+.bk-lt small { color: var(--muted); font-size: clamp(9px, min(12cqh, 10cqw), 17px); }
+@container (min-aspect-ratio: 2 / 1) {
+  .bk-lt { flex-direction: row; justify-content: flex-start; text-align: left; gap: 8px; }
+  .bk-lt > :is(svg.ic, .gc-up) { height: min(80cqh, 34cqw) !important; } .bk-lt > .gc-art { height: min(86cqh, 30cqw) !important; }
+  .bk-lt b { font-size: clamp(11px, 28cqh, 22px); -webkit-line-clamp: 1; } .bk-lt small { font-size: clamp(10px, 24cqh, 16px); }
+}
+/* a switch / a lock: the Picture & values rows, as big as the box lets them (the toggle and the track in em) */
+.bk-p > .sp-r { width: 100%; height: 100%; font-size: clamp(11px, 34cqh, 26px); }
+.bk-p > .sp-r .sp-tg { width: 2.4em; height: 1.35em; border-radius: .7em; }
+.bk-p > .sp-r .sp-tg::after { width: 1em; height: 1em; left: .18em; top: .18em; }
+.bk-p > .sp-sw.on .sp-tg::after { transform: translateX(1.05em); }
+.bk-p > .sp-r .sp-trk { height: min(84cqh, 2.4em); flex: 0 1 60%; min-width: 0; font-size: .8em; border-radius: 99px; }
+.bk-p > .sp-r .sp-trk .lk-thumb { width: calc(min(84cqh, 2.4em) - 6px); height: calc(min(84cqh, 2.4em) - 6px); }
+.bk-p > .sp-r .sp-trk .lk-thumb .ic { width: 60%; height: 60%; }
+/* a value / a door: its name over the reading (a wide, low box: side by side, like a row) */
+.bk-v { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; text-align: center; min-width: 0; }
+.bk-v > span { color: var(--muted); font-size: clamp(9px, min(16cqh, 8cqw), 18px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.bk-v > b { font-size: clamp(11px, min(40cqh, 20cqw), 64px); font-weight: 600; white-space: nowrap; line-height: 1.1; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.bk-dr > .ic { flex: none; width: auto; height: min(34cqh, 40cqw); color: var(--muted); }
+.bk-v.warn > b, .bk-v.warn > .ic { color: var(--warn); }
+@container (min-aspect-ratio: 3 / 1) {
+  .bk-v { flex-direction: row; justify-content: space-between; gap: 8px; text-align: left; }
+  .bk-v > span { flex: 1; font-size: clamp(10px, 34cqh, 18px); } .bk-v > b { font-size: clamp(12px, 46cqh, 40px); }
+  .bk-dr > .ic { height: min(60cqh, 24px); }
+}
+/* a garage: its doors as big as the box allows; a tap on a door opens / closes it */
+.bk-gar { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0; }
+.bk-gar > svg.ic { flex: none; height: 76cqh !important; width: auto !important; max-width: 100%; }
+.bk-gar [data-gdoor] { cursor: pointer; }
+.bk-garage.on small { color: var(--warn); }
+/* text: as typed (live values filled in), its size from the piece's settings */
+.bk-tx { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; line-height: 1.25; overflow: hidden; }
+.bk-tx > div { overflow-wrap: break-word; hyphens: auto; }
+.gr.gr-col { flex-direction: column; justify-content: center; text-align: center; gap: 4px; padding: 8px; }
+/* room tile chips, system status, photos, batteries, power, the light bar */
+.gc-rchips { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+.gc-rchips i { display: inline-flex; align-items: center; gap: 3px; font-style: normal; font-size: 13px; color: var(--muted); padding: 2px 8px; border-radius: 999px; background: rgba(255, 255, 255, .07); }
+.gc-rchips i.w { color: var(--warn); }
+.gc-st { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 8px 16px; }
+.st-row { display: flex; align-items: center; gap: 10px; } .st-row b { font-size: 16px; } .st-row small { margin-left: auto; color: var(--muted); }
+.st-row > i { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); } .st-row > i.bad { background: var(--bad); }
+.gc-ph { position: absolute; inset: 0; background: #000; }
+.gc-ph img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: var(--fit, cover); opacity: 0; transition: opacity 1.2s; }
+.gc-ph img.on { opacity: 1; }
+.gc-bat.warn .ic { color: var(--warn); } .gc-bat.bad .ic { color: var(--bad); }
+.gc-pw { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 6px 16px 12px; }
+.gc-pwt { font-size: 34px; font-weight: 300; } .gc-pwt small { font-size: 14px; color: var(--muted); margin-left: 8px; }
+.gc-pwr { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 15px; }
+.gc-pwr span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gc-pwr > i { grid-column: 1 / -1; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .08); overflow: hidden; display: block; }
+.gc-pwr > i > i { display: block; height: 100%; background: var(--gcc, var(--accent-2)); transform-origin: 0 50%; }
+.gc-vb { touch-action: none; }
+.gc-vb .gc-slf { transform-origin: 50% 100%; background: linear-gradient(0deg, var(--gcc, var(--accent)), rgba(var(--glass-rgb), .2)); }
+.gc-vbt { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 100%; padding: 14px 8px; text-align: center; }
+.gc-vbt b { font-size: 22px; } .gc-vbt .gc-n { font-size: 14px; color: var(--muted); }
+/* music player */
+.pl { display: flex; align-items: center; gap: 12px; height: 100%; padding: 10px 14px; min-width: 0; }
+.pl-art { width: 64px; height: 64px; border-radius: 12px; object-fit: cover; flex: none; background: rgba(255, 255, 255, .06); display: grid; place-items: center; }
+.pl-noart .ic { color: var(--muted); }
+.pl-now { flex: 1; min-width: 0; display: flex; flex-direction: column; } .pl-now b, .pl-now small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-now b { font-size: 17px; } .pl-now small { color: var(--muted); font-size: 14px; }
+.pl-ctl { display: flex; gap: 6px; flex: none; }
+.pl button { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .08); color: var(--text); padding: 0; }
+.pl-ctl button:nth-child(2) { background: var(--accent-grad); } .pl-ctl button:nth-child(2) .ic { color: #fff; }
+.pl-vol { display: flex; align-items: center; gap: 8px; width: 100%; }
+.pl-vol > i { flex: 1; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .1); overflow: hidden; display: block; }
+.pl-vol > i > i { display: block; height: 100%; background: var(--gcc, var(--accent-2)); transform-origin: 0 50%; }
+.pl-vol span { min-width: 2.2em; text-align: right; color: var(--muted); }
+.pl-big { flex-direction: column; justify-content: space-evenly; text-align: center; gap: 6px; }
+.pl-big .pl-art { flex: 1 1 0; min-height: 0; height: auto; width: auto; max-width: 220px; aspect-ratio: 1; }   /* (the art gives way: the controls always fit) */
+.pl-big .pl-ctl, .pl-big .pl-vol { flex: none; }
+.pl-big .pl-now { flex: none; width: 100%; } .pl-v { flex-wrap: wrap; } .pl-v b { flex: 1; }
+/* arc thermostat */
+.gt-arc { flex-direction: column; align-items: center; gap: 4px; }
+.ga { position: relative; flex: 1; min-height: 0; aspect-ratio: 1; max-width: 100%; }
+.ga svg { width: 100%; height: 100%; transform: rotate(0deg); }
+.ga-bg, .ga-fg { fill: none; stroke-width: 12; stroke-linecap: round; transform: rotate(135deg); transform-origin: 100px 100px; }
+.ga-bg { stroke: rgba(255, 255, 255, .1); } .ga-fg { stroke: var(--accent-2); } .ga-fg.heat { stroke: #fb923c; } .ga-fg.cool { stroke: #38bdf8; }
+.ga-now { fill: #fff; stroke: rgba(0, 0, 0, .3); stroke-width: 2; }
+.ga-mid { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.ga-mid b { font-size: 46px; font-weight: 200; } .ga-mid small { color: var(--muted); font-size: 13px; }
+.ga-row { flex: none; width: 100%; } .ga-row span { color: var(--muted); font-size: 14px; }
+/* (the mode buttons: the card's whole width, each a finger wide — 44 px — wrapping to a second row when they must) */
+.gt-arc .gt-m { flex: none; width: 100%; flex-wrap: wrap; } .gt-m button { min-width: 44px; min-height: 36px; padding-left: 6px; padding-right: 6px; }
+/* fan / purifier */
+.fn { display: flex; flex-direction: column; justify-content: center; gap: 10px; height: 100%; padding: 12px 14px; }
+.fn-h { display: flex; align-items: center; gap: 10px; } .fn-h b { flex: 1; font-size: 18px; } .fn-h small { color: var(--muted); }
+.fn-ic { display: inline-grid; } .gc.on .fn-ic { animation: fnspin 1.6s linear infinite; } .gc.on .fn-ic .ic { color: var(--gcc, var(--accent-2)); }
+@keyframes fnspin { to { transform: rotate(360deg); } }
+.fn-sp { display: flex; gap: 6px; flex-wrap: wrap; }
+.fn-sp button { flex: 1 1 34px; padding: 9px 2px; border-radius: 12px; background: rgba(255, 255, 255, .08); color: var(--muted); font-size: 14px; }
+.fn-sp button.cur { background: var(--accent-grad); color: #fff; }
+/* six speeds (low, medium-low … high): one row, smaller words — the card scales down to fit them rather than hide a row */
+.fn-sp.many { flex-wrap: nowrap; } .fn-sp.many button { flex: 1 1 auto; font-size: 12px; padding: 9px 4px; }
+/* energy flow: Home in the middle, Solar above, Grid left, Battery right; dots slide along the lines (transform only) */
+.ef { position: relative; flex: 1; min-height: 190px; margin: 0 8px 8px; }
+.ef-n { position: absolute; display: flex; flex-direction: column; align-items: center; width: 34%; text-align: center; z-index: 1; }
+.ef-n .ic { width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center; background: rgba(var(--glass-rgb), .95); border: 2px solid var(--glass-line); }
+.ef-n b { font-size: 16px; } .ef-n small { color: var(--muted); font-size: 12px; }
+.ef-n.s { left: 33%; top: 0; } .ef-n.s .ic { color: #fbbf24; border-color: #fbbf24; }
+.ef-n.g { left: 0; bottom: 0; } .ef-n.g .ic { color: #60a5fa; border-color: #60a5fa; }
+.ef-n.b { right: 0; bottom: 0; } .ef-n.b .ic { color: #34d399; border-color: #34d399; }
+.ef-n.h { left: 33%; bottom: 0; } .ef-n.h .ic { color: var(--accent-2); border-color: var(--accent-2); width: 60px; height: 60px; }
+/* the lines run from Home's circle (bottom middle) to each node */
+.ef-sp { position: absolute; left: 50%; bottom: 52px; height: 3px; background: rgba(255, 255, 255, .14); transform-origin: 0 50%; overflow: hidden; }
+.ef-sp.s { width: calc(100% - 175px); max-width: 220px; transform: rotate(-90deg); }
+.ef-sp.g { width: 31%; bottom: 40px; transform: rotate(180deg); }
+.ef-sp.b { width: 31%; bottom: 40px; }
+.ef-sp i { position: absolute; inset: 0; opacity: 0; }
+.ef-sp i::before { content: ""; position: absolute; left: 0; top: -2px; width: 7px; height: 7px; border-radius: 50%; background: #fff; }
+.ef-sp.in i, .ef-sp.out i { opacity: .9; animation: efout 1.8s linear infinite; } .ef-sp.in i { animation-name: efin; }
+.ef-sp i:nth-child(2) { animation-delay: -.6s; } .ef-sp i:nth-child(3) { animation-delay: -1.2s; }
+@keyframes efout { from { transform: translateX(0); } to { transform: translateX(100%); } }
+@keyframes efin { from { transform: translateX(100%); } to { transform: translateX(0); } }
+/* the version running, lower left (app.js versionTag) */
+#ver-tag { position: fixed; left: 10px; bottom: 6px; z-index: 40; font-size: 11px; letter-spacing: .03em; color: var(--text); opacity: .5; pointer-events: none; }
+/* "New version ready · Refresh" (app.js): top right, above the page, under pop-ups and full-screen cameras */
+.refresh-pill { position: fixed; top: 14px; right: 14px; z-index: 40; display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 14px; border-radius: 999px;
+  color: var(--text); font-size: 15px; border: 1px solid var(--glass-line); animation: fade .4s ease-out; }
+.refresh-pill b { padding: 6px 14px; border-radius: 999px; background: var(--accent-grad); color: #fff; font-weight: 600; }
+body.benching .refresh-pill { display: none; }
+/* the full benchmark (bench.js): a test stage over the page, see-through so the sky shows */
+body.benching #main, body.benching .dock { display: none; }
+.bn { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; pointer-events: none; }
+.bn.running { pointer-events: auto; touch-action: none; } .bn-hint.flash { color: var(--text); font-weight: 600; }
+.bn.done { pointer-events: auto; background: rgba(0, 0, 0, .45); justify-content: center; align-items: center; }
+.bn-top { display: flex; flex-direction: column; gap: 6px; margin: 16px auto 0; padding: 14px 20px; max-width: 640px; border-radius: 18px;
+  background: var(--glass-strong); color: var(--text); font-size: 16px; text-align: center; }
+.bn.done .bn-top { margin: 0; font-size: 18px; }
+.bn-bar { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .12); overflow: hidden; } .bn-bar i { display: block; height: 100%; width: 0; background: var(--accent-grad); }
+.bn-top small { color: var(--muted); }
+.bn-stage { flex: 1; min-height: 0; padding: 16px; }
+.bn-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; height: 100%; }
+.bn-card { display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 14px; border-radius: 18px; background: var(--glass); color: var(--text);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .25); }
+.bn-card.on { background: var(--glass-strong); } .bn-card.on .bn-ic { color: var(--accent); }
+.bn-clock { font-size: 44px; } .bn-v { color: var(--muted); }
+.bn-art { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; height: 100%; align-items: center; }
+.bn-artbox { display: grid; place-items: center; } .bn-artbox svg { width: 100%; max-height: 60vh; }
+.bn-anim { position: relative; height: 100%; }
+.bn-anim i { position: absolute; left: 0; width: 80px; height: 80px; border-radius: 20px; background: var(--accent-grad); opacity: .8; animation: bn-move 3s linear infinite alternate; }
+.bn-anim i:nth-child(3n) { top: 10%; } .bn-anim i:nth-child(3n+1) { top: 40%; } .bn-anim i:nth-child(3n+2) { top: 70%; }
+@keyframes bn-move { from { transform: translateX(0) rotate(0); } to { transform: translateX(calc(100vw - 120px)) rotate(360deg); } }
+.bn-cams { display: grid; grid-template-columns: repeat(var(--n), 1fr); gap: 6px; height: 100%; }
+.bn-cam { position: relative; min-height: 0; background: #000; border-radius: 8px; overflow: hidden; }
+.bn-cam .cam-media { position: absolute; inset: 0; width: 100%; height: 100%; }
+.bn-bars { background: repeating-linear-gradient(90deg, #c00 0 14.3%, #cc0 14.3% 28.6%, #0c0 28.6% 42.9%, #0cc 42.9% 57.2%, #00c 57.2% 71.5%, #c0c 71.5% 85.8%, #eee 85.8% 100%); }
+/* shared lists and notes (lists.js) */
+.ls { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.ls > .gc-t { padding: 12px 16px 0; }
+.ls-list, .nt-board { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 12px; display: flex; flex-direction: column; gap: 4px; }
+.ls-i { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-bottom: 1px solid var(--glass-line); font-size: 17px; }
+.ls-i span { flex: 1; min-width: 0; overflow-wrap: anywhere; } .ls-i.done span { color: var(--muted); text-decoration: line-through; }
+.ls-ck { width: 30px; height: 30px; flex: none; border-radius: 9px; border: 2px solid var(--muted); display: grid; place-items: center; padding: 0; background: none; }
+.ls-i.done .ls-ck { background: var(--accent-grad); border-color: transparent; } .ls-ck .ic { color: #fff; }
+.ls-x { background: none; color: var(--faint); font-size: 16px; padding: 4px 8px; }
+.ls-add { display: flex; gap: 6px; padding: 8px 12px 12px; align-items: center; flex-wrap: wrap; }
+.ls-add input { flex: 1; min-width: 100px; padding: 9px 12px; border-radius: 12px; border: 1px solid var(--glass-line); background: rgba(255, 255, 255, .07); color: var(--text); font-size: 16px; }
+.ls-add select { padding: 8px; border-radius: 10px; background: rgba(255, 255, 255, .07); color: var(--text); border: 1px solid var(--glass-line); }
+.ls-add > button { width: 42px; height: 40px; border-radius: 12px; background: var(--accent-grad); color: #fff; font-size: 22px; padding: 0; }
+.ls-add > button.ls-clr { width: auto; padding: 0 12px; font-size: 13px; background: rgba(255, 255, 255, .1); color: var(--muted); }
+.nt-board { flex-direction: row; flex-wrap: wrap; align-content: flex-start; gap: 8px; }
+.nt { position: relative; flex: 1 1 140px; max-width: 240px; min-height: 80px; padding: 12px 26px 12px 12px; border-radius: 6px; font-size: 16px; line-height: 1.3;
+  color: #2a2116; box-shadow: 3px 4px 0 rgba(0, 0, 0, .25); overflow-wrap: anywhere; }
+.nt.yellow { background: #fde68a; } .nt.pink { background: #fbcfe8; } .nt.blue { background: #bfdbfe; } .nt.green { background: #bbf7d0; } .nt.purple { background: #ddd6fe; }
+.nt .ls-x { position: absolute; top: 2px; right: 2px; color: rgba(0, 0, 0, .45); }
+/* kitchen timers (timers.js) */
+.tm { display: flex; flex-direction: column; gap: 8px; height: 100%; padding: 12px 14px; }
+.tm-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.tm-row { display: grid; grid-template-columns: 1fr auto auto auto auto; grid-template-rows: auto 4px; align-items: center; gap: 2px 8px;
+  padding: 8px 10px; border-radius: 12px; background: rgba(255, 255, 255, .05); }
+.tm-row .tm-n { font-size: 16px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tm-row b { font-size: 26px; font-weight: 300; }
+.tm-row button { padding: 6px 10px; border-radius: 10px; background: rgba(255, 255, 255, .1); color: var(--text); font-size: 14px; }
+.tm-bar { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, .08); overflow: hidden; display: block; }
+.tm-bar > i { display: block; height: 100%; background: var(--gcc, var(--accent-2)); transform-origin: 0 50%; }
+.tm-row.done { background: rgba(251, 191, 36, .18); } .tm-row.done b { color: var(--warn); }
+.tm-pre { display: flex; gap: 6px; flex-wrap: wrap; }
+.tm-pre button { flex: 1; padding: 9px 0; border-radius: 12px; background: var(--accent-grad); color: #fff; font-size: 14px; min-width: 56px; }
+.tm-note { position: fixed; left: 50%; top: 24px; z-index: 70; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 16px 30px; border-radius: 18px; background: rgba(251, 191, 36, .95); color: #1a1238; box-shadow: 0 10px 40px rgba(0, 0, 0, .5); cursor: pointer; }
+.tm-note b { font-size: 24px; } .tm-note span { font-size: 13px; }
+/* the press-and-hold wheel (grid.js openWheel): the card's actions fan out around it; only transform / opacity move */
+/* holding a card that has a wheel: a ring grows around the finger's card (transform / opacity only) */
+.gc.holding::after, .gc-gi.holding::after { content: ""; position: absolute; inset: 4px; border-radius: inherit; border: 3px solid var(--accent-2);
+  pointer-events: none; animation: gholding .55s linear forwards; }
+.gc-gi { position: relative; }
+@keyframes gholding { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: scale(1); } }
+.gwheel { position: fixed; inset: 0; z-index: 60; background: rgba(5, 3, 15, .45); opacity: 0; transition: opacity .15s; touch-action: none; }
+.gwheel.open { opacity: 1; }
+.gw-c { position: absolute; width: 0; height: 0; }
+.gw-mid, .gw-it { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 50%;
+  color: var(--text); border: 1px solid var(--glass-line); padding: 0; }
+.gw-mid { width: 84px; height: 84px; left: -42px; top: -42px; background: rgba(var(--glass-rgb), .95); box-shadow: 0 6px 24px rgba(0, 0, 0, .45); }
+.gw-mid .ic { color: var(--accent-2); }
+.gw-it { width: 72px; height: 72px; left: -36px; top: -36px; gap: 2px; background: var(--accent-grad); box-shadow: 0 6px 18px rgba(0, 0, 0, .4);
+  transform: translate(0, 0) scale(.3); opacity: 0; transition: transform .22s cubic-bezier(.2, .9, .3, 1.2) var(--wd), opacity .15s var(--wd); }
+.gwheel.open .gw-it { transform: translate(var(--wx), var(--wy)) scale(1); opacity: 1; }
+.gw-it .ic { color: #fff; }
+.gw-it span { font-size: 11px; font-weight: 600; line-height: 1.05; max-width: 64px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw-it:active { filter: brightness(1.2); }
+.gw-sw { display: block; width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .85); }
+.gw-it .gc-art { width: 34px !important; height: 34px !important; }
+/* the layout builder's demo canvas (?design=1): no settings button there */
+html.design .gear { display: none; }
+.uc-frame { border: 0; width: 100%; height: 100%; display: block; background: transparent; color-scheme: normal; }
+.uc-note { display: flex; flex-direction: column; justify-content: center; gap: 4px; height: 100%; padding: 12px 16px; color: var(--muted); font-size: 14px; }
+.uc-note b { color: var(--text); font-size: 16px; }
+
+/* "List": the tiles room page as a compact two-column list */
+main.room-list .tiles { grid-template-columns: 1fr 1fr; grid-auto-rows: 74px; gap: 10px; }
+main.room-list .tile { flex-direction: row; align-items: center; gap: 16px; padding: 10px 16px; }
+main.room-list .tile .top { display: contents; }
+main.room-list .tile .icn { order: -1; }
+main.room-list .tile .switch { order: 2; margin-left: auto; }
+main.room-list .tile .icn { width: 46px; height: 46px; border-radius: 14px; }
+
+/* ---------- the room bar's place: bottom (default), top, left or right ---------- */
+html.dock-top { --dock-t: 112px; --dock-b: 0; }
+html.dock-top .dock { top: calc(18px + var(--st-h, 0px)); bottom: auto; }
+html.dock-left, html.dock-right { --dock-b: 0; }
+html.dock-left { --dock-l: 150px; } html.dock-right { --dock-r: 150px; }
+html.dock-left .dock, html.dock-right .dock { top: calc(50% + var(--st-h, 0px) / 2); bottom: auto; left: 14px; transform: translateY(-50%); flex-direction: column;
+  max-width: none; max-height: calc(100vh - 40px - var(--st-h, 0px)); }   /* (clear of a status bar on top: status.css) */
+html.dock-right .dock { left: auto; right: 14px; }
+html.dock-left .dock-fixed, html.dock-right .dock-fixed, html.dock-left .dock-rooms, html.dock-right .dock-rooms { flex-direction: column; }
+html.dock-left .dock-rail, html.dock-right .dock-rail { flex-direction: column; }
+html.dock-left .dock-rooms, html.dock-right .dock-rooms { overflow-x: hidden; overflow-y: auto; scroll-snap-type: y proximity; scroll-padding: 88px 0;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, transparent var(--hp), #000 var(--fp), #000 calc(100% - var(--fn)), transparent calc(100% - var(--hn)), transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, transparent var(--hp), #000 var(--fp), #000 calc(100% - var(--fn)), transparent calc(100% - var(--hn)), transparent 100%); }
+html.dock-left .dock .dock-more, html.dock-right .dock .dock-more { left: 0; right: 0; width: auto; height: 48px; }
+html.dock-left .dock .dock-more.prev, html.dock-right .dock .dock-more.prev { top: 0; bottom: auto; transform: translateY(-6px); }
+html.dock-left .dock .dock-more.next, html.dock-right .dock .dock-more.next { top: auto; bottom: 0; transform: translateY(6px); }
+html.dock-left .dock-rail.more-prev .dock-more.prev, html.dock-left .dock-rail.more-next .dock-more.next,
+html.dock-right .dock-rail.more-prev .dock-more.prev, html.dock-right .dock-rail.more-next .dock-more.next { transform: none; }
+html.dock-left .dock button, html.dock-right .dock button { width: 112px; height: 64px; }
+html.dock-left .dock .sep, html.dock-right .dock .sep { width: auto; height: 1px; margin: 4px 10px; }
+html.dock-top .fx-label { top: calc(var(--dock-t, 112px) + 10px); }   /* (the bar's own height: app.js dockSafe) */
+html.dock-top #layout-switch { top: calc(var(--dock-t, 112px) + 10px); }
+
+/* swiping left / right on a room page = the next / previous room (app.js). The tablet's browser would otherwise take a
+   sideways move as its own gesture and cancel it (no pointerup, no swipe): room pages only scroll up and down. Zero
+   specificity (:where) so the controls that drag themselves (sliders, the dial, the colour wheel, side-scrolling rows)
+   keep their own touch-action. */
+:where(main.roomview, main.roomview *, main.roomlayout, main.roomlayout *) { touch-action: pan-y; }
+
+/* a panel address the Manager hasn't set up (app.js checkSetUp): a blank page, the gear and one line */
+html.not-set-up #main, html.not-set-up #dock, html.not-set-up #sky, html.not-set-up #fx, html.not-set-up #land, html.not-set-up #alerts,
+html.not-set-up .lock-badge, html.not-set-up #refresh-pill, html.not-set-up .st-bar { display: none !important; }
+html.not-set-up body { background: #0b0d12; }
+#not-set-up { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: min(90vw, 560px); text-align: center;
+  font-size: 18px; line-height: 1.5; color: var(--muted, #9aa3b2); padding: 0 16px; }
+/* no room bar (Settings dockOff — a new panel): the page takes its place, the gear stays */
+html.dock-off #dock { display: none !important; }
+html.dock-off { --dock-b: 0px; --dock-t: 0px; --dock-l: 0px; --dock-r: 0px; }
+/* (no room bar: the settings gear sits in the bottom-right corner — the page keeps its 44 px + margins clear there) */
+html.dock-off main.home, html.dock-off main.roomview { padding-bottom: 68px; }
+/* calendars: one that never worked, or more events than one answer carries (data.js Home.calNote) */
+.cal-note { font-size: 12px; color: var(--muted); padding: 4px 2px 0; }
+.cal-more.in { flex: none; margin-left: auto; padding: 0; }   /* ("+2 more today" at the end of the last row shown: UI.fitCal) */
+
+/* ---------- Home on every screen (the built-in layouts): nothing spills out of its card ----------
+   Each column is a container (col): what's in it sizes from the column's width. The thermostat takes what its column
+   leaves (its dial follows: .nest); the weather's day row gives way first when a column is full (a Notifications line,
+   a big clock) — its tiles drop their icons, then the rain; a clock is never wider than its column. */
+main.home .col { container: col / inline-size; }
+main.home .col .nest { flex: 1 1 0; min-height: 170px; }
+main.home .col .wx { flex: 0 1 auto; min-height: 0; }
+main.home .col .wx-days { flex: 1 1 122px; height: auto; min-height: 58px; max-height: 122px; container-type: size; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+main.home .col .wx.solo .wx-days { flex-grow: 0; }
+main.home .col:has(.nest) .wx.solo { flex: 0 1 auto; }   /* (with the thermostat in its column, the dial gets the room) */
+@container (max-height: 106px) { main.home .col .wx-day .wx { display: none; } main.home .col .wx-day { gap: 2px; } }
+@container (max-height: 74px) { main.home .col .wx-day .rain { display: none; } }
+main.home .col .clk { font-size: min(var(--clk), 36cqw) !important; }
+main.home .col .clk-digital { font-size: min(var(--clk), 27cqw) !important; }
+main.home .col .clk-stacked { font-size: min(var(--clk), 36cqw, 12vh) !important; }
+main.home .col .clk-analog { width: min(var(--clk), 100cqw, 28vh) !important; height: min(var(--clk), 100cqw, 28vh) !important; }
+/* a narrow day row (a narrow column, a bigger text size): the day's high over its low */
+@container (max-width: 360px) {
+  main.home .col .wx-day .hl { flex-direction: column; align-items: center; gap: 0; line-height: 1.1; }
+  main.home .col .wx-day .hl b { font-size: 19px; } main.home .col .wx-day .hl span { font-size: 14px; }
+  main.home .col .wx-day .rain { font-size: 11px; white-space: nowrap; }
+}
+/* a narrow column (1024 × 768, portrait, a bar at the side): a smaller "now", the day's high over its low */
+@container col (max-width: 380px) {
+  main.home .wx-now svg.wx { width: 72px; height: 72px; }
+  main.home .wx-now .t { font-size: 54px; }
+  main.home .wx-meta { font-size: 13px; line-height: 1.45; }
+  main.home .wx-days { gap: 6px; }
+  main.home .wx > .card-head > .label { display: none; }   /* (the place tabs keep to one row: they name the weather anyway) */
+  main.home .wx > .card-head { justify-content: flex-start; }
+  main.home .twin .status { padding: 10px; gap: 10px; }
+  main.home .twin .status .big { width: 40px; height: 40px; }
+  main.home .twin .status .t { font-size: 15px; } main.home .twin .status .s { font-size: 12px; }
+  main.home .ag-t { width: 70px; font-size: 14px; }
+}
+/* the calendar card is a size container (its own size, Text size included): a narrow one shrinks the week strip with it
+   (today and the next-week arrow stay inside); a short one (Two columns at 1024 × 768 / 1280 × 800) drops the day's
+   title and draws the week strip and the month smaller, so at least one event — and the whole month — still fit */
+main.home .col .cal { container: cal / size; }
+@container cal (max-width: 340px) {
+  main.home .wk { gap: 3px; } main.home .wk-nav { width: 28px; flex: none; } main.home .wk-day { min-width: 0; }
+  main.home .wk-day b { font-size: 20px; }
+}
+@container cal (max-width: 260px) {
+  main.home .wk { gap: 1px; } main.home .wk-nav { width: 22px; }
+  main.home .wk-day { font-size: 11px; } main.home .wk-day b { font-size: 17px; }
+  main.home .cal > .card-head > .label { display: none; }   /* (Week / Month stay whole: they name the card anyway) */
+  main.home .cal > .card-head { justify-content: flex-start; }
+}
+@container cal (max-height: 340px) {
+  main.home .cal .wk-day { padding: 5px 0 3px; } main.home .cal .wk-day b { font-size: 21px; }
+  main.home .cal .cal-body > .wk + .ag-head { display: none; }
+  main.home .cal .mo-head b { font-size: 17px; } main.home .cal .mo-head button { min-height: 0; height: 30px; }
+  main.home .cal .cal-mo { gap: 0 3px; } main.home .cal .cal-mo .dow { padding-bottom: 0; }
+  main.home .cal .cal-mo button { padding: 1px 0; font-size: 14px; gap: 1px; } main.home .cal .cal-mo .wk-dots { height: 4px; }
+  main.home .cal .cal-mo .wk-dots i { width: 4px; height: 4px; }
+}
+/* portrait (800 × 1280): two columns — the first and last side by side, the middle one (the calendar) across the bottom */
+@media (max-aspect-ratio: 1/1) {
+  main.home:not(.lay-custom):not(.lay-minimal):has(> .col.center) { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(0, 1.35fr) minmax(0, 1fr); }
+  main.home:not(.lay-custom):not(.lay-minimal) > .col.center { grid-column: 1 / -1; grid-row: 2; }
+  /* (the clock's column across the bottom — "Agenda": the clock left, the weather beside it) */
+  main.home:not(.lay-custom):not(.lay-minimal) > .col.center:has(> .part > .clockbox) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 16px 22px; }
+  main.home:not(.lay-custom):not(.lay-minimal) > .col.center:has(> .part > .clockbox) .wx { grid-column: 2; grid-row: 1 / span 6; align-self: stretch; }
+  /* (an analog clock lower: at 28vh it left the weather's day tiles hanging out of their card) */
+  main.home .col .clk-analog { width: min(var(--clk), 100cqw, 16vh) !important; height: min(var(--clk), 100cqw, 16vh) !important; }
+}
+/* the room bar on a narrower screen: smaller buttons, so more rooms show (portrait showed one) */
+.dock { max-width: calc(100vw - 32px); }
+@media (max-width: 900px) { .dock button { font-size: 12px; } html.dock-style-pill:not(.dock-left):not(.dock-right):not(.dock-nolabels) #dock { --di-w: 80px; --di-h: 66px; --de-w: 48px; } }
+/* the thermostat's dial in a pop-up (a room page's thermostat row): a fixed height for its size container */
+.popup .nest { height: min(440px, 60vh); padding: 0; background: none; border: 0; box-shadow: none; }
+.popup .nest > .card-head { display: none; }
+/* ---------- the weather beside the Guest Wi-Fi card (app.js homeParts: weather(!guest)) ----------
+   With the QR card in its column the weather is the compact one: its place tabs and "now" always show whole (the card
+   never gets shorter than them: 162 px, Text size included), and its 5-day row starts at ~56 px. When the column is
+   short the QR card gives way first (its code shrinks with it, down to ~90 px), then the day row (small tiles, then
+   none); room to spare goes to the day row (up to its full 122 px). The clock in that column keeps to 16 % of the
+   screen's height (1280 × 800, 1024 × 768: a little smaller). Not on a phone (Home scrolls there). */
+@media (min-width: 601px) and (min-height: 501px) {
+  main.home .col .card.wx:not(.solo) { flex: 1 1 auto; min-height: 162px; max-height: 330px; padding-top: 14px; padding-bottom: 14px; }
+  main.home .col .card.wx:not(.solo) > * { flex-shrink: 0; }
+  /* (the day row's gap goes with it: a row with no room adds nothing) */
+  main.home .col .card.wx:not(.solo) .wx-days { flex: 1 1 66px; min-height: 0; max-height: 132px; margin-top: -10px; padding-top: 10px; }
+  /* (with the thermostat in its column, the dial gets the room: no day row unless the column has room left over) */
+  main.home .col:has(.nest) .card.wx:not(.solo) { flex-grow: 0; }
+  main.home .col:has(.nest) .card.wx:not(.solo) .wx-days { flex-basis: 0; }
+  /* (a landscape screen 900 px tall or more — 1440 × 900, 1920 × 1080: the dial has its room, the day row gets its ~56 px) */
+  @media (min-height: 900px) and (min-aspect-ratio: 1/1) { main.home .col:has(.nest) .card.wx:not(.solo) .wx-days { flex-basis: 66px; } }
+  main.home .col .card.wx:not(.solo) .wx-now svg.wx { width: 64px; height: 64px; }
+  main.home .col .card.wx:not(.solo) .wx-now .t { font-size: 48px; }
+  main.home .col .card.wx:not(.solo) .wx-now .muted { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* ("Mostly clear": one line) */
+  main.home .col .card.wx:not(.solo) .wx-now > div:not(.wx-meta) { min-width: 0; }
+  main.home .col .card.wx:not(.solo) .wx-meta { font-size: 13px; line-height: 1.4; }
+  /* (a low day row: small tiles — the day over its high and low; a narrow one only the high; under 22 px no row) */
+  @container (max-height: 74px) {
+    main.home .col .card.wx:not(.solo) .wx-day { gap: 0; padding: 1px 0; border-radius: 12px; line-height: 1.15; }
+    main.home .col .card.wx:not(.solo) .wx-day .d { font-size: 12px; }
+    main.home .col .card.wx:not(.solo) .wx-day .hl { flex-direction: row; align-items: baseline; gap: 5px; }
+    main.home .col .card.wx:not(.solo) .wx-day .hl b { font-size: 17px; } main.home .col .card.wx:not(.solo) .wx-day .hl span { font-size: 13px; }
+  }
+  @container (max-height: 74px) and (max-width: 300px) { main.home .col .card.wx:not(.solo) .wx-day .hl span { display: none; } }
+  /* (lower still: one line — the day and its high) */
+  @container (max-height: 37px) {
+    main.home .col .card.wx:not(.solo) .wx-day { flex-direction: row; gap: 4px; padding: 0 2px; }
+    main.home .col .card.wx:not(.solo) .wx-day .hl b { font-size: 15px; } main.home .col .card.wx:not(.solo) .wx-day .hl span { display: none; }
+  }
+  @container (max-height: 21px) { main.home .col .card.wx:not(.solo) .wx-day { display: none; } }
+  /* (the place tabs in one row without the "Weather" title — the tabs name the card — which scrolls sideways when they
+     still don't fit; a narrow column — Security at 1024 × 768 — leaves out feels / humidity / wind) */
+  main.home .col .card.wx:not(.solo) > .card-head > .label { display: none; }
+  main.home .col .card.wx:not(.solo) > .card-head { justify-content: flex-start; }
+  main.home .col .card.wx:not(.solo) .loc { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; min-width: 0; }
+  main.home .col .card.wx:not(.solo) .loc-t { flex: none; }
+  @container col (max-width: 380px) {
+    main.home .col .card.wx:not(.solo) .wx-meta { display: none; }
+    main.home .col .card.wx:not(.solo) .loc { gap: 4px; } main.home .col .card.wx:not(.solo) .loc-t { padding: 6px 8px; font-size: 13px; gap: 4px; }
+  }
+  /* the QR card: a size container (its height comes from the column), the code as tall as the card leaves it */
+  main.home .col .gw-card { flex: 0 30 228px; min-height: 124px; container: gw / size; }
+  main.home .col .gw-card:has(.gw-pass) { min-height: 150px; }   /* (a typed network shows its password too) */
+  main.home .col .gw-card .gw-qr { height: 100%; width: auto; aspect-ratio: 1; max-height: 190px; }
+  /* (a screen 790 px tall or more — 1280 × 800: the code stays at ~110 px or more, scannable at arm's length; the day row
+     gives way to it, down to one-line tiles) */
+  @media (min-height: 790px) { main.home .col:not(:has(.nest)) .gw-card { min-height: 148px; } }
+  @media (min-height: 790px) and (min-aspect-ratio: 1/1) { main.home .col:not(:has(.nest)) .gw-card:has(.gw-pass) { min-height: 168px; } }
+  /* (with the thermostat in its column — Security — the QR card starts small and takes a quarter of what's left over, the
+     dial the rest; a short thermostat card drops its title row: the dial says "Inside", and "Hallway" ran into Cool) */
+  main.home .col:has(.nest) .gw-card { flex: .3 30 124px; max-height: 228px; }
+  /* (and both give a little more when the column is short — Text size 110 % at 1280 × 800, 1024 × 768: the temperature
+     tiles at the bottom were pushed under the room bar) */
+  main.home .col:has(.nest) .gw-card:has(.gw-pass) { min-height: 150px; }
+  main.home .col:has(> .part > .gw-card) .nest { min-height: 132px; }
+  @container (max-height: 260px) {
+    main.home .col:has(> .part > .gw-card) .nest > .card-head { display: none; }
+    main.home .col:has(> .part > .gw-card) .nest-in .nest-dial { width: min(270px, 100cqh - 4px, 100cqw - 124px); height: min(270px, 100cqh - 4px, 100cqw - 124px); }
+  }
+  /* the network's name is what a guest needs: it wraps (three lines at most, then …) and gets smaller before it's cut */
+  main.home .col .gw-card .gw-txt { flex: 1; container: gwt / inline-size; }   /* (the name's size follows the room beside the code) */
+  main.home .col .gw-card .gw-ssid { font-size: clamp(13px, 12cqw, 26px); line-height: 1.15; white-space: normal; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; flex: none; }
+  main.home .col .gw-card .gw-hint { text-wrap: balance; }
+  /* (the text column fits the card by what really fits, Text size and a long name included: it is the card's height and
+     wraps into a second column that is never shown — so a line that doesn't fit whole drops out whole, the hint
+     first, instead of spilling onto the next card or being cut in half. A short card drops the "Guest Wi-Fi" title
+     too, so the name and a typed network's password keep the room) */
+  main.home .col .gw-card .gw-txt { height: 100%; flex-wrap: wrap; justify-content: center; align-content: flex-start; overflow: hidden; }
+  main.home .col .gw-card .gw-txt > * { flex: none; width: 100%; }
+  main.home .col .gw-card .gw-pass { font-size: clamp(13px, 9.5cqw, 20px); }   /* (a long password: smaller, not three lines) */
+  @container gw (max-height: 140px) { main.home .col .gw-card .gw-txt { gap: 4px; } main.home .col .gw-card .gw-txt:has(.gw-pass) > .label { display: none; } }
+  @container gw (max-height: 100px) { main.home .col .gw-card .gw-txt > .label { display: none; } }
+  main.home .col:has(> .part > .gw-card) .clk { font-size: min(var(--clk), 36cqw, 16vh) !important; }
+  main.home .col:has(> .part > .gw-card) .clk-digital { font-size: min(var(--clk), 27cqw, 16vh) !important; }
+  main.home .col:has(> .part > .gw-card) .clk-analog { width: min(var(--clk), 100cqw, 22vh) !important; height: min(var(--clk), 100cqw, 22vh) !important; }
+}
+/* portrait, "Agenda" (the clock's column across the bottom, two columns inside): the clock sized to its half; with the QR
+   card, the weather beside the clock and the QR card beside the people (under the clock it ran under the room bar) */
+@media (max-aspect-ratio: 1/1) and (min-width: 601px) and (min-height: 501px) {
+  main.home:not(.lay-custom):not(.lay-minimal) > .col.center:has(> .part > .clockbox) .clk { font-size: min(var(--clk), 17cqw, 12vh) !important; }
+  main.home:not(.lay-custom):not(.lay-minimal) > .col.center:has(> .part > .clockbox) .clk-digital { font-size: min(var(--clk), 13cqw, 12vh) !important; }
+  main.home:not(.lay-custom):not(.lay-minimal) > .col.center:has(> .part > .clockbox) .clk-analog { width: min(var(--clk), 48cqw, 16vh) !important; height: min(var(--clk), 48cqw, 16vh) !important; }
+  main.home:not(.lay-custom):not(.lay-minimal) > .col.center:has(> .part > .clockbox):has(> .part > .gw-card) .card.wx { grid-row: 1; max-height: none; }
+  main.home:not(.lay-custom):not(.lay-minimal) > .col.center:has(> .part > .clockbox) .card.wx .loc { flex-wrap: wrap; }
+  main.home:not(.lay-custom):not(.lay-minimal) > .col.center:has(> .part > .clockbox) .gw-card { grid-column: 2; grid-row: 2 / span 5; margin-top: 0; align-self: start; }
+  main.home:not(.lay-custom):not(.lay-minimal) > .col.center:has(> .part > .clockbox) .gw-card { container-type: normal; }   /* (sized by its content here) */
+  main.home:not(.lay-custom):not(.lay-minimal) > .col.center:has(> .part > .clockbox) .gw-card .gw-qr { width: 150px; height: 150px; }
+}
+/* (a phone: that column is one column like the others — two inside it left the clock and the QR code sticking out) */
+@media (max-width: 600px), (max-height: 500px) {
+  main.home:not(.lay-custom):not(.lay-minimal) > .col.center:has(> .part > .clockbox) { display: flex; }
+}
+/* a phone (390 × 844 — people open the demo link on one; also turned sideways, 844 × 390): Home as one column that
+   scrolls; a smaller room bar */
+@media (max-width: 600px), (max-height: 500px) {
+  main.home:not(.lay-custom) { display: flex; flex-direction: column; gap: 16px; overflow-y: auto; padding: 46px 16px 12px; }
+  main.home:not(.lay-custom) > .col { flex: none; }
+  main.home .col .nest { flex: none; height: 400px; }
+  /* (the calendar as tall as its events — the page scrolls; v2.7.2: a fixed 540 px cut "Coming up" short) */
+  main.home .col .cal { flex: none; height: auto; min-height: 420px; container-type: inline-size; }
+  main.home .col .wx-days { flex: none; height: 122px; }
+  .dock { padding: 8px; gap: 4px; } .dock button { font-size: 11px; } html.dock-style-pill:not(.dock-left):not(.dock-right):not(.dock-nolabels) #dock { --di-w: 50px; --di-h: 60px; --de-w: 40px; }
+  .dock-fixed, .dock-rooms { gap: 4px; }
+  /* (Alarm · Home · Cameras as icons only, narrower arrows: two rooms show beside them, not none) */
+  html.dock-style-pill #dock .dock-fixed > button { width: 38px; font-size: 0; gap: 0; }
+  /* (small arrows, short fades and room for an arrow at each end: the bar between the arrows is ~104 px at 390 px —
+     two whole rooms, none cut beside an arrow; an arrow pages to a whole room, app.js) */
+  .dock .dock-more { width: 24px; } .dock .dock-more span { width: 22px; height: 22px; } .dock .dock-more svg { width: 18px; height: 18px; }
+  #dock .dock-rooms { padding-inline: 26px; scroll-padding: 0 26px; } .dock-rail.more-prev .dock-rooms { --fp: 26px; --hp: 24px; } .dock-rail.more-next .dock-rooms { --fn: 26px; --hn: 24px; }
+}
+/* the gear's PIN pad over Settings: the "Enter the panel PIN" card under it steps aside (two titles, two Cancels) */
+body:has(.popup-host.show) .settings-layer .set-pin { visibility: hidden; }
+/* ---------- the room bar's styles (Manager → Look & layout → Room bar; app.js App.render sets the classes) ----------
+   html.dock-style-<style>: pill (the default) · rail · segmented · tabs · chips · split, each on any edge (html.dock-<edge>);
+   html.dock-nolabels: icons only (the names stay in the buttons for screen readers; a tap shows one: .dock-tip);
+   html.dock-autohide: folded to a handle until tapped (#dock.collapsed). A style sets its buttons' size (--di-w × --di-h,
+   the bell and the gear --de-w × --de-h) and fill (--di-bg); the page keeps clear of the bar by measuring it (app.js
+   dockSafe), so a bigger style never lies over the page. Every button is at least 48 px across. */
+#dock { --di-w: 90px; --di-h: 70px; --di-r: 22px; --di-gap: 4px; --de-w: 52px; --de-h: var(--di-h); --di-bg: none;
+  --dock-glass: linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,0) 40%), var(--glass); gap: var(--di-gap); }
+#dock .dock-fixed, #dock .dock-rooms { gap: var(--di-gap); }
+#dock .dock-end { display: contents; }
+#dock .dock-handle { display: none; }
+#dock .dock-fixed > button, #dock .dock-rooms > button, #dock .reorder-done { width: var(--di-w); height: var(--di-h); border-radius: var(--di-r); background: var(--di-bg); }
+#dock .dock-bell, #dock .dock-gear { width: var(--de-w); height: var(--de-h); border-radius: var(--di-r); background: var(--di-bg); }
+#dock .dock-fixed > button.cur, #dock .dock-rooms > button.cur { background: var(--accent-grad); color: #fff; box-shadow: var(--on-glow); }
+/* (room across the bar for a glow or an edge marker: the scrolling rooms cut off what lies outside their box) */
+#dock .dock-rooms { padding-block: 12px; margin-block: -12px; }
+html.dock-left #dock .dock-rooms, html.dock-right #dock .dock-rooms { padding-block: 0; margin-block: 0; padding-inline: 12px; margin-inline: -12px; }
+/* the alarm: tinted while armed, solid for armed away, solid red and pulsing for HSM's alert (shape too: app.js) */
+#dock .alarm-btn.armed { background: linear-gradient(rgba(251,113,133,.28), rgba(251,113,133,.28)), var(--di-bg); color: #fecdd3; box-shadow: 0 0 22px rgba(251,113,133,.35); }
+#dock .alarm-btn.away { background: var(--bad); color: #fff; }
+#dock .alarm-btn.alert { background: #ef4444; color: #fff; animation: dock-alarm 1.2s ease-in-out infinite; }
+@keyframes dock-alarm { 0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,.55); } 50% { box-shadow: 0 0 0 8px rgba(239,68,68,0); } }
+/* icons only: the name hidden (not gone), a room's lights-on badge in the corner */
+html.dock-nolabels #dock .dl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; padding: 0; }
+html.dock-nolabels #dock .dock-rooms > button .n { top: 5px; right: 5px; }
+.dock-tip { position: fixed; z-index: 40; pointer-events: none; padding: 8px 14px; border-radius: 12px; background: var(--glass-opaque, rgb(30, 20, 64)); color: var(--text);
+  border: 1px solid var(--glass-line); box-shadow: 0 10px 30px rgba(5, 2, 20, .45); font-size: 15px; font-weight: 600; white-space: nowrap; opacity: 0; transition: opacity .15s; }
+.dock-tip.show { opacity: 1; }
+
+/* 1 · floating glass pill (the default): a capsule of icon-over-name buttons, the page on screen a solid accent pill */
+html.dock-style-pill #dock { padding: 8px; border-radius: 30px; }
+html.dock-style-pill.dock-left #dock, html.dock-style-pill.dock-right #dock { --di-w: 92px; --di-h: 66px; --de-w: var(--di-w); --de-h: 52px; border-radius: 28px; }
+html.dock-style-pill.dock-nolabels #dock { --di-w: 64px; --di-h: 64px; --di-r: 20px; }
+html.dock-style-pill.dock-nolabels.dock-left #dock, html.dock-style-pill.dock-nolabels.dock-right #dock { --de-h: 52px; }
+
+/* 2 · rail: a flat bar the length of the edge, plain icons (names on request); the page on screen a tinted tile with a
+   marker on the screen's side */
+html.dock-style-rail #dock { --di-w: 64px; --di-h: 64px; --di-r: 18px; --di-gap: 6px; --de-w: 64px; --de-h: 64px; --bar: 84px;
+  padding: 0 18px; border: 0; border-radius: 0; transform: none; max-width: none; max-height: none; align-items: center;
+  background: color-mix(in srgb, var(--glass-opaque, rgb(30, 20, 64)) 92%, transparent); box-shadow: 0 0 30px rgba(5, 2, 20, .35); }
+html.dock-style-rail.dock-bottom #dock { left: 0; right: 0; bottom: 0; height: var(--bar); border-top: 1px solid var(--glass-line); }
+html.dock-style-rail.dock-top #dock { left: 0; right: 0; top: var(--st-h, 0px); height: var(--bar); border-bottom: 1px solid var(--glass-line); }
+html.dock-style-rail.dock-left #dock, html.dock-style-rail.dock-right #dock { --bar: 88px; top: var(--st-h, 0px); bottom: 0; width: var(--bar); padding: 18px 0; }
+html.dock-style-rail.dock-left #dock { left: 0; border-right: 1px solid var(--glass-line); }
+html.dock-style-rail.dock-right #dock { right: 0; left: auto; border-left: 1px solid var(--glass-line); }
+html.dock-style-rail #dock .dock-rail { flex: 1 1 auto; }
+html.dock-style-rail:not(.dock-nolabels) #dock { --di-w: 84px; --di-h: 66px; --de-w: 64px; }
+html.dock-style-rail:not(.dock-nolabels).dock-left #dock, html.dock-style-rail:not(.dock-nolabels).dock-right #dock { --bar: 100px; --di-w: 88px; --di-h: 64px; --de-w: 88px; --de-h: 56px; }
+html.dock-style-rail #dock button { font-size: 12px; }
+html.dock-style-rail #dock .dock-fixed > button.cur, html.dock-style-rail #dock .dock-rooms > button.cur { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--accent-2); box-shadow: none; font-weight: 700; }
+html.dock-style-rail #dock button.cur::before { content: ""; position: absolute; background: var(--accent-2); }
+html.dock-style-rail.dock-bottom #dock button.cur::before { bottom: calc((var(--di-h) - var(--bar)) / 2); left: 18px; right: 18px; height: 4px; border-radius: 3px 3px 0 0; }
+html.dock-style-rail.dock-top #dock button.cur::before { top: calc((var(--di-h) - var(--bar)) / 2); left: 18px; right: 18px; height: 4px; border-radius: 0 0 3px 3px; }
+html.dock-style-rail.dock-left #dock button.cur::before { left: calc((var(--di-w) - var(--bar)) / 2); top: 18px; bottom: 18px; width: 4px; border-radius: 0 3px 3px 0; }
+html.dock-style-rail.dock-right #dock button.cur::before { right: calc((var(--di-w) - var(--bar)) / 2); top: 18px; bottom: 18px; width: 4px; border-radius: 3px 0 0 3px; }
+html.dock-style-rail #dock .sep { margin: 22px 6px; }
+html.dock-style-rail.dock-left #dock .sep, html.dock-style-rail.dock-right #dock .sep { margin: 6px 22px; }
+
+/* 3 · segmented glass bar: one track, icon and name side by side, the page on screen a raised thumb (a sidebar list on
+   a side edge) */
+html.dock-style-segmented #dock { --di-w: auto; --di-h: 56px; --di-r: 17px; --di-gap: 2px; --de-w: 56px; padding: 5px; border-radius: 22px; }
+html.dock-style-segmented #dock .dock-fixed > button.cur, html.dock-style-segmented #dock .dock-rooms > button.cur { background: rgba(255, 255, 255, .15); color: var(--text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), 0 4px 14px rgba(0, 0, 0, .25); }
+html.dock-style-segmented #dock button.cur .dl { font-weight: 650; }
+html.dock-style-segmented #dock :is(.dock-fixed, .dock-rooms) > button svg.ic { width: 24px; height: 24px; }
+html.dock-style-segmented #dock .sep { margin: 14px 6px; }
+html.dock-style-segmented.dock-left #dock, html.dock-style-segmented.dock-right #dock { --di-h: 54px; --de-w: auto; --de-h: 54px; width: 224px; }
+html.dock-style-segmented.dock-left #dock .sep, html.dock-style-segmented.dock-right #dock .sep { margin: 5px 14px; }
+html.dock-style-segmented.dock-nolabels #dock { --di-w: 56px; }
+html.dock-style-segmented.dock-nolabels.dock-left #dock, html.dock-style-segmented.dock-nolabels.dock-right #dock { --di-w: 56px; --di-h: 56px; --de-w: 56px; width: auto; }
+
+/* (segmented and chips: the icon beside its name, on one line) */
+html:is(.dock-style-segmented, .dock-style-chips):not(.dock-nolabels) #dock :is(.dock-fixed, .dock-rooms) > button,
+html:is(.dock-style-segmented, .dock-style-chips):not(.dock-nolabels) #dock .reorder-done { flex-direction: row; justify-content: flex-start; gap: 10px; padding: 0 16px 0 14px; }
+html:is(.dock-style-segmented, .dock-style-chips):not(.dock-nolabels) #dock .dl { display: block; max-width: 150px; padding: 0; white-space: nowrap; text-overflow: ellipsis; line-height: 1.2;
+  text-align: left; font-size: 15px; font-weight: 500; }
+html:is(.dock-style-segmented, .dock-style-chips):not(.dock-nolabels) #dock .dock-rooms > button .n { position: static; margin-left: 2px; }
+html.dock-style-segmented:not(.dock-nolabels):is(.dock-left, .dock-right) #dock .dock-rooms > button .n { margin-left: auto; }
+
+/* 4 · edge tabs: folder tabs growing out of the screen edge; the page on screen stands taller and lights up */
+html.dock-style-tabs #dock { --di-w: 94px; --di-h: 64px; --di-r: 18px; --di-gap: 6px; --de-w: 58px; --di-bg: var(--dock-glass);
+  padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+html.dock-style-tabs #dock :is(.dock-fixed, .dock-rooms) > button, html.dock-style-tabs #dock :is(.dock-bell, .dock-gear) { border: 1px solid var(--glass-line); }
+html.dock-style-tabs #dock .sep { display: none; }
+html.dock-style-tabs #dock .dock-rail { align-self: stretch; }
+html.dock-style-tabs #dock .dock-fixed > button.cur, html.dock-style-tabs #dock .dock-rooms > button.cur { border-color: transparent; }
+html.dock-style-tabs.dock-bottom #dock { bottom: 0; }
+html.dock-style-tabs.dock-top #dock { top: var(--st-h, 0px); }
+html.dock-style-tabs.dock-left #dock { left: 0; }
+html.dock-style-tabs.dock-right #dock { right: 0; }
+html.dock-style-tabs.dock-bottom #dock, html.dock-style-tabs.dock-bottom #dock :is(.dock-fixed, .dock-rooms) { align-items: flex-end; }
+html.dock-style-tabs.dock-top #dock, html.dock-style-tabs.dock-top #dock :is(.dock-fixed, .dock-rooms) { align-items: flex-start; }
+html.dock-style-tabs.dock-left #dock, html.dock-style-tabs.dock-left #dock :is(.dock-fixed, .dock-rooms) { align-items: flex-start; }
+html.dock-style-tabs.dock-right #dock, html.dock-style-tabs.dock-right #dock :is(.dock-fixed, .dock-rooms) { align-items: flex-end; }
+html.dock-style-tabs.dock-bottom #dock :is(.dock-fixed, .dock-rooms) > button, html.dock-style-tabs.dock-bottom #dock :is(.dock-bell, .dock-gear) { border-radius: 18px 18px 0 0; border-bottom: 0; }
+html.dock-style-tabs.dock-top #dock :is(.dock-fixed, .dock-rooms) > button, html.dock-style-tabs.dock-top #dock :is(.dock-bell, .dock-gear) { border-radius: 0 0 18px 18px; border-top: 0; }
+html.dock-style-tabs.dock-left #dock :is(.dock-fixed, .dock-rooms) > button, html.dock-style-tabs.dock-left #dock :is(.dock-bell, .dock-gear) { border-radius: 0 18px 18px 0; border-left: 0; }
+html.dock-style-tabs.dock-right #dock :is(.dock-fixed, .dock-rooms) > button, html.dock-style-tabs.dock-right #dock :is(.dock-bell, .dock-gear) { border-radius: 18px 0 0 18px; border-right: 0; }
+html.dock-style-tabs:is(.dock-bottom, .dock-top) #dock button.cur { height: calc(var(--di-h) + 14px); }
+html.dock-style-tabs.dock-bottom #dock button.cur { padding-bottom: 6px; } html.dock-style-tabs.dock-top #dock button.cur { padding-top: 6px; }
+html.dock-style-tabs:is(.dock-left, .dock-right) #dock { --di-h: 66px; --de-w: var(--di-w); --de-h: 54px; }
+html.dock-style-tabs:is(.dock-left, .dock-right) #dock button.cur { width: calc(var(--di-w) + 14px); }
+html.dock-style-tabs.dock-left #dock button.cur { padding-left: 10px; } html.dock-style-tabs.dock-right #dock button.cur { padding-right: 10px; }
+html.dock-style-tabs.dock-nolabels #dock { --di-w: 72px; --di-h: 56px; }
+html.dock-style-tabs.dock-nolabels:is(.dock-left, .dock-right) #dock { --di-w: 64px; --di-h: 60px; --de-h: 52px; }
+
+/* 5 · compact chips: separate small glass chips, icon and name in one line — the thinnest bar */
+html.dock-style-chips #dock { --di-w: auto; --di-h: 50px; --di-r: 25px; --di-gap: 8px; --de-w: 50px; --de-h: 50px; --di-bg: var(--dock-glass);
+  padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; align-items: center; }
+html.dock-style-chips #dock :is(.dock-fixed, .dock-rooms) > button, html.dock-style-chips #dock :is(.dock-bell, .dock-gear) { border: 1px solid var(--glass-line); box-shadow: 0 4px 16px rgba(0, 0, 0, .18); }
+html.dock-style-chips:not(.dock-nolabels) #dock :is(.dock-fixed, .dock-rooms) > button { gap: 8px; padding: 0 18px 0 14px; }
+html.dock-style-chips #dock .dl { font-size: 14.5px; }
+html.dock-style-chips #dock .dock-fixed > button.cur, html.dock-style-chips #dock .dock-rooms > button.cur { border-color: transparent; }
+html.dock-style-chips #dock .sep { display: none; }
+html.dock-style-chips #dock :is(.dock-fixed, .dock-rooms) > button svg.ic { width: 22px; height: 22px; }
+html.dock-style-chips:is(.dock-left, .dock-right) #dock { --de-w: 50px; }
+html.dock-style-chips.dock-left #dock, html.dock-style-chips.dock-left #dock :is(.dock-fixed, .dock-rooms) { align-items: flex-start; }
+html.dock-style-chips.dock-right #dock, html.dock-style-chips.dock-right #dock :is(.dock-fixed, .dock-rooms) { align-items: flex-end; }
+html.dock-style-chips:is(.dock-left, .dock-right) #dock .dock-rail { align-self: stretch; }
+html.dock-style-chips.dock-nolabels #dock { --di-w: 50px; }
+/* (a narrow screen — portrait: the house-wide buttons of the side-by-side styles as icons only, so rooms show beside them) */
+@media (max-width: 900px) {
+  html:is(.dock-style-segmented, .dock-style-chips):not(.dock-nolabels):is(.dock-bottom, .dock-top) #dock .dock-fixed > button { width: var(--di-h); padding: 0; justify-content: center; }
+  html:is(.dock-style-segmented, .dock-style-chips):not(.dock-nolabels):is(.dock-bottom, .dock-top) #dock .dock-fixed .dl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+}
+
+/* 6 · split: two islands — the alarm and the house-wide pages at one end, the rooms and settings at the other */
+html.dock-style-split #dock { --di-w: 86px; --di-h: 68px; --di-r: 21px; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none;
+  transform: none; max-width: none; max-height: none; justify-content: space-between; align-items: center; }
+html.dock-style-split:is(.dock-bottom, .dock-top) #dock { left: 16px; right: 16px; }
+html.dock-style-split:is(.dock-left, .dock-right) #dock { top: calc(16px + var(--st-h, 0px)); bottom: 16px; --di-w: 92px; --di-h: 64px; --de-w: var(--di-w); --de-h: 52px; }
+html.dock-style-split #dock :is(.dock-fixed, .dock-end) { display: flex; gap: var(--di-gap); padding: 8px; border-radius: 28px; background: var(--dock-glass);
+  border: 1px solid var(--glass-line); box-shadow: 0 10px 40px rgba(5, 2, 20, .35); align-items: center; min-width: 0; min-height: 0; }
+html.dock-style-split:is(.dock-left, .dock-right) #dock :is(.dock-fixed, .dock-end) { flex-direction: column; }
+html.dock-style-split #dock .dock-end { flex: 0 1 auto; }
+html.dock-style-split #dock .sep { display: none; }
+html.dock-style-split.dock-nolabels #dock { --di-w: 64px; --di-h: 64px; --di-r: 20px; }
+
+/* auto-hide: folded to a handle at the edge's middle (the alarm, the page on screen, alerts waiting); a tap opens the bar
+   over the page, which keeps the handle's room (no jump) */
+html.dock-autohide #dock.dock.collapsed { padding: 0; border: 1px solid var(--glass-line); border-radius: 28px; background: var(--dock-glass); box-shadow: 0 10px 40px rgba(5, 2, 20, .35);
+  width: auto; height: auto; max-width: none; max-height: none; }
+html.dock-autohide.dock-bottom #dock.dock.collapsed { left: 50%; right: auto; top: auto; bottom: 12px; transform: translateX(-50%); }
+html.dock-autohide.dock-top #dock.dock.collapsed { left: 50%; right: auto; top: calc(12px + var(--st-h, 0px)); bottom: auto; transform: translateX(-50%); }
+html.dock-autohide.dock-left #dock.dock.collapsed { top: calc(50% + var(--st-h, 0px) / 2); bottom: auto; left: 12px; right: auto; transform: translateY(-50%); }
+html.dock-autohide.dock-right #dock.dock.collapsed { top: calc(50% + var(--st-h, 0px) / 2); bottom: auto; left: auto; right: 12px; transform: translateY(-50%); }
+html.dock-autohide #dock.dock.collapsed > :not(.dock-handle) { display: none; }
+html.dock-autohide #dock.dock.collapsed > .dock-handle { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: 10px; width: auto; height: 56px;
+  padding: 6px 16px 6px 6px; border-radius: 28px; color: var(--text); background: none; font-size: 16px; }
+html.dock-autohide:is(.dock-left, .dock-right) #dock.dock.collapsed > .dock-handle { flex-direction: column; width: 60px; height: auto; padding: 6px 6px 14px; gap: 8px; }
+#dock .dock-handle .hs { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; flex: none; background: rgba(52, 211, 153, .15); color: var(--ok); }
+#dock .dock-handle.t-unk .hs { background: rgba(255, 255, 255, .08); color: var(--muted); }
+#dock .dock-handle.t-bad .hs { background: rgba(251, 113, 133, .22); color: var(--bad); }
+#dock .dock-handle.t-bad2 .hs { background: var(--bad); color: #fff; }
+#dock .dock-handle.t-alarm .hs { background: #ef4444; color: #fff; animation: dock-alarm 1.2s ease-in-out infinite; }
+#dock .dock-handle .hn { display: flex; align-items: center; gap: 8px; font-weight: 600; white-space: nowrap; }
+#dock .dock-handle .hn .ic { color: var(--muted); }
+html:is(.dock-left, .dock-right) #dock .dock-handle .hl { display: none; }
+html:is(.dock-left, .dock-right) #dock .dock-handle .hn .ic { color: var(--text); }
+#dock .dock-handle .hw { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--warn); color: #241a00; font-size: 12px; font-weight: 700; display: grid; place-items: center; }
+#dock .dock-handle .hw.l4 { background: var(--bad); color: #fff; }
+#dock .dock-handle .hc { color: var(--muted); display: grid; place-items: center; }
+#dock.opening { animation: dock-in .22s ease-out; }
+html.dock-top #dock { --dock-in: 0 -24px; } html.dock-left #dock { --dock-in: -24px 0; } html.dock-right #dock { --dock-in: 24px 0; }
+@keyframes dock-in { from { opacity: 0; translate: var(--dock-in, 0 24px); } }
+@media (prefers-reduced-motion: reduce) { #dock.opening, #dock .alarm-btn.alert, #dock .dock-handle.t-alarm .hs { animation: none; } }
+
+/* ---------- v2.4.0 milestone test fixes (the panel on a phone, touch targets, small things) ---------- */
+/* the version tag keeps clear of the bar: with a bar along the bottom edge (every style but the floating pill, whose
+   corner stays free) it moves to the top right corner, in the page's top margin — above the bar it lay on the cards;
+   right of a bar on the left edge (it was printed across "Alarm") */
+html.dock-bottom:not(.dock-style-pill) #ver-tag { top: calc(4px + var(--st-h, 0px)); bottom: auto; left: auto; right: 10px; }
+html.dock-left #ver-tag { left: calc(var(--dock-l, 0px) + 10px); }
+/* finger-sized targets (44 px) where the button itself is drawn smaller: the tap area reaches past its edges */
+.lockrow button, .cal-toggle button, .nest .modes button, .locks .card-head .chip, .wk-day, .wk-nav, .wx .loc-t { position: relative; }
+.lockrow button::after, .cal-toggle button::after, .nest .modes button::after, .locks .card-head .chip::after, .wk-day::after, .wk-nav::after,
+.wx .loc-t::after { content: ""; position: absolute; }
+.lockrow button::after { inset: -8px -6px; }                     /* (61 × 28 → 73 × 44) */
+.cal-toggle button::after, .nest .modes button::after { inset: -3px 0; }   /* (38 → 44 tall) */
+.locks .card-head .chip::after { inset: -4px 0; } .wx .loc-t::after { inset: -2px 0; }
+.wx .loc-x { position: relative; z-index: 1; }   /* (a place's × stays tappable above its tab's tap area) */
+.wk-day::after { inset: 0 -3px; } .wk-nav::after { inset: 0 -3px; } /* (into the gaps between the days) */
+/* "1 window open" / "Doors closed" on one line in a Home column (Security at 1280 × 800 wrapped it): a little smaller
+   with the column's width instead (a phone keeps the wrap) */
+@media (min-width: 601px) {
+  main.home .col .twin .status > div { min-width: 0; }
+  main.home .col .twin .status .t { font-size: clamp(13px, 3.8cqw, 17px); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }   /* (one line when it fits; two in a narrow column — never "1 windo…") */
+}
+/* a list that scrolls inside its card (door locks, a long calendar): a thin, quiet scrollbar, not the bright native one */
+main * { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .22) transparent; }
+
+/* a phone — or any screen under 600 px wide */
+@media (max-width: 600px) {
+  /* level 4–5 alert: the whole card on the screen, its buttons one under the other, full width */
+  .alert-card { padding: 22px 16px; border-radius: 24px; }
+  .alert-icon { width: 72px; height: 72px; margin-bottom: 4px; } .alert-icon svg { width: 40px; height: 40px; }
+  .alert-t { font-size: 26px; line-height: 1.15; overflow-wrap: anywhere; } .alert-w { font-size: 18px; } .alert-lvl { font-size: 13px; }
+  .alert-card .alert-btns { flex-direction: column; align-items: stretch; width: 100%; gap: 10px !important; }
+  .alert-card .alert-btn { margin-top: 0; width: 100%; justify-content: center; padding: 16px 14px; font-size: 19px; border-radius: 18px; }
+  .alert-card .alert-btns { margin-top: 12px; }
+  .alert-hint { max-width: 100%; }
+  /* pop-ups (the alarm keypad, the PIN pad, lists): inside the screen, the × and every button reachable */
+  .popup { padding: 18px 16px; gap: 12px; max-height: calc(100vh - 24px); }
+  .popup-head h2 { font-size: 22px; min-width: 0; overflow-wrap: anywhere; } .popup-x { width: 44px; height: 44px; flex: none; }
+  .pgrid { grid-template-columns: 1fr; }
+  .kp { width: 100%; max-width: 320px; gap: 10px; } .kp button { height: 64px; font-size: 28px; }
+  .kp-opts { flex-direction: column; gap: 10px; margin: 12px 0; }
+  .kp-opt { width: 100%; height: 64px; flex-direction: row; gap: 12px; font-size: 18px; border-radius: 18px; }
+  .pp, .pp-confirm { min-width: 0; width: 100%; }
+  .pp-keys { grid-template-columns: repeat(3, minmax(0, 84px)); gap: 10px; } .pp-k { height: 64px; }
+  .pp-confirm .row { flex-direction: column; width: 100%; } .pp-confirm .row > * { width: 100%; }
+  .set-pin { padding: 20px 16px; } .set-pin h2, .set-head h2 { font-size: 22px; }
+  .set-page { padding: 18px 14px; }
+  .set-head { margin: -18px -14px 0; padding: 18px 14px 10px; top: -18px; }
+  .set-grid { grid-template-columns: 1fr; }
+  .ov-list { min-width: 0; }
+
+  /* the room bar, every style along the top or bottom edge: every button an icon over a small one-line name (Alarm, Home,
+     Cameras too — the same as the rooms; a long name ends in "…") — two rooms between the arrows, as with the pill (the
+     other styles showed none) */
+  html:is(.dock-bottom, .dock-top) #dock#dock { --di-w: 50px; --di-h: 58px; --de-w: 38px; --de-h: 58px; --di-gap: 4px; --di-r: 16px; max-width: calc(100vw - 16px); }
+  html:is(.dock-bottom, .dock-top) #dock#dock .dock-fixed > button { width: 46px; padding: 0; justify-content: center; gap: 2px; }
+  html:is(.dock-bottom, .dock-top).dock-nolabels #dock#dock .dock-fixed > button { width: 38px; }
+  html:is(.dock-bottom, .dock-top):not(.dock-nolabels) #dock#dock :is(.dock-fixed, .dock-rooms) > button { flex-direction: column; justify-content: center; gap: 2px; padding: 0; }
+  html:is(.dock-bottom, .dock-top):not(.dock-nolabels) #dock#dock :is(.dock-fixed, .dock-rooms) .dl { display: block; position: static; width: auto; height: auto; clip: auto;
+    max-width: 100%; padding: 0 1px; font-size: 10px; font-weight: 500; line-height: 1.2; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  html:is(.dock-bottom, .dock-top) #dock#dock .dock-fixed > button svg.ic { width: 22px; height: 22px; }
+  html:is(.dock-bottom, .dock-top) #dock#dock .dock-rooms > button svg.ic { width: 22px; height: 22px; }
+  /* (two rooms exactly fill the room between the arrows, whatever the phone's width: none half shown beside one) */
+  html:is(.dock-bottom, .dock-top) #dock#dock .dock-rooms > button { width: calc((100% - var(--di-gap)) / 2); }
+  html:is(.dock-bottom, .dock-top) #dock#dock .dock-rooms > button .n { position: absolute; top: 2px; right: 2px; margin: 0; }
+  html:is(.dock-bottom, .dock-top) #dock#dock .sep { margin: 12px 2px; }
+  html.dock-style-rail:is(.dock-bottom, .dock-top) #dock#dock { --bar: 68px; padding: 0 6px; max-width: none; }   /* (the rail: edge to edge) */
+  html.dock-style-split:is(.dock-bottom, .dock-top) #dock#dock { left: 8px; right: 8px; gap: 6px; }
+  html.dock-style-split #dock#dock :is(.dock-fixed, .dock-end) { padding: 4px; border-radius: 20px; }
+  html.dock-style-tabs:is(.dock-bottom, .dock-top) #dock#dock button.cur { height: calc(var(--di-h) + 8px); }
+  html.dock-style-segmented #dock#dock, html.dock-style-pill #dock#dock { padding: 5px; }
+  /* the version tag: top right, in the page's top margin (under a bar on top), and out of the way while the page is
+     scrolled — the page scrolls under it on a phone (app.js html.page-scrolled) */
+  #ver-tag { top: calc(var(--dock-t, 0px) + var(--st-h, 0px) + 4px) !important; bottom: auto !important; left: auto !important; right: 10px !important; transition: opacity .2s; }
+  html.page-scrolled #ver-tag { opacity: 0 !important; }
+  main.home.lay-custom, main.roomview.lay-custom { padding-top: 26px !important; }   /* (room for the version tag over the first card) */
+
+  /* the Guest Wi-Fi card: a smaller code, the network's name wrapping (two lines, then …) instead of cut to "Mulde…" */
+  main.home .gw-card { gap: 14px; padding: 14px; }
+  main.home .gw-card .gw-qr { width: 132px; height: 132px; padding: 8px; }
+  main.home .gw-card .gw-txt { min-width: 0; flex: 1; }
+  main.home .gw-card .gw-ssid { white-space: normal; overflow-wrap: anywhere; font-size: 20px; line-height: 1.15;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+  main.home .gw-card .gw-pass { font-size: 16px; }
+
+  /* your own layout (the builder's grid) on a phone: the cards one under the other in reading order, full width, each
+     a sensible height — not a tablet's three columns squeezed into 390 px (the builder's own canvas keeps its grid) */
+  html:not(.design) main.lay-custom { display: flex !important; flex-direction: column; gap: 14px; overflow-y: auto; padding: 46px 16px 12px !important; }
+  html:not(.design) main.lay-custom > .gc { grid-area: auto !important; order: var(--go, 0); flex: none; position: relative; height: 200px; margin: 0 !important; }
+  html:not(.design) main.lay-custom > .gc.gc-hide { display: none; }
+  html:not(.design) main.lay-custom > .gc:is(.gc-people, .gc-temps, .gc-openings, .gc-alerts, .gc-text, .gc-scenes) { height: 110px; }
+  html:not(.design) main.lay-custom > .gc:is(.gc-clock) { height: 190px; }
+  html:not(.design) main.lay-custom > .gc:is(.gc-guest) { height: 180px; }
+  html:not(.design) main.lay-custom > .gc:is(.gc-weather, .gc-locks, .gc-roomdevs, .gc-roomcams, .gc-roomthings) { height: 300px; }
+  html:not(.design) main.lay-custom > .gc:is(.gc-thermostat) { height: 360px; }
+  html:not(.design) main.lay-custom > .gc:is(.gc-calendar) { height: 480px; }
+  html:not(.design) main.lay-custom > .gc:is(.gc-roomhead) { height: auto; min-height: 90px; }
+}
+
+/* ---------- guest lockdown (v2.7.2, guestlock.js): over the page, the dock, a full-screen camera and Settings (95);
+   under the pop-ups (100: the PIN pad) and a level 4–5 alert (102) ---------- */
+.gl { position: fixed; inset: 0; z-index: 98; display: grid; place-items: center; padding: 16px; box-sizing: border-box;
+  background: radial-gradient(ellipse at 50% 30%, rgb(40, 26, 92), rgb(8, 5, 22) 70%);
+  background: radial-gradient(ellipse at 50% 30%, color-mix(in srgb, var(--glass-opaque, rgb(30, 20, 64)) 88%, var(--accent, #8b6cff)),
+    color-mix(in srgb, var(--glass-opaque, rgb(30, 20, 64)) 62%, #000) 70%);
+  color: var(--text); }   /* (opaque: nothing of the page shows through; the panel's own glass + accent, so ocean, amber, graphite and day look like themselves) */
+.gl[hidden] { display: none; }
+.gl-card { width: min(520px, 100%); display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.gl-clock { font-size: clamp(64px, 14vmin, 128px); font-weight: 200; line-height: 1; }
+.gl-clock small { font-size: .3em; margin-left: .15em; color: var(--muted); }
+.gl-date { font-size: 22px; color: var(--muted); margin-bottom: 18px; }
+.gl-t { display: flex; align-items: center; gap: 10px; font-size: 26px; font-weight: 600; }
+.gl-s { margin: 0 0 14px; font-size: 18px; line-height: 1.45; color: var(--muted); max-width: 30em; }
+.gl .gl-unlock { min-width: 200px; min-height: 56px; }
+.gl-live { margin: 14px 0 0; padding: 10px 14px; border-radius: 12px; font-size: 14px; color: #fde68a; background: rgba(251, 191, 36, .12); }
+/* the black screen: nothing to see until a touch (then the card above) */
+.gl.gl-off { background: #000; cursor: pointer; }
+.gl.gl-off .gl-card { visibility: hidden; }
+@media (max-width: 600px) { .gl-date { font-size: 18px; } .gl-t { font-size: 22px; } .gl-s { font-size: 16px; } }
+
+   the card stays where it is, an empty veil in it (no event on the page or in memory: data.js hideEvents); one button on top */
+   the card stays where it is; its content can't be read, pressed or reached (inert, aria-hidden); one button on top */
+.cal { position: relative; }
+.gb-veil { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; overflow: hidden; filter: blur(8px); opacity: .7;
+  pointer-events: none; user-select: none; -webkit-user-select: none; }
+.gb-over { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  padding: 16px; box-sizing: border-box; }
+.gb-veil i { display: block; flex: none; border-radius: 14px; background: rgba(255, 255, 255, .09); }
+.gb-veil .gb-strip { height: 76px; }
+.gb-veil .gb-row { height: 58px; }
+.gb-veil .gb-row.gb-head { height: 14px; width: 30%; border-radius: 7px; margin-top: 4px; }
+.gb-show { display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 48px; max-width: 100%; padding: 14px 22px;
+  border-radius: 18px; background: var(--glass-opaque, rgb(30, 20, 64)); border: 1px solid var(--glass-line); color: var(--text);
+  font-size: 18px; font-weight: 600; text-align: center; box-shadow: 0 6px 24px rgba(0, 0, 0, .35); cursor: pointer; }
+.gb-show small { font-size: 14px; font-weight: 400; color: var(--muted); }
+.gb-show:focus-visible { outline: 3px solid var(--accent-2); outline-offset: 3px; }
+.gb-live { margin: 0; max-width: 32em; text-align: center; }
+
+/* ---------- v2.7.2: readable on a light sky (milestone contrast check) ----------
+   html.sky-light (sky.js: by day, the hour around sunrise / sunset, or no sky behind the owner's picture): the cards are
+   more opaque (settings.js, DAY_GLASS) and the clock, its date and the greeting — straight on the sky — get a soft dark
+   halo, so they read at least 3 : 1 (large) / 4.5 : 1 (the greeting) on the brightest sky */
+html.sky-light .clockbox .greet, html.sky-light .clockbox .date { text-shadow: 0 0 2px rgba(5, 3, 18, .75), 0 0 10px rgba(5, 3, 18, .6), 0 2px 18px rgba(5, 3, 18, .5); }
+html.sky-light .clockbox .clk { text-shadow: 0 0 3px rgba(5, 3, 18, .7), 0 0 18px rgba(5, 3, 18, .55), 0 4px 34px rgba(5, 3, 18, .5); }
+html.sky-light .clockbox .clk .clk-ap { color: var(--text); }
+/* (words for a screen reader only: the level 4–5 alert's announcement — alarm.js afterOverlay) */
+.sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* (and a faint dark veil behind them — on the lightest skies the halo alone left the clock at 2.8 : 1) */
+html.sky-light .clockbox { position: relative; isolation: isolate; }
+html.sky-light .clockbox::before { content: ""; position: absolute; inset: -18px -28px; z-index: -1; pointer-events: none;
+  background: radial-gradient(ellipse at 40% 50%, rgba(5, 3, 18, .34), rgba(5, 3, 18, .16) 55%, transparent 78%); }

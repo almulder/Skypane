@@ -1,0 +1,71 @@
+/* Skypane Manager — design tokens (v2.3.0, the new shell; the design notes): three themes — Light,
+   Dark and Skypane night — picked per login (Appearance; boot-theme.js sets <html data-theme> before the first paint),
+   a z-index scale, and the old names manage.css still uses, mapped onto the new tokens. */
+:root {
+  --rail: 60px; --rail-x: 248px; --top-h: 52px;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  /* the layers, lowest first: nothing on a page can cover the sidebar, its tooltips or a popover */
+  --z-sticky: 10; --z-drawer: 40; --z-top: 200; --z-rail: 300; --z-pop: 400; --z-modal: 500; --z-toast: 600; --z-tip: 1000;
+}
+
+/* (v2.4.1: every text colour ≥ 4.5:1 on its backgrounds — WCAG AA: --t3, --warn and --ok as text, white on --pri) */
+/* ---------- Light (the default before a choice; the html element carries data-theme) ---------- */
+:root {
+  --bg: #f6f6f8; --side: #efeff3; --top: rgba(246, 246, 248, .86); --surface: #fff; --surface-2: #f4f4f7; --hover: #ececf1; --sel: #f1ecff;
+  --line: #e4e4ea; --line-2: #d4d4dd; --text: #17171c; --t2: #55556a; --t3: #6b6b80;
+  --acc: #6d4aff; --acc-2: #5a37f0; --acc-soft: #efeaff; --acc-text: #5631e8;
+  --pri: #6d4aff; --pri-h: #5a37f0; --pri-sh: 0 1px 2px rgba(80, 40, 220, .3), inset 0 1px 0 rgba(255, 255, 255, .15);
+  --input: #fff; --pop: #fff; --pop-solid: #fff; --canvas: #e8e8ee; --scrim: rgba(18, 18, 30, .32);
+  --ok: #15803d; --ok-soft: #e6f6ec; --warn: #a35a00; --warn-soft: #fdf1df; --bad: #dc2626; --bad-soft: #fdeaea; --bad-text: #b91c1c; --idle: #6b6b80;
+  --lit-bg: #fff3d1; --lit-fg: #a87000; --lit-line: #f1dc9d;
+  --shadow: 0 1px 2px rgba(16, 16, 30, .05), 0 1px 1px rgba(16, 16, 30, .03);
+  --shadow-lg: 0 14px 44px rgba(16, 16, 40, .16), 0 2px 6px rgba(16, 16, 40, .06);
+  --blur: none; --kbd: #fff; --tip: #1b1b22; --tip-ring: transparent;
+  color-scheme: light;
+}
+/* ---------- Dark ---------- */
+:root[data-theme=dark] {
+  --bg: #0e0e12; --side: #121217; --top: rgba(14, 14, 18, .86); --surface: #17171d; --surface-2: #1c1c24; --hover: #24242e; --sel: #221c3f;
+  --line: #26262f; --line-2: #34343f; --text: #ededf2; --t2: #a6a6b8; --t3: #8a8a9e;
+  --acc: #8b6dff; --acc-2: #a08aff; --acc-soft: #251e45; --acc-text: #b8a6ff;
+  --pri: #6d4aff; --pri-h: #5a37f0; --pri-sh: 0 1px 2px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 255, 255, .12);
+  --input: #121217; --pop: #1c1c24; --pop-solid: #1c1c24; --canvas: #0a0a0d; --scrim: rgba(0, 0, 0, .55);
+  --ok: #3fcf7a; --ok-soft: #13281c; --warn: #f0a43a; --warn-soft: #2d2212; --bad: #f87171; --bad-soft: #321617; --bad-text: #f87171; --idle: #8f8fa3;
+  --lit-bg: #3a2e10; --lit-fg: #f5c542; --lit-line: #4d3d14;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4); --shadow-lg: 0 18px 50px rgba(0, 0, 0, .6);
+  --blur: none; --kbd: #1c1c24; --tip: #34343f; --tip-ring: rgba(255, 255, 255, .1);
+  color-scheme: dark;
+}
+/* ---------- Skypane night (the panels' purple sky behind glass; the sign-in page always looks like this) ---------- */
+:root[data-theme=night], body.at-login {
+  --bg: #140b3a; --side: rgba(22, 13, 60, .62); --top: rgba(20, 12, 56, .34); --surface: rgba(32, 20, 80, .52); --surface-2: rgba(255, 255, 255, .055);
+  --hover: rgba(255, 255, 255, .075); --sel: rgba(167, 139, 250, .2);
+  --line: rgba(255, 255, 255, .1); --line-2: rgba(255, 255, 255, .18); --text: #f5f1ff; --t2: rgba(234, 226, 255, .76); --t3: rgba(222, 212, 255, .7);
+  --acc: #b39dff; --acc-2: #c7b6ff; --acc-soft: rgba(167, 139, 250, .2); --acc-text: #dacfff;
+  --pri: linear-gradient(135deg, #7c4dff, #5b21b6); --pri-h: linear-gradient(135deg, #6d3dff, #4c1d95); --pri-sh: 0 6px 18px rgba(124, 58, 237, .42);
+  --input: rgba(255, 255, 255, .07); --pop: #25185b; --pop-solid: #25185b; --canvas: transparent; --scrim: rgba(8, 3, 30, .5);
+  --ok: #4ade80; --ok-soft: rgba(74, 222, 128, .15); --warn: #fbbf24; --warn-soft: rgba(251, 191, 36, .15); --bad: #fb7185; --bad-soft: rgba(251, 113, 133, .16); --bad-text: #fda4af;
+  --idle: rgba(222, 212, 255, .72);   /* (v3.0.0: "not set up" dots ≥ 4.5:1 in every theme) */
+  --lit-bg: #ffd34d; --lit-fg: #3a2a00; --lit-line: #ffd34d;
+  --shadow: 0 10px 30px rgba(8, 2, 30, .22), inset 0 1px 0 rgba(255, 255, 255, .05);
+  --shadow-lg: 0 24px 60px rgba(6, 0, 28, .55), inset 0 1px 0 rgba(255, 255, 255, .07);
+  --blur: blur(22px) saturate(140%); --kbd: rgba(255, 255, 255, .08); --tip: #4a3596; --tip-ring: rgba(255, 255, 255, .16);
+  color-scheme: dark;
+}
+
+/* ---------- the old names (manage.css, the pages not rebuilt yet) on the new tokens ----------
+   (declared on body too: a custom property's var() is worked out where it is declared — the sign-in page's own
+   colours on body then reach these as well) */
+:root, body {
+  --muted: var(--t2); --faint: var(--t3);
+  --glass: var(--surface); --glass-line: var(--line);
+  --accent: var(--acc); --accent-2: var(--acc-text); --accent-grad: var(--pri);
+  /* the light fills the old page drew with white at a few percent */
+  --fill-1: var(--surface-2); --fill-2: var(--hover); --fill-3: var(--line-2);
+  --solid: var(--pop-solid);
+  accent-color: var(--acc);
+}
+
+/* ---------- the page's own layer: whatever a page draws (sticky bars, the builder's canvas and its frame) stays
+   inside it, under the top bar, the sidebar, tooltips and popovers ---------- */
+#main { position: relative; z-index: 0; isolation: isolate; }

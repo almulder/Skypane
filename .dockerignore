@@ -1,0 +1,29 @@
+# Build context = only what the image needs (allowlist). Never secrets, house data or test material:
+# .env, private/, data/, config/, captures/, logs/, research/, apks/, broker/, survey/, tools/, docs/, .git/ ...
+*
+!service/
+!scripts/hubitat_bridge.py
+!scripts/protect_to_go2rtc.py
+!dashboard/
+!docker/
+!unraid/skypane.xml
+!hubitat/SkypaneNotifier.groovy
+
+# house data is not in the image (placeholders from docker/placeholders/ are used; real files live in /data/house)
+dashboard/layouts/v4/shared/hubitat-data.js
+dashboard/layouts/v4/shared/protect-cameras.js
+dashboard/layouts/v4/shared/*.mock.js
+# dead design experiments nothing loads (only roomlayoutG.js is live) — the same as scripts/release_manifest.py NEVER
+dashboard/layouts/v4/shared/roomlayout[A-F].js
+dashboard/layouts/v4/shared/roomtest*.js
+
+# the tests (v2.7.2): not in the image — nothing at runtime imports them (service/test_*.py, their fixtures)
+service/test_*.py
+service/**/test_*.py
+service/*_scan.py
+
+# belt and braces
+**/.env
+**/.env.*
+**/__pycache__
+**/*.pyc

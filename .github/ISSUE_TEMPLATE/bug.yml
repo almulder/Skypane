@@ -1,0 +1,25 @@
+name: "Something's wrong"
+description: "Tip: Send feedback in the Skypane Manager files this for you, with the version filled in."
+labels: ["bug", "needs-triage"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: In your own words. Please leave out names, addresses and passwords.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      placeholder: "1. Open Devices\n2. Tap a light\n3. ..."
+  - type: input
+    id: version
+    attributes:
+      label: Skypane version
+      description: Manager -> the small tag under the Skypane name (e.g. v3.0.0 · sha-1234567)

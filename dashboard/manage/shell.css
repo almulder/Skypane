@@ -1,0 +1,245 @@
+/* Skypane Manager — the shell (v2.3.0; the design notes): the sidebar (rail), the top bar, the night
+   sky, the one tooltip, the search box and its results, the theme switch, the avatar menu, the phone's menu button.
+   Drawn by shell.js; the colours come from tokens.css. */
+html { background: var(--bg); scrollbar-gutter: stable; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 Inter, "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased; }
+.i { flex: none; display: inline-block; vertical-align: middle; }
+kbd { font: 500 11px Inter, sans-serif; padding: 1px 5px; border: 1px solid var(--line-2); border-radius: 4px; color: var(--t3); background: var(--kbd); }
+
+/* ---------- the night sky behind everything (Skypane night only) ---------- */
+.sky { position: fixed; inset: 0; z-index: 0; display: none; pointer-events: none;
+  background: radial-gradient(1100px 560px at 78% 6%, rgba(253, 244, 220, .13), transparent 60%), linear-gradient(180deg, #0f0830 0%, #221459 46%, #4b2f9e 80%, #8a63c9 100%); }
+:root[data-theme=night] .sky { display: block; }
+body.at-login .sky { display: none; }
+.sky i { position: absolute; width: 1.5px; height: 1.5px; border-radius: 50%; background: #fff; }
+.sky .moon { position: absolute; right: 30%; top: 9px; width: 38px; height: 38px; border-radius: 50%; background: #fdf4dc; opacity: .8; box-shadow: 0 0 80px 30px rgba(253, 244, 220, .16); }
+.sky svg { position: absolute; left: 0; bottom: 0; width: 100%; height: 36vh; }
+body.bld-open .sky .moon { display: none; }
+
+/* ---------- the page beside the rail (pinned: the rail's full width pushes it) ---------- */
+html.pinned { --rail: var(--rail-x); }
+.app { position: relative; z-index: 1; min-height: 100vh; padding-left: var(--rail); transition: padding-left .18s ease; display: flex; flex-direction: column; }
+body.at-login .app { padding-left: 0; }
+body.at-login .rail, body.at-login .topbar, body.at-login .rscrim, body:not(.signed-in) .rail, body:not(.signed-in) .topbar { display: none; }
+
+/* ---------- the rail: collapsed icons; › expands it over the page, the pin keeps it open, ‹ collapses ---------- */
+.rail { position: fixed; left: 0; top: 0; bottom: 0; width: var(--rail); z-index: var(--z-rail); display: flex; flex-direction: column;
+  padding: 10px 10px 12px; background: var(--side); border-right: 1px solid var(--line); overflow: hidden auto; scrollbar-width: none;
+  transition: width .18s ease, box-shadow .18s ease, transform .18s ease; backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); }
+.rail::-webkit-scrollbar { display: none; }
+.rail .rbody { display: contents; }
+:root[data-theme=night] .rail.open { background: rgba(30, 18, 76, .92); }
+:root[data-theme=dark] .rail.open, :root:not([data-theme]) .rail.open { background: var(--pop-solid); }
+.rail.open { width: var(--rail-x); box-shadow: var(--shadow-lg); }
+html.pinned .rail { box-shadow: none; }
+.rhead { display: flex; align-items: center; gap: 10px; min-height: 40px; margin-bottom: 12px; padding-left: 2px; flex: none; }
+.rhead .lg { flex: none; width: 36px; height: 36px; display: grid; place-items: center; }
+.rhead .lg img { width: 32px; height: 32px; display: block; }
+.rhead .wsn { min-width: 0; white-space: nowrap; flex: 1; }
+.rhead .wsn b { display: block; font-size: 14.5px; font-weight: 650; letter-spacing: -.01em; }
+/* (the version in full — "v2.4.0 · sha-1234567", the owner reads it to check an update: on two lines when it must) */
+.rhead .wsn small { display: block; color: var(--t3); font-size: 11.5px; margin-top: -1px; white-space: nowrap; line-height: 1.25; }
+.rail.open .rhead .wsn small, html.pinned .rail .rhead .wsn small { white-space: normal; }   /* (open: wraps at its spaces, never cut) */
+.rpin { margin-left: 0; }
+.rpin, .rcol { width: 30px; height: 30px; border-radius: 7px; border: 1px solid transparent; background: none; color: var(--t3); display: grid; place-items: center; flex: none; padding: 0; }
+.rpin { margin-left: auto; }
+.rpin:hover, .rcol:hover { background: var(--hover); color: var(--text); border-color: var(--line); }
+html.pinned .rpin { color: var(--acc); background: var(--acc-soft); }
+.rail:not(.open) .rpin, .rail:not(.open) .rcol { display: none; }
+html.pinned .rail .rpin, html.pinned .rail .rcol { display: grid; }
+.rexp { display: grid; place-items: center; width: 40px; height: 24px; margin: -6px 0 8px; padding: 0; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--surface-2); color: var(--t2); flex: none; }
+.rexp:hover { color: var(--text); border-color: var(--line-2); background: var(--hover); }
+.rail.open .rexp, html.pinned .rail .rexp { display: none; }
+/* (the words beside the icons: only once it's open) */
+.rail .fade { opacity: 0; transition: opacity .12s ease; pointer-events: none; }
+.rail.open .fade, html.pinned .rail .fade { opacity: 1; pointer-events: auto; transition-delay: .05s; }
+.rn { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; height: 38px; padding: 0 0 0 11px; border: 0; background: none;
+  border-radius: 9px; color: var(--t2); font-weight: 500; font-size: 13.5px; text-align: left; white-space: nowrap; flex: none; cursor: pointer; }
+.rn:hover { background: var(--hover); color: var(--text); }
+.rn.cur { background: var(--acc-soft); color: var(--acc-text); }
+.rn.cur .i { color: var(--acc); }
+.rn.cur::before { content: ""; position: absolute; left: -10px; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--acc); }
+.rn kbd { margin-left: auto; margin-right: 8px; }
+.rn:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
+.rgrp { position: relative; display: flex; flex-direction: column; gap: 2px; margin-top: 6px; flex: none; }
+.rgh { position: relative; height: 24px; display: flex; align-items: center; padding-left: 11px; font-size: 11.5px; font-weight: 600; color: var(--t3); white-space: nowrap; gap: 6px; }
+.rgh::before { content: ""; position: absolute; left: 8px; width: 24px; top: 50%; height: 1px; background: var(--line-2); transition: opacity .12s; }
+.rail.open .rgh::before, html.pinned .rail .rgh::before { opacity: 0; }
+.radm { margin-top: 14px; padding: 4px 0 6px; border-radius: 12px; background: linear-gradient(var(--acc-soft), transparent 85%); }
+.radm .rgh::before { display: none; }
+.radm .adm { position: absolute; left: 0; width: 40px; text-align: center; font: 600 8.5px var(--mono); letter-spacing: .08em; color: var(--acc-text); transition: opacity .12s; }
+.rail.open .radm .adm, html.pinned .rail .radm .adm { opacity: 0; }
+.tag-a { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 99px; background: var(--acc-soft); color: var(--acc-text); }
+.rail .sp { flex: 1; min-height: 10px; }
+.rfoot { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 2px; flex: none; }
+/* the page behind a rail opened with › (a click there closes it) */
+.rscrim { position: fixed; inset: 0; z-index: calc(var(--z-rail) - 1); background: rgba(0, 0, 0, .2); }
+:root:not([data-theme]) .rscrim, :root[data-theme=light] .rscrim { background: rgba(16, 16, 40, .08); }
+
+/* ---------- the top bar ---------- */
+.topbar { position: sticky; top: 0; z-index: var(--z-top); height: var(--top-h); display: flex; align-items: center; gap: 10px; padding: 0 20px 0 24px;
+  border-bottom: 1px solid var(--line); background: var(--top); backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px); }
+.topbar .sp { flex: 1; min-width: 8px; }
+.crumb { display: flex; align-items: center; gap: 6px; color: var(--t3); font-size: 13.5px; white-space: nowrap; min-width: 0; overflow: hidden; }
+.crumb b { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.crumb .i { color: var(--t3); }
+.ib { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 7px; border: 1px solid transparent; background: none; color: var(--t2); position: relative; flex: none; padding: 0; cursor: pointer; }
+.ib:hover { background: var(--hover); color: var(--text); }
+.menu-btn { display: none; margin-left: -8px; }
+/* the health pill: a dot for each part Skypane needs (hub, broker, cameras, panels) */
+.hbtn { display: flex; align-items: center; height: 32px; padding: 0 3px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface);
+  box-shadow: var(--shadow); backdrop-filter: var(--blur); color: var(--text); cursor: pointer; flex: none; position: relative; }
+.hbtn:hover, .hbtn.open { border-color: var(--line-2); background: var(--hover); }
+.hbtn .hi { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; font-size: 12.5px; color: var(--t2); font-weight: 500; white-space: nowrap; }
+.hbtn .hi + .hi { border-left: 1px solid var(--line); }
+.hbtn .hi.warn { color: var(--warn); } .hbtn .hi.bad { color: var(--bad); } .hbtn .hi.idle { color: var(--t3); }
+.hbtn .hi.sum { display: none; } .hbtn .hi.sum + .hi { border-left: 0; }   /* (the phone's one dot: the worst part) */
+.hbtn .hn { min-width: 18px; padding: 0 5px; border-radius: 9px; font-size: 11.5px; font-weight: 700; line-height: 18px; text-align: center; background: var(--bad); color: #fff; margin-left: 2px; }
+.hbtn .hn.l3 { background: var(--warn); color: #241a00; }
+:root[data-theme=light] .hbtn .hn.l3 { color: #fff; }   /* (v2.7.0: white on the light theme's dark amber reads; the dark text was for the brighter amber of the dark themes) */
+.hd { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none; box-shadow: 0 0 0 3px var(--ok-soft); }
+.hd.warn { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); } .hd.bad { background: var(--bad); box-shadow: 0 0 0 3px var(--bad-soft); }
+.hd.idle { background: var(--idle); box-shadow: none; }
+@media (max-width: 1279px) { .hbtn .hi { padding: 0 7px; } }   /* (every part with its word, or one dot: shell.js fitTop — never grey dots without words) */
+/* the search box (Ctrl K): pages, devices, panels and a few commands — only what this login may open */
+.qs { position: relative; flex: none; }
+.qbox { display: flex; align-items: center; gap: 8px; width: 300px; height: 32px; padding: 0 6px 0 10px; border-radius: 7px; background: var(--surface-2);
+  border: 1px solid var(--line-2); color: var(--t3); transition: width .16s ease, border-color .12s, box-shadow .12s; cursor: text; }
+.qbox:hover { border-color: var(--t3); }
+.qs.open .qbox { width: 420px; border-color: var(--acc); box-shadow: 0 0 0 3px var(--acc-soft); background: var(--input); }
+.qbox input, .qbox input[type=search] { flex: 1; min-width: 0; border: 0; border-radius: 0; outline: 0; background: none; font-size: 13px; color: var(--text); height: 100%; padding: 0;
+  -webkit-appearance: none; appearance: none; }
+.qbox input::-webkit-search-cancel-button { display: none; }
+.qbox input::placeholder { color: var(--t3); }
+.qbox kbd { font-family: var(--mono); font-size: 10.5px; white-space: nowrap; }
+@media (max-width: 1279px) { .qbox { width: 220px; } .qs.open .qbox { width: 340px; } }
+.qres { width: 520px; padding: 6px; max-height: min(520px, calc(100vh - 80px)); overflow: auto; }
+.qres h6 { margin: 8px 10px 4px; font-size: 11.5px; color: var(--t3); font-weight: 600; display: flex; justify-content: space-between; }
+.qres h6 span { font-weight: 500; }
+.qo { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 0 10px; border-radius: 8px; font-size: 13.5px; cursor: pointer; color: var(--text); }
+.qo .qi { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--line); color: var(--t2); flex: none; }
+.qo > span:nth-child(2) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.qo small { color: var(--t3); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.qo .k { margin-left: auto; display: none; }
+.qo.on { background: var(--hover); } .qo.on .k { display: inline; }
+.qo mark { background: none; color: var(--acc-text); font-weight: 650; }
+.qf { display: flex; gap: 16px; padding: 8px 10px 4px; margin-top: 4px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--t3); flex-wrap: wrap; }
+.qf span:last-child { margin-left: auto; }
+.qempty { padding: 30px 16px; text-align: center; color: var(--t3); } .qempty b { display: block; color: var(--text); margin-bottom: 2px; }
+/* the theme switch (square, three icons) */
+.tsel { display: inline-flex; height: 32px; border: 1px solid var(--line-2); border-radius: 7px; overflow: hidden; background: var(--surface-2); flex: none; }
+.tsel button { width: 34px; padding: 0; border: 0; border-left: 1px solid var(--line-2); border-radius: 0; background: none; color: var(--t3); display: grid; place-items: center; cursor: pointer; }
+.tsel button:first-child { border-left: 0; }
+.tsel button:hover { color: var(--text); background: var(--hover); }
+.tsel button.on { background: var(--acc-soft); color: var(--acc-text); }
+/* the avatar: the login's first letter; its menu */
+.avb { position: relative; width: 32px; height: 32px; border-radius: 50%; border: 0; padding: 0; background: none; flex: none; display: grid; place-items: center; cursor: pointer; }
+.av { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 600; font-size: 12.5px; flex: none; background: var(--acc); }
+.avb .av { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--line-2); }
+.avb:hover .av, .avb.open .av { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--acc); }
+.amenu { width: 292px; padding: 6px; }
+.amenu .mh { display: flex; gap: 12px; align-items: center; padding: 10px 10px 12px; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
+.amenu .mh .av { width: 38px; height: 38px; font-size: 15px; }
+.amenu .mh b { display: block; font-size: 14px; overflow-wrap: anywhere; } .amenu .mh small { display: block; color: var(--t3); font-size: 12px; }
+.amenu .ml { padding: 8px 10px 6px; font-size: 11.5px; font-weight: 600; color: var(--t3); }
+.amenu hr { border: 0; border-top: 1px solid var(--line); margin: 6px 0; }
+.amenu .arow { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; font-size: 13px; color: var(--text); }
+.amenu .arow span { flex: 1; }
+.amenu .tseg { display: flex; margin: 0 6px 6px; }
+.amenu .tseg button { flex: 1; justify-content: center; }
+.mi { display: flex; align-items: center; gap: 10px; width: 100%; height: 34px; padding: 0 10px; border: 0; background: none; border-radius: 7px; font-size: 13px;
+  text-align: left; color: var(--text); cursor: pointer; }
+.mi:hover, .mi:focus-visible { background: var(--hover); outline: none; }
+.mi .i { color: var(--t2); }
+.mi small { margin-left: auto; color: var(--t3); font-size: 12px; }
+/* the health popover */
+.hpop { width: 380px; padding: 6px 0 0; }
+.hpop h4 { margin: 8px 16px 8px; font-size: 13.5px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
+.hpop h4 small { margin-left: auto; font-weight: 500; color: var(--t3); font-size: 12px; }
+.hrow { display: flex; align-items: center; gap: 12px; padding: 8px 16px; width: 100%; border: 0; background: none; text-align: left; color: var(--text); border-radius: 0; cursor: pointer; }
+.hrow:hover, .hrow:focus-visible { background: var(--hover); outline: none; }
+.hrow > span:nth-child(2) { flex: 1; min-width: 0; }
+.hrow b { display: block; font-weight: 550; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hrow small { display: block; color: var(--t3); font-size: 12px; }
+.hpop .hnote { margin: 4px 16px 10px; color: var(--t3); font-size: 13px; }
+.hpop .hunset { display: flex; align-items: center; gap: 8px; } .hpop .hunset .hl-dot { background: var(--idle); }
+.hfoot { display: flex; align-items: center; gap: 8px; padding: 10px 16px; margin-top: 6px; border-top: 1px solid var(--line); font-size: 12px; color: var(--t3);
+  background: var(--surface-2); border-radius: 0 0 12px 12px; }
+.hfoot .btn { margin-left: auto; }
+
+/* ---------- the one tooltip (on <body>, above everything): the rail's names while it's collapsed, the icons' ---------- */
+#gtip { position: fixed; z-index: var(--z-tip); background: var(--tip); color: #fff; font-size: 12.5px; font-weight: 550; padding: 5px 9px; border-radius: 6px;
+  white-space: nowrap; pointer-events: none; box-shadow: 0 0 0 1px var(--tip-ring), 0 6px 18px rgba(0, 0, 0, .35); opacity: 0; transition: opacity .1s; left: 0; top: 0; }
+#gtip.on { opacity: 1; }
+#gtip small { color: rgba(255, 255, 255, .6); font-weight: 500; margin-left: 6px; font-size: 12px; }
+#gtip::before { content: ""; position: absolute; width: 8px; height: 8px; background: inherit; transform: rotate(45deg); }
+#gtip.r::before { left: -3px; top: calc(50% - 4px); } #gtip.b::before { top: -3px; left: calc(50% - 4px); } #gtip.t::before { bottom: -3px; left: calc(50% - 4px); }
+
+/* ---------- the page area ---------- */
+#main { flex: 1; width: 100%; max-width: none; margin: 0; padding: 24px 28px 64px; min-width: 0; }
+body.bld-open #main { padding: 12px 14px 20px; }
+@media (max-width: 1279px) { #main { padding: 20px 22px 60px; } .topbar { padding: 0 18px 0 20px; } }
+
+/* ---------- a phone (narrow + a finger; shell.js / boot-theme.js set html.phone): the rail behind a menu button,
+   opened over the page; the top bar keeps search, health and the avatar ---------- */
+html.phone { --rail: 0px; }
+html.phone .app { padding-left: 0; }
+html.phone .rail { width: var(--rail-x); transform: translateX(-102%); box-shadow: none; }
+html.phone .rail.open { transform: none; box-shadow: var(--shadow-lg); }
+html.phone .rail .fade { opacity: 1; pointer-events: auto; }
+html.phone .rail .rexp, html.phone .rail .rpin, html.phone .rail .rgh::before, html.phone .rail .radm .adm { display: none; }
+html.phone .rail.open .rcol { display: grid; margin-left: auto; }
+html.phone .menu-btn { display: grid; }
+html.phone .topbar { padding: 0 10px 0 12px; gap: 6px; }
+html.phone .tsel, html.phone .qbox kbd, html.phone .hbtn .hi { display: none; }
+html.phone .hbtn .hi.sum { display: flex; }
+html.phone .qbox { width: 36px; padding: 0 9px; }
+html.phone .qs.open { position: fixed; left: 8px; right: 8px; top: 10px; z-index: var(--z-pop); }
+html.phone .qs.open .qbox { width: 100%; }
+html.phone .qres { width: auto; }
+html.phone #main { padding: 14px 12px 60px; }
+/* the sign-in page: its own night scene edge to edge (no gutter in the theme's colour) */
+html:has(body.at-login) { scrollbar-gutter: auto; background: #0b0820; }
+/* the avatar menu's theme buttons: the icon apart from its word */
+.amenu .tseg button { display: inline-flex; align-items: center; gap: 6px; }
+#appearance-views:focus { outline: none; }
+#appearance-views:focus-visible { outline: 2px solid var(--acc); outline-offset: 4px; border-radius: 12px; }
+/* Skypane night: the strip kept for the scrollbar shows the sky's colours too (the sky itself is the viewport's) */
+:root[data-theme=night]:not(:has(body.at-login)) { background: #221459 linear-gradient(180deg, #0f0830 0%, #221459 46%, #4b2f9e 80%, #8a63c9 100%) fixed; }
+/* a narrower window with the rail pinned: room for the crumb */
+.crumb { flex: 0 1 auto; min-width: 90px; }
+
+/* a phone: its scroll bars float over the page (no strip kept for them); the search box opens at once */
+html.phone { scrollbar-gutter: auto; }
+html.phone .qbox { transition: none; }
+/* v2.4.0: the top bar fits its contents — shell.js fitTop adds these one at a time while they don't fit: the extra
+   items fold into the avatar menu, the search box becomes an icon (it opens over the bar), the theme buttons go (they
+   are in the avatar menu), the health pill shows one dot (the worst part), the page's name goes. */
+.tslot { display: flex; align-items: center; gap: 6px; flex: none; }
+.topbar.tb-measure .qbox { transition: none !important; }
+.tslot:empty { display: none; }
+.topbar.tb-fold .tslot [data-tb-item] { display: none; }
+.topbar.tb-q .qbox { width: 36px; padding: 0 9px; } .topbar.tb-q .qbox kbd { display: none; }
+html:not(.phone) .topbar.tb-q .qs.open { position: absolute; left: 12px; right: 12px; top: 50%; transform: translateY(-50%); z-index: 2; }
+html:not(.phone) .topbar.tb-q .qs.open .qbox { width: 100%; }
+.topbar.tb-t .tsel { display: none; }
+.topbar.tb-h .hbtn .hi { display: none; } .topbar.tb-h .hbtn .hi.sum { display: flex; }
+.topbar.tb-c .crumb { display: none; }
+.topbar.tb-c .sp { min-width: 0; }
+/* thin scroll bars in the theme's colours (the page, the drawer, the facets, menus) */
+* { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+/* (v2.4.0 gate 2: the search box open over the bar — folded, or on a phone — is solid in every theme and nothing of the
+   bar shows through or beside it) */
+html.phone .qs.open .qbox, .topbar.tb-q .qs.open .qbox { background: var(--pop-solid); }
+html.phone .topbar:has(.qs.open) :is(.crumb, .hslot, .menu-btn, .tslot),
+.topbar.tb-q:has(.qs.open) :is(.crumb, .hslot, .menu-btn, .tslot) { visibility: hidden; }
+/* (v2.4.1) "Skip to content": out of sight until the keyboard reaches it */
+.skip { position: fixed; left: 8px; top: 8px; z-index: var(--z-tip); transform: translateY(-160%); padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line-2);
+  background: var(--pop-solid); color: var(--text); font-weight: 600; font-size: 13.5px; box-shadow: var(--shadow-lg); }
+.skip:focus { transform: none; }
+#main:focus { outline: none; }
+/* (v2.4.1) a phone: the top bar's buttons at least 40 px to touch */
+html.phone .topbar .ib, html.phone .avb, html.phone .hbtn, html.phone .qbox { min-width: 40px; min-height: 40px; }
+@media (prefers-reduced-motion: reduce) { .rail, .app, .qbox, .sw, .sw::after { transition: none !important; } }

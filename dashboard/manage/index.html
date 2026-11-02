@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0e12"><!-- (v2.8.0) the browser's bar; phone.js follows the theme -->
+<link rel="manifest" href="manifest.webmanifest"><!-- (v2.8.0) "Add to home screen": full screen, the Skypane icon -->
+<link rel="apple-touch-icon" href="../assets/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Skypane">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="referrer" content="no-referrer">
+<title>Skypane</title>
+<link rel="icon" type="image/svg+xml" href="../assets/skypane.svg"><!-- the Skypane icon (docs/branding) -->
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/icon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="../assets/icon-16.png">
+<script src="boot-theme.js"></script><!-- the theme and the sidebar's pin before the first paint (v2.3.0) -->
+<link rel="stylesheet" href="../vendor/fonts/fonts.css">
+<link rel="stylesheet" href="tokens.css"><!-- Light · Dark · Skypane night, the layers, the old names on the new tokens -->
+<link rel="stylesheet" href="shell.css"><!-- the sidebar, the top bar, search, the tooltip -->
+<link rel="stylesheet" href="ui.css"><!-- the shared parts: cards, grouped rows, switches, pills, popovers, the side layout -->
+<link rel="stylesheet" href="manage.css"><!-- the pages' own parts -->
+<link rel="stylesheet" href="devices.css"><!-- the Devices page: Basic / Detailed (v2.4.0) -->
+<link rel="stylesheet" href="panels.css"><!-- the Panels page: Status / Setup, Open live (v2.5.0) -->
+<link rel="stylesheet" href="builder.css"><!-- the layout builder: the new Manager look, Focus (v2.5.0) -->
+<link rel="stylesheet" href="media.css"><!-- Backgrounds · Icons · Cards: Gallery / List; the kit's table (v2.6.0) -->
+<link rel="stylesheet" href="cameras.css"><!-- the Cameras page: Live / Setup (v2.6.0) -->
+<link rel="stylesheet" href="admin.css"><!-- Accounts, Your account, Integrations, Guest Wi-Fi, Health → Timeline (v2.7.0) -->
+<link rel="stylesheet" href="../layouts/v4/shared/motions.css">
+<link rel="stylesheet" href="phone.css"><!-- (v2.8.0) the phone: bottom tabs, sheets, the phone screens — html.phone only -->
+</head>
+<body>
+<!-- The Manager page (stage 4; the new shell since v2.3.0): the house's settings, device types, rooms, PIN rules and
+     pictures, from a laptop or phone. Its own username + password (created on the first visit; service/manager_auth.py).
+     shell.js draws the sidebar and the top bar around the page; everything is drawn with DOM calls + textContent —
+     no device name is ever parsed as HTML. No inline script anywhere: the page's CSP allows only these files. -->
+<div class="app">
+<main id="main"><div class="p-skel boot-skel" role="status" aria-label="Loading the Manager"><i></i><i></i><i></i></div></main><!-- (v2.8.0: skeleton rows while the first answers come — phone.css) -->
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="../layouts/v4/shared/icons.js"></script>
+<script src="../layouts/v4/shared/themes.js"></script>
+<script src="../layouts/v4/shared/backgrounds.js"></script><!-- the built-in scenes (their names; the panels draw them) -->
+
+<!-- (v2.7.2) art-extra.js, roomlayoutG.js, motions.js, pictures.js and builder.js load after a sign-in: manage.js loadHeavy -->
+<script src="strings/en.js"></script><!-- (v2.9.0) the Manager's words (Kit.t): English; other languages later -->
+<script src="manage.js"></script><!-- the core: el, api, sign-in, permissions, dialogs, the unsaved-changes guard -->
+<script src="kit.js"></script><!-- the icons, the side layout, grouped rows -->
+<script src="shell.js"></script><!-- the sidebar, the top bar, the router, each login's prefs -->
+<script src="phone.js"></script><!-- (v2.8.0) the phone shell: bottom tabs, ‹ Back, More, Kit.sheet, Back closes a sheet -->
+<script src="layoutmaps.js"></script><!-- (v2.8.0) the layout grid and the built-in layouts: the Panels maps and the builder -->
+<script src="devices.js"></script><!-- the Devices page: Basic / Detailed (v2.4.0) -->
+<script src="iconsets.js"></script><!-- the icon sets and their credits (Pictures tab; names for the builder's picker) -->
+<script src="bench-ui.js"></script><!-- the panel benchmark's controls and live view (Panels and the layout builder) -->
+<script src="panels.js"></script><!-- the Panels page: Status / Setup, Open live (v2.5.0) -->
+<script src="guest.js"></script><!-- the Guest Wi-Fi page (out of panels.js in v2.5.0) -->
+<script src="calendars.js"></script><!-- Integrations → Calendars: the house's calendar links (the admin) -->
+<script src="weatherdev.js"></script><!-- (v3.0.0) Integrations → Weather: a Hubitat weather device's warnings and weather -->
+<script src="house.js"></script>
+<script src="cardlib.js"></script><!-- a card's install dialog, preview, export, the AI prompt -->
+<script src="cameras.js"></script><!-- the Cameras page: Live / Setup (v2.6.0) -->
+<script src="media.js"></script><!-- Backgrounds · Icons · Cards: Gallery / List (v2.6.0) -->
+<script src="accounts.js"></script><!-- Accounts: One / All — several admins, the owner, sign-in codes (v2.7.0) -->
+<script src="account.js"></script><!-- Your account: profile, password, sign out the others, appearance, language (v2.7.0) -->
+<script src="integrations.js"></script><!-- Integrations: the house settings in groups, the connections (v2.7.0) -->
+<script src="overview.js"></script><!-- the Overview: the house at a glance, alerts waiting (Acknowledge), what needs a look -->
+<script src="housectl.js"></script>
+<script src="feedback.js"></script><!-- (v3.0.0) Send feedback: a report filed through the feedback relay --><!-- (v2.9.3) Mode & alarm on the Overview: the Hubitat mode and HSM, with the panel PIN -->
+<script src="timeline.js"></script><!-- Health → Timeline: the activity log and the health log (v2.7.0) -->
+<script src="health.js"></script><!-- the health pill in the top bar and the Health page (service/health.py) -->
+<script src="help-topics.js"></script><!-- the Help topics (plain data; docs/help.md is a copy) -->
+<script src="help.js"></script><!-- the Help page (#help/<topic>, the sidebar's Help, F1) and its search -->
+
+</body>
+</html>

@@ -1,0 +1,69 @@
+/* icon motions (motions.js; the idea from Anashost's HA-Animated-cards, our own motions): transform / opacity only,
+   moving only while the device is on (.run), still under the screensaver and for "reduce motion" */
+.mo { position: relative; display: inline-grid; place-items: center; flex: none; border-radius: 50%; background: rgba(255, 255, 255, .07);
+  color: rgba(255, 255, 255, .62); transition: background .4s, color .4s; }
+.mo::before { content: ""; position: absolute; inset: -22%; border-radius: 50%; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle, var(--c) 0%, transparent 68%); }
+.mo.run { background: color-mix(in srgb, var(--c) 36%, rgba(20, 14, 44, .45)); color: var(--c); }
+.mo.run::before { animation: mo-aura 2.6s ease-in-out infinite alternate; }
+@keyframes mo-aura { from { opacity: .22; transform: scale(.88); } to { opacity: .55; transform: scale(1.06); } }
+.mo.mo.mo .mo-i .ic { color: inherit; }   /* (the chip's colour wins over a card's "on" colour) */
+.gc-sq .gc-disc:has(> .mo), .gc.on .gc-sq .gc-disc:has(> .mo) { background: none; width: auto; height: auto; }   /* (the chip is the disc) */
+.mo > .mo-i { display: inline-grid; transform-origin: 50% 50%; }
+.mo > i { position: absolute; pointer-events: none; opacity: 0; }
+.mo.run > .mo-i { animation: var(--mo-a) var(--mo-t, 1.6s) var(--mo-e, ease-in-out) infinite var(--mo-d, normal); }
+.mo-spin { --mo-a: mo-spin; --mo-t: 1.3s; --mo-e: linear; }
+.mo-rock { --mo-a: mo-rock; --mo-t: 1.8s; --mo-d: alternate; }
+.mo-twist { --mo-a: mo-twist; --mo-t: 3.2s; }
+.mo-swing { --mo-a: mo-swing; --mo-t: 2.6s; --mo-d: alternate; } .mo-swing > .mo-i { transform-origin: 15% 50%; }
+.mo-rumble { --mo-a: mo-rumble; --mo-t: .32s; --mo-e: steps(2); }
+.mo-hop { --mo-a: mo-hop; --mo-t: .7s; --mo-d: alternate; }
+.mo-shake { --mo-a: mo-shake; --mo-t: .4s; }
+.mo-tumble { --mo-a: mo-tumble; --mo-t: 1s; --mo-d: alternate; }
+.mo-flicker { --mo-a: mo-flicker; --mo-t: 1.2s; } .mo-flicker > .mo-i { transform-origin: 50% 90%; }
+.mo-ring { --mo-a: mo-ring; --mo-t: 2.4s; } .mo-ring > .mo-i { transform-origin: 50% 12%; }
+.mo-slide { --mo-a: mo-slide; --mo-t: 2.4s; --mo-d: alternate; }
+.mo-lift { --mo-a: mo-lift; --mo-t: 2.2s; --mo-d: alternate; }
+.mo-charge { --mo-a: mo-charge; --mo-t: 1.4s; }
+.mo-breathe { --mo-a: mo-breathe; --mo-t: 3s; --mo-d: alternate; }
+.mo-roam { --mo-a: mo-roam; --mo-t: 3.4s; }
+.mo-blink { --mo-a: mo-blink; --mo-t: .9s; --mo-e: steps(2); }
+.mo-sonar, .mo-steam, .mo-heat, .mo-drip, .mo-waves, .mo-glow { --mo-a: none; }
+@keyframes mo-spin { to { transform: rotate(360deg); } }
+@keyframes mo-rock { from { transform: rotate(-14deg); } to { transform: rotate(14deg); } }
+@keyframes mo-twist { 0%, 64%, 100% { transform: rotate(0); } 74% { transform: rotate(-28deg); } 84% { transform: rotate(4deg); } }
+@keyframes mo-swing { from { transform: scaleX(1); } to { transform: scaleX(.62) skewY(-6deg); } }
+@keyframes mo-rumble { from { transform: translate(.6px, 0); } to { transform: translate(-.6px, .5px); } }
+@keyframes mo-hop { from { transform: translateY(1px); } to { transform: translateY(-5px); } }
+@keyframes mo-shake { 0%, 100% { transform: translateX(0) rotate(0); } 25% { transform: translateX(-2px) rotate(-2deg); } 75% { transform: translateX(2px) rotate(2deg); } }
+@keyframes mo-tumble { from { transform: rotate(-22deg); } to { transform: rotate(22deg); } }
+@keyframes mo-flicker { 0%, 100% { transform: scale(1, 1); opacity: 1; } 30% { transform: scale(.96, 1.08); opacity: .85; } 55% { transform: scale(1.03, .95); } 80% { transform: scale(.98, 1.05); opacity: .92; } }
+@keyframes mo-ring { 0%, 40%, 100% { transform: rotate(0); } 5%, 15%, 25% { transform: rotate(16deg); } 10%, 20%, 30% { transform: rotate(-16deg); } }
+@keyframes mo-slide { from { transform: translateY(-3px) scaleY(.92); } to { transform: translateY(2px) scaleY(1.04); } }
+@keyframes mo-lift { from { transform: translateY(2px); } to { transform: translateY(-4px); } }
+@keyframes mo-charge { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+@keyframes mo-breathe { from { transform: scale(.93); } to { transform: scale(1.07); } }
+@keyframes mo-roam { 0%, 100% { transform: translateX(0) rotate(0); } 25% { transform: translateX(-5px) rotate(-8deg); } 50% { transform: translateX(0) rotate(0); } 75% { transform: translateX(5px) rotate(8deg); } }
+@keyframes mo-blink { from { opacity: 1; } to { opacity: .25; } }
+/* the extra pieces: rings, wisps, a drop, waves, a halo */
+.mo-sonar > i { inset: -4%; border: 2px solid var(--c); border-radius: 50%; }
+.mo-sonar.run > i { animation: mo-ping 2s ease-out infinite; } .mo-sonar.run > i + i { animation-delay: -1s; }
+@keyframes mo-ping { from { transform: scale(.55); opacity: .8; } to { transform: scale(1.9); opacity: 0; } }
+.mo-steam > i, .mo-heat > i { bottom: 64%; width: 3px; height: 40%; border-radius: 3px; background: rgba(255, 255, 255, .55); }
+.mo-heat > i { background: rgba(255, 160, 90, .6); }
+.mo-steam > i:nth-child(1), .mo-heat > i:nth-child(1) { left: 28%; } .mo-steam > i:nth-child(2), .mo-heat > i:nth-child(2) { left: 47%; } .mo-steam > i:nth-child(3), .mo-heat > i:nth-child(3) { left: 66%; }
+.mo-steam.run > i, .mo-heat.run > i { animation: mo-rise 1.8s ease-out infinite; }
+.mo-steam.run > i:nth-child(2), .mo-heat.run > i:nth-child(2) { animation-delay: -.6s; } .mo-steam.run > i:nth-child(3), .mo-heat.run > i:nth-child(3) { animation-delay: -1.2s; }
+@keyframes mo-rise { 0% { transform: translateY(6px) scaleY(.4); opacity: 0; } 40% { opacity: .9; } 100% { transform: translateY(-10px) scaleY(1); opacity: 0; } }
+.mo-drip > i { left: 44%; top: 74%; width: 6px; height: 8px; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; background: #7cc4ff; }
+.mo-drip.run > i { animation: mo-drop 1.3s ease-in infinite; }
+@keyframes mo-drop { 0% { transform: translateY(-4px) scale(.4); opacity: 0; } 30% { opacity: 1; transform: translateY(0) scale(1); } 100% { transform: translateY(14px); opacity: 0; } }
+.mo-waves > i { top: 26%; right: -14%; width: 24%; height: 48%; border: 2px solid var(--c); border-left: 0; border-top-color: transparent; border-bottom-color: transparent; border-radius: 0 50% 50% 0; }
+.mo-waves > i + i { right: -28%; height: 66%; top: 17%; }
+.mo-waves.run > i { animation: mo-wave 1.2s ease-out infinite; } .mo-waves.run > i + i { animation-delay: -.6s; }
+@keyframes mo-wave { from { transform: translateX(-4px); opacity: .9; } to { transform: translateX(3px); opacity: 0; } }
+.mo-glow > i { inset: 8%; border-radius: 50%; background: radial-gradient(circle, rgba(255, 228, 150, .7), rgba(255, 214, 120, 0) 65%); }
+.mo-glow.run > i { animation: mo-halo 2.6s ease-in-out infinite alternate; }
+@keyframes mo-halo { from { opacity: .35; transform: scale(.9); } to { opacity: .85; transform: scale(1.08); } }
+html.anim-paused .mo .mo-i, html.anim-paused .mo > i, html.anim-paused .mo::before { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) { .mo.run > .mo-i, .mo.run > i, .mo.run::before { animation: none; } }

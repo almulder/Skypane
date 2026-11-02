@@ -1,0 +1,21 @@
+/* The panel's status bars (status.js): lost the server = a full-width bar across the top; other problems = a small
+   centred "⚠ Issues detected" bar (a tap lists them). Over the page but under the Settings window (95) and pop-ups;
+   the page moves down while one shows, so nothing is covered. */
+.st-bar { position: fixed; top: 0; z-index: 90; pointer-events: none; display: flex; align-items: center; justify-content: center; gap: 10px;
+  color: #fff; font-weight: 600; letter-spacing: .01em; box-shadow: 0 6px 20px rgba(0,0,0,.35); animation: stIn .35s ease both; }
+.st-bar[hidden] { display: none; }
+.st-lost { left: 0; right: 0; padding: 10px 16px; font-size: 18px; background: rgba(190, 40, 64, .94); }
+.st-issues { pointer-events: auto; cursor: pointer; border: 0; font: inherit; font-weight: 600; min-height: 36px; left: 50%; transform: translateX(-50%); width: min(33vw, 520px); min-width: 220px; padding: 6px 14px; font-size: 15px;
+  border-radius: 0 0 14px 14px; background: rgba(150, 100, 0, .92); animation-name: stInC; }
+.st-issues.alert { background: rgba(196, 72, 20, .94); }
+.st-dot { width: 10px; height: 10px; border-radius: 50%; background: #fff; animation: stPulse 1.2s ease-in-out infinite; }
+@keyframes stIn { from { transform: translateY(-100%); } to { transform: none; } }
+@keyframes stInC { from { transform: translate(-50%, -100%); } to { transform: translateX(-50%); } }
+@keyframes stPulse { 50% { opacity: .25; } }
+/* (the screensaver's pause stops other animations; these still show — they are the news) */
+html.anim-paused .st-dot { animation-play-state: running; }
+/* (room for the bar: the page starts under it; with the dock on top the dock moves down too) */
+html.st-lost-on main { top: calc(var(--dock-t, 0px) + 44px); }
+html.st-issues-on main { top: calc(var(--dock-t, 0px) + 36px); }
+html.st-lost-on { --st-h: 44px; } html.st-issues-on { --st-h: 36px; }   /* (a room bar on top moves down under it: theme.css) */
+.st-list { margin: 0; padding-left: 20px; font-size: 17px; line-height: 1.6; text-align: left; }

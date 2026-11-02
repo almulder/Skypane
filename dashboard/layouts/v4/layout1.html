@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"><!-- a wall panel: no pinch zoom -->
+<title>Skypane</title>
+<link rel="icon" type="image/svg+xml" href="../../assets/skypane.svg"><!-- the Skypane icon (docs/branding) -->
+<link rel="icon" type="image/png" sizes="32x32" href="../../assets/icon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="../../assets/icon-16.png">
+<link rel="apple-touch-icon" href="../../assets/icon-180.png">
+<link rel="stylesheet" href="../../vendor/fonts/fonts.css">
+<link rel="stylesheet" href="shared/theme.css">
+<link rel="stylesheet" href="shared/motions.css">
+<link rel="stylesheet" href="shared/status.css"><!-- the status bars (status.js) -->
+<link rel="stylesheet" href="shared/thermo-looks.css"><!-- the thermostat card's 12 looks (thermo-looks.js) -->
+</head>
+<body>
+<main id="main"></main>
+<div class="dock glass" id="dock"></div>
+
+<script src="../../vendor/mqtt.min.js"></script>
+<script src="shared/acts.js"></script><!-- what a tap on the generated HTML does: data-click="…", no handler in the markup (the page's CSP) -->
+<script src="shared/strings/en.js"></script><!-- the panel's words, English (v3.0.0: other languages are files like it) -->
+<script src="shared/strings.js"></script><!-- T(key, vars): the words in the panel's language; dates and times via Intl -->
+<script src="shared/live.js"></script><!-- only with ?live=1: the Manager's "Open live" (control or view only) -->
+<script src="shared/icons.js"></script>
+<script src="shared/wxicons.js"></script>
+<script src="shared/nest.js"></script>
+<script src="shared/hubitat-data.js"></script>
+<script src="shared/protect-cameras.js"></script><!-- camera list straight from Protect (written by protect_to_go2rtc.py) -->
+
+<script src="shared/store.js"></script><!-- this panel's saved data, kept by the dashboard service -->
+<script src="shared/themes.js"></script>
+<script src="shared/backgrounds.js"></script>
+<script src="shared/clock.js"></script>
+<script src="shared/data.js"></script>
+<script src="shared/weather.js"></script>
+<script src="shared/ui.js"></script>
+<script src="shared/pinpad.js"></script>
+<script src="shared/sky.js"></script>
+<script src="shared/chime.js"></script>
+<script src="shared/alarm.js"></script>
+<script src="shared/hubalerts.js"></script><!-- alerts from Hubitat rules (the Skypane Notifier driver) -->
+<script src="shared/settings.js"></script>
+<script src="shared/cameras.js"></script>
+<script src="../../vendor/qrcode.js"></script>
+<script src="shared/guestwifi.js"></script>
+<script src="shared/music.js"></script>
+<script src="shared/art-extra.js"></script><!-- more animated drawings (adapted from skyrotter, MIT) -->
+<script src="shared/roomlayoutG.js"></script>
+<script src="shared/timers.js"></script><!-- kitchen timers (the Timers card) -->
+<script src="shared/modes.js"></script><!-- Hubitat modes (the Mode card) -->
+<script src="shared/lists.js"></script><!-- shared lists and notes (the List / Notes cards) -->
+<script src="shared/motions.js"></script><!-- icon motions for device cards (the idea: Anashost's HA-Animated-cards) -->
+<script src="shared/thermo-looks.js"></script><!-- the thermostat card's 12 looks (builder → Thermostat → Look) -->
+<script src="shared/grid.js"></script><!-- the layout builder's pages: Home and the rooms (Manager → Look & layout → Your own) -->
+<script src="shared/cards.js"></script><!-- cards people made, each in its sandboxed frame (Manager → Cards) -->
+<script src="shared/app.js"></script>
+<script src="shared/guestlock.js"></script><!-- guest lockdown: locked (or the screen off) while the admin's guest switch is on -->
+<script src="shared/status.js"></script><!-- status bars (lost the server / issues) and the panel as a speaker -->
+<script src="shared/bench.js"></script><!-- the full benchmark (Manager → Panels → Weather effects) -->
+<script src="/assets/panel-start.js"></script><!-- App.start() (v2.4.1: no inline script — the page's CSP) -->
+<script src="shared/design.js"></script><!-- only with ?design=1: the layout builder's live canvas in the Manager -->
+</body>
+</html>

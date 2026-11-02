@@ -1,0 +1,20 @@
+{
+  "id": "ev-battery",
+  "name": "EV battery",
+  "version": "1.0.0",
+  "author": "Skypane (example)",
+  "description": "A car's battery level as a bar, its range, and a button to start or stop its charger. A template card: no code of its own.",
+  "tier": "template",
+  "size": {"w": 3, "h": 2},
+  "slots": [
+    {"key": "car", "label": "Car (battery)", "attributes": ["battery", "range", "chargingState"]},
+    {"key": "charger", "label": "Charger switch", "attributes": ["switch", "power"], "commands": ["on", "off"], "required": false}
+  ],
+  "settings": [
+    {"key": "title", "label": "Title", "type": "text", "default": "Car"},
+    {"key": "low", "label": "Low below (%)", "type": "number", "default": 20},
+    {"key": "bar", "label": "Bar colour", "type": "color", "default": "#34d399"}
+  ],
+  "html": "<div class=\"ev\"><div class=\"top\"><b>{{set.title}}</b><span class=\"pct\">{{car.battery}}%</span></div><div class=\"bar\"><i></i></div><div class=\"row\"><span data-if=\"car.range>0\">{{car.range}} mi range</span><span data-if=\"car.battery<20\" class=\"low\">Low</span><button data-if=\"charger.switch=off\" data-cmd=\"charger:on\">Charge</button><button data-if=\"charger.switch=on\" data-cmd=\"charger:off\" class=\"on\">Charging · {{charger.power}} W</button></div></div>",
+  "css": ".ev{display:flex;flex-direction:column;gap:10px;padding:14px 18px;height:100%;box-sizing:border-box}.top{display:flex;justify-content:space-between;align-items:baseline}.top b{font-size:18px}.pct{font-size:34px;font-weight:300}.bar{height:14px;border-radius:7px;background:rgba(255,255,255,.12);overflow:hidden}.bar i{display:block;height:100%;width:calc(var(--car-battery,0) * 1%);background:var(--set-bar,#34d399);border-radius:7px}.row{display:flex;gap:10px;align-items:center;color:var(--muted,#a99fd0)}.row button{margin-left:auto;border:0;border-radius:10px;padding:7px 12px;background:rgba(255,255,255,.12);color:inherit;font:inherit}.row button.on{background:var(--accent,#8b5cf6);color:#fff}.low{color:#fb7185}"
+}

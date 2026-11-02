@@ -1,0 +1,14 @@
+{
+  "id": "power-graph",
+  "name": "Power graph",
+  "version": "1.0.0",
+  "author": "Skypane (example)",
+  "description": "A meter's power now, with a small line of the last hour. A script card: its own code draws the line (sandboxed: no network, no access to the panel page).",
+  "tier": "script",
+  "size": {"w": 4, "h": 2},
+  "slots": [{"key": "meter", "label": "Power meter", "attributes": ["power", "energy"]}],
+  "settings": [{"key": "title", "label": "Title", "type": "text", "default": "Power"}, {"key": "line", "label": "Line colour", "type": "color", "default": "#f59e0b"}],
+  "html": "<div class=\"pg\"><div class=\"top\"><b>{{set.title}}</b><span><em>{{meter.power}}</em> W</span></div><svg id=\"g\" viewBox=\"0 0 300 80\" preserveAspectRatio=\"none\"><polyline id=\"l\" fill=\"none\" stroke-width=\"2.5\" points=\"\"/></svg></div>",
+  "css": ".pg{display:flex;flex-direction:column;height:100%;padding:12px 16px;box-sizing:border-box}.top{display:flex;justify-content:space-between;align-items:baseline}.top em{font-style:normal;font-size:30px;font-weight:300}svg{flex:1;width:100%}#l{stroke:var(--set-line,#f59e0b)}",
+  "js": "var pts = [], line = document.getElementById('l');\nSkypane.on('state', function (s) {\n  var m = s.slots.meter, w = m ? parseFloat(m.attrs.power) : NaN;\n  if (!isFinite(w)) return;\n  var now = Date.now();\n  if (!pts.length || now - pts[pts.length - 1][0] > 20000) pts.push([now, w]); else pts[pts.length - 1][1] = w;\n  pts = pts.filter(function (p) { return now - p[0] < 3600000; });\n  var max = Math.max.apply(null, pts.map(function (p) { return p[1]; }).concat([1]));\n  line.setAttribute('points', pts.map(function (p) { return (300 - (now - p[0]) / 12000).toFixed(1) + ',' + (78 - (p[1] / max) * 74).toFixed(1); }).join(' '));\n});\n"
+}

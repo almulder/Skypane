@@ -1,0 +1,18 @@
+{
+  "name": "Skypane",
+  "short_name": "Skypane",
+  "description": "The Skypane Manager: your wall panels, devices and the house at a glance.",
+  "id": "/manage/",
+  "start_url": "/manage/#overview",
+  "scope": "/manage/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#140b3a",
+  "theme_color": "#0e0e12",
+  "icons": [
+    { "src": "../assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "../assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "../assets/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "../assets/skypane.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Skypane, concept A "night pane": the panel's own purple night sky behind a window pane -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b1145"/><stop offset=".55" stop-color="#5a3fb0"/><stop offset="1" stop-color="#e6b8e8"/>
+    </linearGradient>
+    <linearGradient id="m1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7c4ddb"/><stop offset="1" stop-color="#3a1f82"/></linearGradient>
+    <linearGradient id="m2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4b2a9e"/><stop offset="1" stop-color="#21114f"/></linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff6dd" stop-opacity=".55"/><stop offset="1" stop-color="#fff6dd" stop-opacity="0"/></radialGradient>
+    <clipPath id="tile"><rect x="16" y="16" width="480" height="480" rx="112"/></clipPath>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect width="512" height="512" fill="url(#sky)"/>
+    <circle cx="330" cy="168" r="110" fill="url(#glow)"/>
+    <circle cx="330" cy="168" r="52" fill="#fdf4dc"/>
+    <g fill="#fff" opacity=".85"><circle cx="110" cy="96" r="5"/><circle cx="178" cy="150" r="3.5"/><circle cx="420" cy="80" r="4"/><circle cx="96" cy="210" r="3"/><circle cx="440" cy="250" r="3"/></g>
+    <path d="M0 360 L110 250 L170 300 L250 210 L340 300 L400 262 L512 340 L512 512 L0 512 Z" fill="url(#m1)"/>
+    <path d="M0 420 L90 360 L190 410 L300 340 L420 400 L512 370 L512 512 L0 512 Z" fill="url(#m2)"/>
+  </g>
+  <!-- the pane: frame and cross bars -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="none" stroke="#f4ecff" stroke-width="22"/>
+  <path d="M256 27 V485 M27 256 H485" stroke="#f4ecff" stroke-width="16" stroke-linecap="round" opacity=".9"/>
+</svg>
