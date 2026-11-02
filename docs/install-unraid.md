@@ -68,7 +68,7 @@ Unraid quirk; nothing is wrong).
 
 ## 5. Create your login — right away
 
-Open the Manager: the container's **WebUI** button, or `http://192.168.1.50/manage/`.
+Open the Manager: the container's **WebUI** button, or `http://192.168.1.50/admin/`.
 
 The **first** person to open it creates the owner login (a username and a password of 8 characters or more). Do this
 now, before anyone else on your network can. (Logins you add later for your family need 4 characters or more.)

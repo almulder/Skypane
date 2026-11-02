@@ -11,16 +11,16 @@
   <Project>https://github.com/almulder/Skypane</Project>
   <Overview>Skypane - a wall-panel dashboard for your Hubitat home: it serves the panel pages (http://IP/ = the main panel, http://IP/kitchen etc. = other panels), keeps every panel's settings in /data, and runs the Hubitat bridge, the camera video, an MQTT broker and the guest Wi-Fi code.[br][br]
 NETWORK: br0 with its own fixed IP. Type the IP you picked in "Fixed IP address" (a free address outside your router's DHCP range, e.g. 192.168.1.50). With PORT=80 the main panel is then simply http://IP/ .[br][br]
-FIRST: right after the first start, open the Manager (the WebUI button, http://IP/manage ) and create its login - whoever opens it first creates the owner's username and password, so do it before anyone else on your network can.[br][br]
+FIRST: right after the first start, open the Manager (the WebUI button, http://IP/admin ) and create its login - whoever opens it first creates the owner's username and password, so do it before anyone else on your network can.[br][br]
 SETUP: everything else is set in the Manager: Hubitat (Maker API), cameras (optional), the time zone, the panels. Nothing secret is in this template.[br][br]
 FORGOT THE OWNER PASSWORD, or the Manager says the login is locked: open the Unraid terminal (top right) and run[br]
 docker exec -it skypane python service/reset_login.py[br]
 It clears only that password - the logins, settings, devices and panels stay. Type a new password right there, or use the one-time code it prints on the sign-in page ("I have a sign-in code", within an hour).[br][br]
 Secrets are kept in /data/private, never shown in logs or sent to a browser. LAN only - do not port-forward it. Install guide: https://github.com/almulder/Skypane/blob/main/docs/install-unraid.md</Overview>
   <Category>HomeAutomation: Tools:</Category>
-  <WebUI>http://[IP]:[PORT:80]/manage/</WebUI>
+  <WebUI>http://[IP]:[PORT:80]/admin/</WebUI>
   <TemplateURL/>
-  <Icon>https://skypane.huskyserver.us/assets/skypane-icon.png</Icon>
+  <Icon>https://raw.githubusercontent.com/almulder/Skypane/main/dashboard/assets/icon-256.png</Icon>
   <ExtraParams>--sysctl net.ipv4.ip_unprivileged_port_start=0 --cap-drop=ALL --security-opt=no-new-privileges</ExtraParams>
   <PostArgs/>
   <CPUset/>

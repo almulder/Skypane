@@ -18,6 +18,8 @@ First places to look:
 
 ## The Manager or a panel doesn't open
 
+- **`/manage` says "The Manager moved":** since Skypane 3.0.1 the Manager is at **`/admin`** (e.g. `http://192.168.1.50/admin/`).
+  Update your bookmark or home-screen icon; the old address doesn't forward.
 - **Nothing answers:** is the container running? Is the address right (Docker: port `8088`, e.g.
   `http://192.168.1.20:8088/`)? On Unraid with br0, the Unraid server itself can't reach a container's br0 address by
   default — try from another device.

@@ -58,7 +58,7 @@ The Manager has its own help (the **?** on every page, or Help in the menu) — 
 In the Manager: **Send feedback** (sidebar; on a phone: More). You see the whole report before it goes. Skypane adds
 nothing from your house — no device names, addresses or passwords — only the Skypane version, the page, your browser
 and a few counts; what you type is sent as you typed it, so leave out private details. Nothing is sent until you press
-**Send**.
+**Send**. Reports become public issues in this repository — anyone can read them.
 
 ## Support Skypane
 

@@ -376,7 +376,7 @@
   };
 
   function weather(solo, o, key) {
-    // a grid card shows only its own places (builder → Places → + Location), with its own tabs; none: the panel's own
+    // a grid card shows only its own places (builder → Places → + Add a place), with its own tabs; none: the panel's own
     // weather, as the built-in layouts show it (a starting layout's card is never empty)
     const cw0 = o ? { key, ...Weather.forCard(key, o.locs) } : null, cw = cw0 && cw0.places.length ? cw0 : null;
     const d0 = cw ? cw.data : Weather.current(), cls = `card glass wx${solo ? " solo" : ""}`;

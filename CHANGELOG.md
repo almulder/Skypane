@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.0.1
+
+- **The Manager moved to `/admin`** (e.g. `http://192.168.1.50/admin/`). The old address `/manage` now shows a short
+  "the Manager moved" page with a link — it doesn't forward, so update your bookmarks and any home-screen icon. On Unraid, set the container's
+  **WebUI** to `http://[IP]:[PORT:80]/admin/` ([upgrade.md](docs/upgrade.md)). Panels keep their addresses.
+- A panel you called **admin** in 3.0 now opens at `/admin-panel`; its settings, layout and alerts stay. Health and the
+  Overview say so until its tablet opens the new address. `admin` and `manage` can't be used for new panels.
+- The layout builder's preview no longer shows the house's alerts or the weather card's warning ribbon.
+- Send feedback says plainly that a report becomes a public GitHub issue — the repository is public now. The licence
+  says anyone may read the source (all rights stay reserved).
+- The Unraid template's icon comes from the GitHub repository.
+- Wording: the weather card's **+ Add a place** (the same name everywhere), a plainer message when the place search
+  can't be reached, and the health pill says "1 issue" / "3 issues".
+- The image build uses the current GitHub Actions (Node 24).
+- Addresses with a part ending in a dot or a space are refused (on Windows they could reach a file by another name).
+
 ## 3.0.0 — the tester release
 
 The first Skypane anyone can install. Welcome, testers — thank you for trying it.

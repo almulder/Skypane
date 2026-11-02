@@ -133,6 +133,7 @@
   // shown); one dismissed here or elsewhere is still shown, subdued, while the device reports it. A tap: the warning, or
   // the list when several are up. "" = none.
   HA.weatherRibbon = () => {
+    if (window.PANEL_DESIGN === true) return "";   // (nor the weather card's warning ribbon)
     const ws = (window.Weather && Weather.warnings ? Weather.warnings() : []).filter((w) => forMe({ to: Array.isArray(w.to) ? w.to : ["all"] }) && allowed(w));
     if (!ws.length) return "";
     const up = new Set(HA.shown().filter(isWx).map((a) => a.id)), act = ws.filter((w) => up.has(w.id)).sort((x, y) => y.lvl - x.lvl);
@@ -330,7 +331,7 @@
       kind: /^[a-z]{1,20}$/.test(String(a.kind || "")) ? a.kind : "", place: cut(String(a.place || ""), 60), sender: cut(String(a.sender || ""), 60),
       more: Number.isInteger(a.more) && a.more > 0 ? Math.min(a.more, 99) : 0 })));
   };
-  H.subscribe("hubitat/alerts", receive);
+  if (window.PANEL_DESIGN !== true) H.subscribe("hubitat/alerts", receive);   // (the layout builder's canvas never shows alerts)
   // Settings → Test (the panel only, nothing goes to Hubitat): a made-up alert of this level, as if a rule sent it —
   // shown, sounded and dismissed like a real one (its dismissal isn't sent: Hubitat never had it). It lasts as long as
   // a real one with the level's default: 1–2 for 60 s, 3–5 until dismissed.

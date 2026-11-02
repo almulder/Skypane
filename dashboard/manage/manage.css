@@ -1,4 +1,4 @@
-/* Skypane Manager (/manage): the pages' own parts, for a laptop or a phone. Since v2.3.0 the colours come from the
+/* Skypane Manager (/admin): the pages' own parts, for a laptop or a phone. Since v2.3.0 the colours come from the
    three themes in tokens.css (Light, Dark, Skypane night) through the old names (--accent, --glass, --muted, --fill-1…);
    the shell (sidebar, top bar) is shell.css, the shared parts ui.css. */
 * { box-sizing: border-box; }

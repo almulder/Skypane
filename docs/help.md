@@ -1,6 +1,6 @@
 # Skypane Help
 
-The Manager's Help page (**Help** at the bottom of the sidebar, F1, or `/manage/#help/<topic>`), as one file.
+The Manager's Help page (**Help** at the bottom of the sidebar, F1, or `/admin/#help/<topic>`), as one file.
 Made from `dashboard/manage/help-topics.js` — change the topics there, then make this file again.
 
 ## Start here
@@ -17,7 +17,7 @@ Found a bug, have an idea, or something is confusing? **Send feedback** tells th
 3. Look at **About this install**: the Skypane version, the page you came from, your browser, theme and language, and a few counts (panels, devices, cameras, logins). Untick anything you'd rather not send.
 4. Check **What will be sent** — exactly that, nothing more — and press **Send**.
 
-Your Skypane server sends it to the Skypane feedback service, which files it as an issue for the team and gives you its number ("Thanks — reported as #12"). With it goes a random number for this install, so the team can see which reports come from the same place — it doesn't say who you are.
+Your Skypane server sends it to the Skypane feedback service, which files it as a **public** issue on GitHub (anyone can read it) and gives you its number ("Thanks — reported as #12"). With it goes a random number for this install, so the team can see which reports come from the same place — it doesn't say who you are.
 
 Never sent: your devices', rooms', panels' or people's names, addresses, passwords, PINs, settings or the activity log.
 
@@ -220,7 +220,7 @@ The **Panels** page has two views. The switch at the top right (or the V key) ch
 
 **Setup: one panel at a time**
 
-The list of panels on the left, the panel's settings in tabs in the middle — **General**, **Look & layout**, **Rooms & devices**, **Cameras**, **People & calendars**, **Alerts**, **Safety**, **Guest Wi-Fi card**, **Weather effects** — and beside them a **Preview** (the same drawing, as saved: it follows every change you make) and its **Status**. Each change saves at once; the panel takes it within seconds. A link straight to a tab: /manage/#panels/setup/<panel>/<tab>.
+The list of panels on the left, the panel's settings in tabs in the middle — **General**, **Look & layout**, **Rooms & devices**, **Cameras**, **People & calendars**, **Alerts**, **Safety**, **Guest Wi-Fi card**, **Weather effects** — and beside them a **Preview** (the same drawing, as saved: it follows every change you make) and its **Status**. Each change saves at once; the panel takes it within seconds. A link straight to a tab: /admin/#panels/setup/<panel>/<tab>.
 
 > **Tip:** Alerts and Safety are the admin's. Another login that may change a panel sees those two tabs read only.
 
@@ -606,7 +606,7 @@ See also: [Card types (a short list)](#card-types) · [The panel PIN](#panel-pin
 *Where: Layout builder → a Weather card → Places*
 
 1. Add a **Weather** card and tap it.
-2. Under **Places**, press **+ Location**, type a town or city, press **Search** and pick the right one from the list.
+2. Under **Places**, press **+ Add a place**, type a town or city, press **Search** and pick the right one from the list.
 3. Use ▲ ▼ to order them. The first one is home.
 4. Press ✕ to remove one.
 

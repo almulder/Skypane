@@ -1,4 +1,4 @@
-// Skypane Manager (/manage, stage 4): the house's settings (Hubitat, Protect, UniFi, broker… — no longer in the
+// Skypane Manager (/admin, stage 4; /manage until v3.0.1): the house's settings (Hubitat, Protect, UniFi, broker… — no longer in the
 // Docker template) and what each Hubitat device is (type, room, PIN rule, fan type; pictures next). Its own username +
 // password, made on the first visit (service/manager_auth.py, a signed HttpOnly cookie). Device changes go to
 // /api/manage/devices: the bridge rebuilds the house model and every panel reloads once it's idle.

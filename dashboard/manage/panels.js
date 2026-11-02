@@ -452,7 +452,7 @@
     const words = s.split("-").filter(Boolean);
     while (words.length > 1 && /^(panel|tablet|screen|dashboard)$/.test(words[words.length - 1])) words.pop();   // i18n-ok (words dropped from an address)
     s = words.join("-").replace(/^[^a-z]+/, "") || "panel";   // i18n-ok (the fallback address)
-    if (/^(manager|api$|manage$)/.test(s)) s = `panel-${s}`;   // i18n-ok (kept for the pages / the Manager)
+    if (/^(manager|api$|manage$|admin$)/.test(s)) s = `panel-${s}`;   // i18n-ok (kept for the pages / the Manager)
     s = s.slice(0, 32).replace(/-+$/, "");
     const used = new Set([...(taken || [])].map((x) => String(x).toLowerCase()).concat("main"));
     if (!used.has(s)) return s;
@@ -462,7 +462,7 @@
   // <slug
   async function addPanel() {
     if (!M.isAdmin()) return;
-    const taken = (list || []).map((p) => p.id);
+    const taken = (list || []).flatMap((p) => [p.id, String(p.address || "").slice(1)]);   // (a moved panel's /admin-panel too)
     const nameIn = el("input", { type: "text", placeholder: K.t("panels.add.namePh"), maxlength: "40", "aria-label": K.t("panels.add.panelName"), id: "pn-add-name" });
     const idIn = el("input", { type: "text", placeholder: K.t("panels.add.idPh"), maxlength: "32", autocapitalize: "none", spellcheck: "false", "aria-label": K.t("panels.add.address"), id: "pn-add-id" });
     const base = `${location.protocol}//${location.host}/`;
@@ -777,7 +777,7 @@
     const p = shown(cur) || { id: cur, name: cur };
     const name = data.managed.panelName || p.name;
     if (!M.openBuilder) { toast(K.t("panels.builder.notLoaded"), true); return; }   // (a lazily loaded script that failed)
-    M.openBuilder({ panel: { id: p.id, name }, managed: data.managed, rooms: data.rooms, views: data.views, perf: data.perf, room: !!opts.room,
+    M.openBuilder({ panel: { id: p.id, name, address: p.address }, managed: data.managed, rooms: data.rooms, views: data.views, perf: data.perf, room: !!opts.room,
       panels: list.map((x) => ({ id: x.id, name: x.name })), save, latest: () => data.managed, back: () => { tab = "look"; listAt = 0; drawSetup(); } });
     if (M.routeSync) M.routeSync([p.id, "layout"], K.t(opts.room ? "panels.builder.titleRooms" : "panels.builder.titleHome", { name }));
   }

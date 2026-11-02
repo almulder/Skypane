@@ -4,7 +4,7 @@ Copyright (c) 2026 almulder (https://github.com/almulder). All rights reserved.
 
 During the tester phase Skypane is source-available, not open source. You may:
   - run the Skypane image (ghcr.io/almulder/skypane) for your own home, and
-  - read the source code in this repository if you were invited to it,
+  - read the source code in this repository (anyone may read it),
   - send feedback, bug reports and ideas.
 
 You may not, without written permission: copy, modify, redistribute, sublicense or sell the code or the image, or use

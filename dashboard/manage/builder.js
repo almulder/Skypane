@@ -581,7 +581,7 @@
       el("button.btn.bld-discard", { type: "button", title: Kit.t("builder.top.discardTip"), onclick: discard }, Kit.t("builder.top.discard")),
       el("button.btn.pri.bld-save", { type: "button", title: Kit.t("builder.top.saveTip"), onclick: saveIt }, Kit.t("builder.top.save")));
     // the panel's own page, live, in demo mode (design.js) — the handles (gridstack) sit on top of it
-    const id = st.ctx.panel.id, src = `${String(id).toLowerCase() === "main" ? "/" : `/${encodeURIComponent(id)}`}?design=1`;
+    const id = st.ctx.panel.id, src = `${st.ctx.panel.address || (String(id).toLowerCase() === "main" ? "/" : `/${encodeURIComponent(id)}`)}?design=1`;
     // (Arrange: the frame is no Tab stop — Tab goes from the cards to the settings, not through 60 panel buttons; Try it: it is)
     const frame = el("iframe.bld-frame", { src, title: Kit.t("builder.frame.title"), tabindex: st.mode === "try" ? null : "-1" });
     const over = el("div.bld-over");
@@ -2134,7 +2134,7 @@
     return out;
   }
 
-  // ---------- a weather card's places: + Location (search Open-Meteo's place names), × to remove; the first is home ----------
+  // ---------- a weather card's places: + Add a place (search Open-Meteo's place names), × to remove; the first is home ----------
   let wxFound = null, wxAdding = false, wxWhy = "";   // (wxWhy: why the last search found nothing — a word from the table)
   function wxPlaces(o, set) {
     const locs = Array.isArray(o.locs) ? o.locs : [];

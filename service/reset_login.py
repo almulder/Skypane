@@ -5,7 +5,7 @@
 
 It clears only that login's password: the names, the other logins and every setting, device choice and picture stay.
 Then it asks for the new password right there (type it twice), or — press Enter, or run it without -it — it prints a
-one-time code: open http://<Skypane's IP>/manage, choose "I have a sign-in code" and type the login's name, the code
+one-time code: open http://<Skypane's IP>/admin, choose "I have a sign-in code" and type the login's name, the code
 and the new password (the code works once, for an hour). (Usually another admin can do this from Manager → Accounts:
 "Make a sign-in code".)
 
@@ -23,7 +23,7 @@ import manager_auth  # noqa: E402
 def manager_url(env=None):
     """The Manager's address as the person types it: the port only when it isn't 80 (Docker: :8088; Unraid br0: none)."""
     port = str((env if env is not None else os.environ).get("PORT") or "8088").strip()
-    return f"http://<Skypane's IP>{'' if port == '80' else ':' + port}/manage"
+    return f"http://<Skypane's IP>{'' if port == '80' else ':' + port}/admin"
 
 
 def main(data=None, ask=None, out=print, argv=None):

@@ -133,7 +133,29 @@ LAYOUT = "layouts/v4/layout1.html"
 BASE_HREF = "/layouts/v4/"
 HOUSE_FILES = {"/layouts/v4/shared/hubitat-data.js": "hubitat-data.js",
                "/layouts/v4/shared/protect-cameras.js": "protect-cameras.js"}
-RESERVED_SEGMENTS = {"api", "manage"}
+RESERVED_SEGMENTS = {"api", "admin", "manage"}   # (v3.0.1: the Manager is at /admin; /manage, its old address, stays
+# reserved and answers "not found" — an old bookmark never opens a panel by that name)
+# (v3.0.1) what a browser gets at /manage… (a bookmark, an old home-screen icon): still a 404 and no redirect, but a
+# page that says where the Manager went. No script, nothing from elsewhere.
+MOVED_CSP = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+MOVED_PAGE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex"><title>Skypane — the Manager moved</title>
+<style>
+html,body{margin:0;height:100%}
+body{display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;background:#140b3a;
+background:linear-gradient(180deg,#140b3a,#3b2a8a);color:#f3f0ff;font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:420px;width:100%;padding:28px 24px;border-radius:20px;background:rgba(20,12,58,.72);
+border:1px solid rgba(255,255,255,.16);text-align:center;box-sizing:border-box}
+h1{margin:0 0 10px;font-size:22px;font-weight:650}
+p{margin:0 0 22px;color:#d6d0f5}
+a{display:inline-block;padding:12px 22px;border-radius:12px;background:#7c4dff;color:#fff;font-weight:600;text-decoration:none}
+a:focus-visible{outline:3px solid #fff;outline-offset:3px}
+</style></head>
+<body><main><h1>The Manager moved</h1>
+<p>The Manager moved to <b>/admin</b>. Update your bookmark or home-screen icon.</p>
+<a href="/admin/">Open the Manager</a></main></body></html>
+""".encode("utf-8")
 MANAGE_COOKIE = "hp_manage"    # the Manager page's login (service/manager_auth.py)
 # the Manager's page (dashboard/manage/index.html, v2.3.0): only our own scripts run — no inline script, no handler in
 # markup, no eval; styles may be inline (a page's own style attributes); frames only our own (the builder's canvas, cards)
@@ -553,6 +575,27 @@ class Store:
             if PANEL_RE.fullmatch(f.stem):
                 ids.add(f.stem.lower())
         return sorted(ids)
+
+
+def panel_aliases(ids):
+    """v3.0.1: a panel made before its name became a page's — a 3.0 panel called "admin" (the Manager's address since
+    3.0.1) — opens at "/<id>-panel" instead ("/<id>-panel2"… if a panel already has that name): {alias: id}. Its id
+    stays, so Hubitat's alerts for it, a login's own panel and its backups go on as before; only the address moves."""
+    ids, out = set(ids), {}
+    for pid in sorted(ids & RESERVED_SEGMENTS):
+        alias, n = f"{pid}-panel", 2
+        while alias in ids or alias in out:
+            alias, n = f"{pid}-panel{n}", n + 1
+        out[alias] = pid
+    return out
+
+
+def panel_address(pid, ids):
+    """The address a panel opens at: "/" (the main panel), "/<id>", or its moved address (panel_aliases)."""
+    if pid == PIN_GUARDED_PANEL:
+        return "/"
+    moved = {p: a for a, p in panel_aliases(ids).items()}
+    return "/" + moved.get(pid, pid)
 
 
 def parse_alert_levels(payload):
@@ -1099,7 +1142,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if any(ch < " " or ch == "\x7f" for ch in path):
             raise ApiError(400, "Bad path")
         segments = path.split("/")[1:]
-        if any(s in (".", "..") for s in segments):
+        if any(s in (".", "..") or s.endswith((".", " ")) for s in segments):   # (v3.0.1: "x." / "x " — Windows reads them as "x")
             raise ApiError(400, "Bad path")
         return path
 
@@ -1140,15 +1183,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
             body, headers = cards.frame(card)
             return self._send(200, body, "text/html; charset=utf-8", headers, frameable=True)
         segments = path.split("/")[1:]
-        if len(segments) == 1 and PANEL_RE.fullmatch(segments[0]) and segments[0] not in RESERVED_SEGMENTS \
-                and self._safe_file(segments[0]) is None:
-            return self._panel_page(segments[0])
+        if segments[0].lower() == "manage":   # (v3.0.1: the Manager's old address — no redirect, a "not found")
+            if "text/html" in (self.headers.get("Accept") or ""):   # (a browser: the page that says where it went)
+                return self._send(404, MOVED_PAGE, "text/html; charset=utf-8", {"Cache-Control": "no-cache", "Content-Security-Policy": MOVED_CSP})
+            raise ApiError(404, "Not found")
+        if len(segments) == 1 and PANEL_RE.fullmatch(segments[0]):
+            moved = panel_aliases(self.app.store.panel_ids()).get(segments[0].lower())
+            if moved:   # (a 3.0 panel called "admin", at /admin-panel since 3.0.1)
+                if not re.search(r"[?&](?:design|live)=1(?:&|$)", self.path.split("#", 1)[0]):   # (its tablet, not the Manager)
+                    self.app.moved_opened(moved)
+                return self._panel_page(moved)
+            if segments[0].lower() not in RESERVED_SEGMENTS and self._safe_file(segments[0]) is None:
+                return self._panel_page(segments[0])
         overlay = path in HOUSE_FILES
         if overlay:
             house = self.app.data_dir / "house" / HOUSE_FILES[path]
             if house.is_file():
                 return self._file(house, overlay=True)
-        f = self._safe_file(path[1:])
+        # the Manager: /admin/… are the files of dashboard/manage/ (its old address /manage was refused above)
+        rel = "manage" + path[len("/admin"):] if segments[0] == "admin" else path[1:]
+        f = self._safe_file(rel)
         if overlay and HOUSE_FILES[path] == "protect-cameras.js" and (f is None or not f.is_file()):
             # (a house without Protect: an empty camera file instead of a 404 on every panel load)
             return self._send(200, b"window.PROTECT_LIVEVIEWS = window.PROTECT_LIVEVIEWS || [];\n",
@@ -1159,7 +1213,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not path.endswith("/"):
                 loc = urllib.parse.quote(path) + "/"
                 return self._send(301, b"", "text/plain", {"Location": loc, "Cache-Control": "no-cache"})
-            f = self._safe_file(path[1:] + "index.html")
+            f = self._safe_file(rel + "index.html")
             if f is None or not f.is_file():
                 raise ApiError(404, "Not found")
         if not f.is_file():
@@ -1702,7 +1756,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return "unlock-panel"
         return None
 
-    # ---- Manager page (/manage, stage 4): device types / rooms / pictures for the whole house -----------------
+    # ---- Manager page (/admin, stage 4): device types / rooms / pictures for the whole house -----------------
 
     def _manage_token(self):
         for part in (self.headers.get("Cookie") or "").split(";"):
@@ -2853,7 +2907,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         me = self._manage_ok()
         if self.command in ("GET", "HEAD"):
             out = []
-            ids = me.panels(sorted(set(self.app.store.panel_ids()) | {PIN_GUARDED_PANEL}, key=lambda p: (p != "main", p)))
+            every = self.app.store.panel_ids()
+            ids = me.panels(sorted(set(every) | {PIN_GUARDED_PANEL}, key=lambda p: (p != "main", p)))
             docs = {pid: self.app.store.get(pid) for pid in ids}
             names = [(pid, (docs[pid]["data"].get("settings") or {}).get("panelName") or ("Main panel" if pid == "main" else pid)) for pid in ids]
             # (v2.5.0, Panels → Status: online / offline and the last check-in, the screen, the benchmark, a drawn map)
@@ -2864,7 +2919,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 s = doc["data"].get("settings") or {}
                 out.append({"id": pid, "exists": doc["exists"], "rev": doc["rev"], "name": name,
                             "kiosk": s.get("kioskName") or (DEFAULT_KIOSK if pid == "main" else pid),
-                            "address": "/" if pid == "main" else "/" + pid,
+                            "address": panel_address(pid, every),
                             "status": self._panel_status(health.get(pid), words, me.admin),
                             "map": panel_settings.thumbnail(s),
                             "perf": panel_settings.perf(doc["data"].get("perf"))})
@@ -2902,7 +2957,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             raise ApiError(400, "The address must start with a letter" if not pid[0].isascii() or not pid[0].isalpha()
                            else "The address can be at most 32 characters" if len(pid) > 32
                            else "The address may only have letters, digits, _ and - (no spaces)")
-        if pid.lower() in RESERVED_SEGMENTS or pid.lower() == "main" or self._safe_file(pid) is not None:
+        if pid.lower() in RESERVED_SEGMENTS or pid.lower() == "main" or self._safe_file(pid) is not None \
+                or pid.lower() in panel_aliases(self.app.store.panel_ids()):   # (/admin-panel: a moved panel's address)
             raise ApiError(400, "That address is already used by the pages — pick another")
         if pid.lower().startswith("manager"):   # (v2.3.1: "manager-<login>" names the Manager in Hubitat's ackPanel)
             raise ApiError(400, "Addresses starting with “manager” are kept for the Manager — pick another")
@@ -4106,6 +4162,8 @@ class App:
         # the house's calendars (iCal links: secrets in private/calendars.json; service/calendars.py)
         self.calendars = calendars.Calendars(cfg.data_dir / "private", log=lambda m: log(m))
         self.calendars.on_change = self.notifier.calendars_changed
+        for alias, pid in panel_aliases(self.store.panel_ids()).items():   # (v3.0.1: a 3.0 panel called "admin")
+            log(f"panels: the panel '{pid}' now opens at /{alias} - the Manager moved to /{pid}; point its tablet there")
 
 
         # stage 4: the device choices move from the main panel's settings to house/device-settings.json (once)
@@ -4328,7 +4386,7 @@ class App:
                   health.service_check("protect.host", "UniFi Protect: no console address",
                                        lambda: "The Protect cameras wait until the Protect console address is set (Integrations → UniFi Protect)"
                                        if setting("PROTECT_API_KEY")() and not setting("PROTECT_HOST")() else None, 3),
-                  health.panels_check(self.panel_names), self._calendar_check]
+                  health.panels_check(self.panel_names), self._calendar_check, self._moved_panel_check]
         if self.cfg.mqtt_host:   # (no broker = a test setup: no bridge to expect)
             checks.insert(0, health.bridge_check(self.notifier.bridge, enabled=lambda: self.health_parts()["hub"]))
         if self.cfg.page_config.get("go2rtcPort"):   # the image's own go2rtc (once the camera sync wrote its config)
@@ -4352,6 +4410,42 @@ class App:
         has = lambda key: bool((st.get(key) or "").strip())   # noqa: E731
         cams = has("PROTECT_HOST") or has("PROTECT_API_KEY") or bool(self.cfg.page_config.get("go2rtc"))             or (bool(self.cfg.page_config.get("go2rtcPort")) and (self.data_dir / "private" / "go2rtc.yaml").exists())
         return {"hub": has("HUBITAT_HOST"), "broker": bool(self.cfg.mqtt_host), "cameras": cams}
+
+    def _moved_file(self):
+        return self.data_dir / "house" / "moved-panels.json"
+
+    def moved_seen(self):
+        """The moved panels (panel_aliases) whose page a tablet has opened at the new address: {"admin", …}."""
+        try:
+            got = json.loads(self._moved_file().read_text(encoding="utf-8")).get("opened")
+            return {p for p in got if isinstance(p, str)} if isinstance(got, list) else set()
+        except (OSError, ValueError, AttributeError):
+            return set()
+
+    def moved_opened(self, pid):
+        """A tablet opened the moved panel at its new address: the notice goes (kept in house/moved-panels.json)."""
+        seen = self.moved_seen()
+        if pid in seen:
+            return
+        f = self._moved_file()
+        try:
+            f.parent.mkdir(parents=True, exist_ok=True)
+            tmp = f.with_name(f".{f.name}.{os.getpid()}.tmp")
+            tmp.write_text(json.dumps({"v": 1, "opened": sorted(seen | {pid})[:20]}), encoding="utf-8")
+            os.replace(tmp, f)
+            log(f"panels: the panel '{pid}' was opened at its new address")
+        except OSError as e:
+            log(f"panels: could not note the moved panel ({type(e).__name__})")
+
+    def _moved_panel_check(self, _m):
+        """v3.0.1: a 3.0 panel called "admin" opens at /admin-panel (the Manager took /admin). Until a tablet opens it
+        there, its Health line (the same id as health.panels_check's, so it replaces "never checked in" / "is
+        disconnected" on Health and the Overview) says where it went."""
+        seen = self.moved_seen()
+        return [health.problem(f"panel:{pid}", f"The panel '{pid}' moved to /{alias}",
+                               f"The Manager is at /{pid} now — open that address on its tablet "
+                               f"(http://<Skypane's address>/{alias}).", 3)
+                for alias, pid in panel_aliases(self.store.panel_ids()).items() if pid not in seen]
 
     def _calendar_check(self, _m):
         """A calendar that can't be read: a notice on the Health page (the panels keep its last good copy)."""

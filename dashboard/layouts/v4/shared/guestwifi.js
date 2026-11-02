@@ -280,7 +280,7 @@
         <section><h3>${esc(T("gw.cardTitle"))}</h3>
           ${status}
           <div class="gw-preview">${G.card(true)}</div>
-          <small class="muted">${esc(T("gw.managerHint", { url: `http://${location.host}/manage` }))}</small>
+          <small class="muted">${esc(T("gw.managerHint", { url: `http://${location.host}/admin` }))}</small>
         </section></div>`;
     },
     setShow(v) { G.set("show", v); },

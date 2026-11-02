@@ -1,5 +1,5 @@
 """The Manager page's logins (accounts; several admins and an owner: v2.7.0): the first account made on the
-first visit to /manage is the **owner** (an admin); admins add the other logins, choose what each may do, and may make
+first visit to /admin is the **owner** (an admin); admins add the other logins, choose what each may do, and may make
 another login an admin.
 
   DATA_DIR/private/manager-users.json   {"v": 2, "users": [{"user", "role" ("admin" | "user"), "salt", "hash" (scrypt;

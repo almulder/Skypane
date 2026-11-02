@@ -10,7 +10,7 @@ setting up — the Manager works on a phone too, but some parts (Integrations, t
 
 ## 1. The owner login
 
-You did this already at the end of the install guide: the first visit to the Manager (`http://192.168.1.50/manage/`)
+You did this already at the end of the install guide: the first visit to the Manager (`http://192.168.1.50/admin/`)
 creates the **owner** login. The owner is an admin who can't be removed. You sign in with it straight away.
 
 Lost the password later? See [troubleshooting.md](troubleshooting.md#i-forgot-the-owner-password).
@@ -36,6 +36,10 @@ any browser will do, the computer you're on is fine:
 1. Open `http://192.168.1.50/` (the main panel). In a computer browser this is a preview of the panel: it works, but
    it doesn't count as a tablet checking in (see §5).
 2. The **settings gear** → **Panel** → **Panel PIN** → **Set PIN** → 4 to 8 digits, then the same PIN again to confirm.
+
+**A sample house?** With no hub connected yet, a panel shows a made-up sample house — **John & Jane**, sample rooms,
+devices and calendar events — so you can see how it looks. It isn't anyone's data. Your own devices take its place once
+Hubitat is connected, and your calendars replace the sample events once you add one (**Integrations → Calendars**).
 
 (Screenshot: the main panel's settings gear → Panel → Panel PIN.)
 

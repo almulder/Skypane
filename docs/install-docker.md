@@ -54,7 +54,7 @@ docker compose logs -f        # Ctrl+C to stop watching
 The log should show `[run_all] server started (pid …)` and `… dashboard service … on 0.0.0.0:8088`.
 `Hubitat not set up … bridge not started` is normal for now.
 
-Skypane is now at **`http://192.168.1.20:8088/`**; the Manager is **`http://192.168.1.20:8088/manage/`**.
+Skypane is now at **`http://192.168.1.20:8088/`**; the Manager is **`http://192.168.1.20:8088/admin/`**.
 With Docker, every Skypane address has `:8088` after the IP — the panels' addresses too (e.g.
 `http://192.168.1.20:8088/kitchen`), wherever the other guides write `http://192.168.1.50/…`.
 
@@ -149,7 +149,7 @@ sides.
 
 ## Then, right away: create your login
 
-Open the Manager: `http://<address>:8088/manage/`. The **first** person to open it creates the owner login (a
+Open the Manager: `http://<address>:8088/admin/`. The **first** person to open it creates the owner login (a
 username and a password of 8 characters or more), so do this before anyone else on your network can. (Logins you add
 later for your family need 4 characters or more.)
 

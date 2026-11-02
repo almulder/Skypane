@@ -31,7 +31,7 @@ window.SKYPANE_HELP = {
           "Look at **About this install**: the Skypane version, the page you came from, your browser, theme and language, and a few counts (panels, devices, cameras, logins). Untick anything you'd rather not send.",
           "Check **What will be sent** — exactly that, nothing more — and press **Send**.",
         ] },
-        "Your Skypane server sends it to the Skypane feedback service, which files it as an issue for the team and gives you its number (\"Thanks — reported as #12\"). With it goes a random number for this install, so the team can see which reports come from the same place — it doesn't say who you are.",
+        "Your Skypane server sends it to the Skypane feedback service, which files it as a **public** issue on GitHub (anyone can read it) and gives you its number (\"Thanks — reported as #12\"). With it goes a random number for this install, so the team can see which reports come from the same place — it doesn't say who you are.",
         "Never sent: your devices', rooms', panels' or people's names, addresses, passwords, PINs, settings or the activity log.",
         { tip: "No internet on the Skypane server, or the service is busy? Press **Copy report** and send the text another way." },
       ],
@@ -213,7 +213,7 @@ window.SKYPANE_HELP = {
           "On a tile: **Setup** opens its settings, **Layout** the layout builder, **Live** the real page ([[open-live]]). The list reads the check-ins again every 30 seconds.",
         ] },
         { h: "Setup: one panel at a time" },
-        "The list of panels on the left, the panel's settings in tabs in the middle — **General**, **Look & layout**, **Rooms & devices**, **Cameras**, **People & calendars**, **Alerts**, **Safety**, **Guest Wi-Fi card**, **Weather effects** — and beside them a **Preview** (the same drawing, as saved: it follows every change you make) and its **Status**. Each change saves at once; the panel takes it within seconds. A link straight to a tab: /manage/#panels/setup/<panel>/<tab>.",
+        "The list of panels on the left, the panel's settings in tabs in the middle — **General**, **Look & layout**, **Rooms & devices**, **Cameras**, **People & calendars**, **Alerts**, **Safety**, **Guest Wi-Fi card**, **Weather effects** — and beside them a **Preview** (the same drawing, as saved: it follows every change you make) and its **Status**. Each change saves at once; the panel takes it within seconds. A link straight to a tab: /admin/#panels/setup/<panel>/<tab>.",
         { tip: "Alerts and Safety are the admin's. Another login that may change a panel sees those two tabs read only." },
       ],
       see: ["open-live", "add-panel", "weather-effects"],
@@ -574,7 +574,7 @@ window.SKYPANE_HELP = {
       body: [
         { steps: [
           "Add a **Weather** card and tap it.",
-          "Under **Places**, press **+ Location**, type a town or city, press **Search** and pick the right one from the list.",
+          "Under **Places**, press **+ Add a place**, type a town or city, press **Search** and pick the right one from the list.",
           "Use ▲ ▼ to order them. The first one is home.",
           "Press ✕ to remove one.",
         ] },

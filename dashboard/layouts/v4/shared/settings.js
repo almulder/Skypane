@@ -339,7 +339,7 @@
   // panel on the Manager page now — the "Manager" tab says where; guest mode switches, effects and Test stay here)
   const TABS = [["look", "grid"], ["sound", "music"], ["panel", "settings"], ["guest", "pin"], ["fx", "sun"], ["test", "bulb"], ["manager", "home"]];   // (names: "set.tab.<id>")
   function managerTab() {
-    const url = `http://${location.host}/manage`;
+    const url = `http://${location.host}/admin`;
     const b = (k) => `<b>${escH(T(k))}</b>`;
     return `<div class="set-grid one"><section><h3>${escH(T("set.mgr.title"))}</h3>
       <p>${T.html("set.mgr.text", { url: `<b>${escH(url)}</b>`, panels: b("set.mgr.panels"), devices: b("set.mgr.devices"), guest: b("set.mgr.guest"), integrations: b("set.mgr.integrations") })}</p>
@@ -443,8 +443,8 @@
     const show = r && r.devices.length ? `<div class="label">${escH(T("set.dev.show"))}</div><div class="pgrid">${r.devices.map((d) => `<div class="prow ok">${icon({ fan: "fan", outlet: "plug", shade: "shade", switch: "power", valve: "drop", garage: "car" }[d.kind] || "bulb", 22)}
       <span class="pn">${escH(d.name)}<br><small class="muted">${escH(d.full)}</small></span><button class="switch ${St.v.hiddenDevices[d.id] ? "" : "on"}" ${Acts.on("set.toggleDevice", d.id)}></button></div>`).join("")}</div>` : "";
     // what each device IS (type, room, PIN rule, fan type, picture) is set for the whole house on the Manager page
-    // (stage 4: /manage, from a laptop or phone); here only what this panel shows
-    const manage = isMain() ? `<small class="muted" style="display:block;margin-top:12px">${T.html("set.dev.manage", { url: `<b>http://${escH(location.host)}/manage</b>` })}</small>` : "";   // i18n-ok (the address)
+    // (stage 4: /admin, from a laptop or phone); here only what this panel shows
+    const manage = isMain() ? `<small class="muted" style="display:block;margin-top:12px">${T.html("set.dev.manage", { url: `<b>http://${escH(location.host)}/admin</b>` })}</small>` : "";   // i18n-ok (the address)
     return { title: r ? T("set.dev.title", { room: name }) : T("set.dev.noRoom"), body: `${show}${manage}` };
   }, onClose);
   // only "which devices are shown" is saved — never the rest of this page's settings (a look being tried, an edit not

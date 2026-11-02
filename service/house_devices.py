@@ -1,7 +1,7 @@
 """The house-wide choices per Hubitat device (stage 4): what it is, which room, PIN rule, fan type, picture.
 
 Kept in DATA_DIR/house/device-settings.json = {"rev": n, "overrides": {"<id>": {...}}, "updated": "<iso>"}, edited on
-the Manager page (/manage, service/server.py) and read by the Hubitat bridge, which rebuilds the house model from it
+the Manager page (/admin, service/server.py) and read by the Hubitat bridge, which rebuilds the house model from it
 (service/house_model.py apply_overrides) — every panel then shows the same. Until stage 4 these lived in the main
 panel's settings (settings.deviceOverrides); `migrate()` copies them over once.
 

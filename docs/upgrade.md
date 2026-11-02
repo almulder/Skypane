@@ -10,6 +10,16 @@ stay. Panels reload by themselves when the new version starts.
 you want to decide when to update. The Manager shows the version under the Skypane name in the sidebar (e.g.
 `v3.0.0 · sha-1234567`), and each panel shows it in its lower-left corner.
 
+## 3.0.1: the Manager moved to /admin
+
+The Manager is now at **`http://<skypane>/admin/`** (it was `/manage/`). The old address doesn't forward — it shows a short
+"the Manager moved" page — so update your bookmarks and any home-screen icon (add it again from the new address). On Unraid, your
+container keeps its old **WebUI** button: edit the container, switch on **Advanced View**, set **WebUI** to
+`http://[IP]:[PORT:80]/admin/` and **Apply**. The panels don't change.
+
+If you had a panel called **admin**, it now opens at **`/admin-panel`**: point that tablet there (Health and the
+Overview say so until it does). Its settings, layout and alerts stay as they were.
+
 ## Before you update
 
 Back up the data folder now and then (it's small): copy `appdata/skypane` (Unraid) or your Docker folder. Skypane also
