@@ -5,9 +5,9 @@ sports feeds. Owner's guide: docs/calendars.md.
 The admin adds them in the Manager (Settings → Calendars: a name, the link, a default colour). A link is a SECRET —
 anyone with it can read the calendar — so it is kept only in DATA_DIR/private/calendars.json (0600), never sent back
 to any page, never logged, never put in the house model or the panels' data. This module fetches each link every
-REFRESH seconds (and right after a save), with timeouts, a size cap, https only (webcal:// → https://), at most
-MAX_REDIRECTS redirects (https only) and never to a private / loopback / link-local address (SSRF: the address is
-checked after the name is looked up, and the connection goes to exactly that checked address). The ICS text is parsed
+5 / 10 / 15 / 30 minutes (the house's setting "every", v3.0.2; and right after a save), with timeouts, a size cap,
+https only (webcal:// → https://), at most MAX_REDIRECTS redirects (https only) and never to a private / loopback /
+link-local address (SSRF: the address is checked after the name is looked up, and the connection goes to exactly that checked address). The ICS text is parsed
 with the standard library only: VEVENT DTSTART / DTEND / DURATION (dates, UTC, TZID through zoneinfo or the file's own
 VTIMEZONE), all-day events, SUMMARY, LOCATION, RRULE (DAILY / WEEKLY / MONTHLY / YEARLY with INTERVAL, COUNT, UNTIL,
 BYDAY, BYMONTHDAY, BYMONTH, BYSETPOS, WKST), RDATE, EXDATE and RECURRENCE-ID overrides — kept for a window of
@@ -50,7 +50,12 @@ MAX_BYTES = 2 * 1024 * 1024       # one calendar's ICS text
 TIMEOUT = 15                      # seconds per connect / read
 DEADLINE = 40                     # seconds for a whole fetch (redirects included)
 MAX_REDIRECTS = 3
-REFRESH = 600                     # seconds between fetches
+REFRESH = 600                     # seconds between fetches (the default of the house's setting below)
+EVERY_CHOICES = (5, 10, 15, 30)   # (v3.0.2: the admin's "check every … minutes"; never below 5 — Google & co. throttle)
+DEFAULT_EVERY = 10
+CHECK_ALL_GAP = 60                # (v3.0.2: "Check calendars now" at most once a minute)
+CHECK_ALL_CAP = 45                # (v3.0.2: … and answered within this many seconds; slower ones go on behind)
+CHECK_ALL_WORKERS = 4             # (… this many calendars fetched at once)
 WINDOW_DAYS = 60                  # events kept: yesterday … today + this many days
 MAX_EVENTS = 2000                 # per calendar, in the window
 MAX_LINK = 2000
@@ -65,6 +70,13 @@ _TEST_ALLOW_LOCAL = False
 
 class Invalid(ValueError):
     """A refused change, in plain words (never containing the link)."""
+
+
+class TooSoon(Exception):
+    """(v3.0.2) "Check calendars now" again within CHECK_ALL_GAP: .wait — the seconds left."""
+    def __init__(self, wait):
+        super().__init__(f"wait {wait} s")
+        self.wait = wait
 
 
 class FetchError(Exception):
@@ -981,6 +993,10 @@ class Calendars:
         self.lock = threading.Lock()
         self.busy = set()
         self.last_asked = {}
+        self.clock = time.monotonic   # (tests: a fake one)
+        self.fetcher = None           # (tests: a stub in place of fetch() — never the internet)
+        self.last_all = None          # (v3.0.2: clock() of the last fetch of them all — the refresher counts from it)
+        self._every = DEFAULT_EVERY
         self._cfg = None
         self._cache = None
 
@@ -996,12 +1012,14 @@ class Calendars:
                                  "color": c["color"] if isinstance(c.get("color"), str) and COLOR_RE.fullmatch(c["color"]) else DEFAULT_COLOR,
                                  "link": c["link"]})
             self._cfg = cals[:MAX_CALENDARS]
+            ev = cfg.get("every")
+            self._every = ev if type(ev) is int and ev in EVERY_CHOICES else DEFAULT_EVERY   # (v3.0.2: a bad file: the default)
             cache = guest_wifi.read_json(self.dir / CACHE, {}) or {}
             self._cache = {k: v for k, v in (cache.get("cals") or {}).items() if isinstance(v, dict)}
         return self._cfg
 
     def _save_cfg(self):
-        guest_wifi.write_private(self.dir / CONFIG, json.dumps({"v": 1, "calendars": self._cfg}, indent=1))
+        guest_wifi.write_private(self.dir / CONFIG, json.dumps({"v": 1, "every": self._every, "calendars": self._cfg}, indent=1))
 
     def _save_cache(self):
         guest_wifi.write_private(self.dir / CACHE, json.dumps({"v": 1, "cals": self._cache}, separators=(",", ":")))
@@ -1027,6 +1045,33 @@ class Calendars:
         with self.lock:
             return [(c["id"], c["name"], (self._cache.get(c["id"]) or {}).get("error")) for c in self._load()
                     if (self._cache.get(c["id"]) or {}).get("error")]
+
+    def every(self):
+        """(v3.0.2) Minutes between the automatic checks (5 / 10 / 15 / 30)."""
+        with self.lock:
+            self._load()
+            return self._every
+
+    def set_every(self, minutes):
+        """(v3.0.2) The house's "check every … minutes": exactly one of EVERY_CHOICES (Invalid otherwise); saved with the
+        calendars; the refresher uses it at its next tick (no restart)."""
+        if type(minutes) is not int or minutes not in EVERY_CHOICES:
+            raise Invalid("Check every 5, 10, 15 or 30 minutes")
+        with self.lock:
+            self._load()
+            old, self._every = self._every, minutes
+            try:
+                self._save_cfg()
+            except OSError:
+                self._every = old
+                raise
+        self.log(f"calendars: checked every {minutes} min")
+
+    def last_checked(self):
+        """(v3.0.2) The latest check of any calendar (ISO, UTC) or None."""
+        with self.lock:
+            self._load()
+            return max((st.get("fetched") or "" for st in self._cache.values()), default="") or None
 
     def exists(self, cid):
         with self.lock:
@@ -1128,50 +1173,153 @@ class Calendars:
 
     # ---- fetching ----
     def refresh(self, cid=None, fetcher=None, now=None):
-        """Fetch one calendar (cid) or all of them; each keeps its last good events when its fetch fails."""
-        fetcher = fetcher or fetch
+        """Fetch one calendar (cid) or all of them, one after another (the background refresher); each keeps its last
+        good events when its fetch fails. One being fetched already (another thread) is skipped.
+        → {checked, newEvents, changes, errors: [{id, name, error}]}."""
+        fetcher = fetcher or self.fetcher or fetch
+        if cid is None:
+            self.last_all = self.clock()
+        summary = {"checked": 0, "newEvents": 0, "changes": 0, "errors": []}
         with self.lock:
             todo = [(c["id"], c["name"], c["link"]) for c in self._load() if cid is None or c["id"] == cid]
             todo = [t for t in todo if t[0] not in self.busy]
             self.busy.update(t[0] for t in todo)
         changed = False
         try:
-            for c_id, c_name, link in todo:
-                events, error = None, None
+            for t in todo:
                 try:
-                    body = fetcher(link)
-                    text = body.decode("utf-8", "replace") if isinstance(body, bytes) else str(body)
-                    events = parse_events(text, c_id, now=now)
-                except (FetchError, Invalid) as e:
-                    error = str(e)
-                except Exception as e:   # (a calendar file that trips the parser: never the whole refresh)
-                    error = "The calendar couldn't be read"
-                    self.log(f"calendars: {c_id}: unreadable ({type(e).__name__})")
-                with self.lock:
-                    if not any(c["id"] == c_id and c["link"] == link for c in self._load()):
-                        continue   # (removed or given a new link meanwhile)
-                    st = self._cache.setdefault(c_id, {})
-                    st["fetched"] = _now_iso()
-                    if error is None:
-                        changed = changed or st.get("events") != events
-                        st.update(events=events, okAt=st["fetched"], error=None)
-                    else:
-                        st["error"] = error
-                        st.setdefault("events", [])
-                    try:
-                        self._save_cache()
-                    except OSError as e:
-                        self.log(f"calendars: cache not written ({type(e).__name__})")
-                if error:
-                    self.log(f"calendars: {c_id}: {error}")
+                    changed = self._fetch_one(*t, fetcher, now, summary) or changed
+                finally:
+                    with self.lock:   # (v3.0.2: let go one by one — "Check calendars now" waits for exactly these)
+                        self.busy.discard(t[0])
         finally:
             with self.lock:
                 self.busy.difference_update(t[0] for t in todo)
-        if changed and self.on_change:
+        if changed:
+            self._changed()
+        return summary
+
+    def _changed(self):
+        if self.on_change:
             try:
                 self.on_change()
             except Exception:
                 pass
+
+    def _fetch_one(self, c_id, c_name, link, fetcher, now, summary):
+        """One calendar fetched and its cache entry updated; adds to summary (under the lock). True when its events
+        changed. (v3.0.2) newEvents: how many more events it has than before (an edited one isn't new); changes: the
+        events that weren't there exactly like this before (new or edited)."""
+        events, error = None, None
+        try:
+            body = fetcher(link)
+            text = body.decode("utf-8", "replace") if isinstance(body, bytes) else str(body)
+            events = parse_events(text, c_id, now=now)
+        except (FetchError, Invalid) as e:
+            error = str(e)
+        except Exception as e:   # (a calendar file that trips the parser: never the whole refresh)
+            error = "The calendar couldn't be read"
+            self.log(f"calendars: {c_id}: unreadable ({type(e).__name__})")
+        changed = False
+        with self.lock:
+            if not any(c["id"] == c_id and c["link"] == link for c in self._load()):
+                return False   # (removed or given a new link meanwhile)
+            st = self._cache.setdefault(c_id, {})
+            st["fetched"] = _now_iso()
+            summary["checked"] += 1
+            if error is None:
+                old = st.get("events") or []
+                changed = old != events
+                seen = {json.dumps(e, sort_keys=True) for e in old}
+                summary["changes"] += sum(json.dumps(e, sort_keys=True) not in seen for e in events)
+                summary["newEvents"] += max(0, len(events) - len(old))
+                st.update(events=events, okAt=st["fetched"], error=None)
+            else:
+                st["error"] = error
+                st.setdefault("events", [])
+                summary["errors"].append({"id": c_id, "name": c_name, "error": error})
+            try:
+                self._save_cache()
+            except OSError as e:
+                self.log(f"calendars: cache not written ({type(e).__name__})")
+        if error:
+            self.log(f"calendars: {c_id}: {error}")
+        return changed
+
+    def check_all(self, fetcher=None, cap=None, workers=None):
+        """(v3.0.2) The Manager's "Check calendars now": all of them, CHECK_ALL_WORKERS at a time, answered within
+        CHECK_ALL_CAP seconds → {checked, stillChecking, failed, newEvents, changes, errors}. A calendar the refresher is
+        fetching right now is waited for (up to the cap) and counted as it ended; one not done by then is "still
+        checking" (it goes on behind — its events reach the panels when it's done). TooSoon within CHECK_ALL_GAP of the
+        last one asked for (calendar services throttle)."""
+        cap = CHECK_ALL_CAP if cap is None else cap
+        workers = CHECK_ALL_WORKERS if workers is None else workers
+        t, last = self.clock(), self.last_asked.get("all")
+        if last is not None and t - last < CHECK_ALL_GAP:
+            raise TooSoon(max(1, int(CHECK_ALL_GAP - (t - last) + 0.999)))
+        self.last_asked["all"] = t
+        self.last_all = t
+        fetcher = fetcher or self.fetcher or fetch
+        end = time.monotonic() + cap
+        summary = {"checked": 0, "newEvents": 0, "changes": 0, "errors": []}
+        with self.lock:
+            cals = [(c["id"], c["name"], c["link"]) for c in self._load()]
+            waiting = {c[0] for c in cals if c[0] in self.busy}   # (the refresher has them: their result is its)
+            todo = [c for c in cals if c[0] not in waiting]
+            self.busy.update(c[0] for c in todo)
+        state = {"answered": False, "changed": False, "left": len(todo), "queue": list(todo)}
+        done = threading.Event()
+
+        def worker():
+            while True:
+                with self.lock:
+                    if not state["queue"]:
+                        return
+                    c = state["queue"].pop(0)
+                changed = False
+                try:
+                    changed = self._fetch_one(*c, fetcher, None, summary)
+                except Exception as e:   # (never a calendar left marked busy)
+                    self.log(f"calendars: {c[0]}: not checked ({type(e).__name__})")
+                finally:
+                    with self.lock:
+                        self.busy.discard(c[0])
+                        state["changed"] = state["changed"] or changed
+                        late = state["answered"]
+                        state["left"] -= 1
+                        if not state["left"]:
+                            done.set()
+                if late and changed:   # (done after the answer: it tells the panels itself)
+                    self._changed()
+
+        for _ in range(min(max(1, workers), len(todo))):
+            threading.Thread(target=worker, name="calendar-check", daemon=True).start()
+        if todo:
+            done.wait(max(0.0, end - time.monotonic()))
+        while waiting:
+            with self.lock:
+                ended = {w for w in waiting if w not in self.busy}
+                for w in ended:   # (the refresher finished it: counted as it ended)
+                    st = (self._cache or {}).get(w) or {}
+                    summary["checked"] += 1
+                    if st.get("error"):
+                        summary["errors"].append({"id": w, "name": next((c[1] for c in cals if c[0] == w), w), "error": st["error"]})
+            waiting -= ended
+            if not waiting or time.monotonic() >= end:
+                break
+            time.sleep(0.05)
+        with self.lock:
+            state["answered"] = True
+            changed = state["changed"]
+            out = {**summary, "errors": list(summary["errors"]), "stillChecking": state["left"] + len(waiting)}
+            out["failed"] = len(out["errors"])
+        if changed:
+            self._changed()
+        return out
+
+    def due(self):
+        """(v3.0.2) The refresher's question: is a fetch of them all due (never yet, or `every` minutes since the last)?"""
+        return self.last_all is None or self.clock() - self.last_all >= self.every() * 60
 
     def refresh_soon(self, cid=None):
         """A refresh on its own thread (after a save; the Manager's "Check now" — once per 20 s per calendar)."""
@@ -1182,16 +1330,19 @@ class Calendars:
         threading.Thread(target=self.refresh, args=(cid,), name="calendar-fetch", daemon=True).start()
         return True
 
-    def start(self, interval=REFRESH, stop=None):
+    def start(self, stop=None, tick=5):
+        # (v3.0.2: was a fixed REFRESH wait — now it looks every `tick` s whether the house's setting says it's due, so a
+        # new "every" applies at once and a "Check now" postpones the next automatic check)
         stop = stop or threading.Event()
 
         def loop():
             while True:
                 try:
-                    self.refresh()
+                    if self.due():
+                        self.refresh()
                 except Exception:   # (never let the loop die)
                     pass
-                if stop.wait(interval):
+                if stop.wait(tick):
                     return
         t = threading.Thread(target=loop, name="calendars", daemon=True)
         t.start()

@@ -6,8 +6,11 @@
 //           Benchmark all; Add a panel (the admin).
 //   Setup   one panel at a time: the panel list, its settings in tabs (General, Look & layout, Rooms & devices,
 //           Cameras, People & calendars, Alerts, Safety, Guest Wi-Fi card, Weather effects) and beside them its map —
-//           a live preview of the look as it is saved — and its status. Each change saves just that setting
-//           (PATCH /api/manage/panels/<id> {set}, service/panel_settings.py); the panel takes it.
+//           a live preview of the look as it will be — and its status. (v3.0.2: the owner — "nothing seems to update":
+//           the changes wait in a bar at the bottom, "3 changes waiting — Discard / Save", and Save sends them in one
+//           PATCH /api/manage/panels/<id> {set}, service/panel_settings.py; the panel takes it.)
+// (v3.0.2) Pairing (pairing.js): the requests, unclaimed panels, notices and each panel's tablet; there is no built-in
+// "main" panel any more — every panel can be removed, and a tablet opens the Skypane address and is approved by code.
 // "Open live": the panel's real page in a large window (/<panel>?live=1 — the service decides: the admin controls it as
 // that panel would, any other login gets it view only; shared/live.js). Look & layout → the layout builder
 // (builder.js, #panels/<id>/layout). Routes: #panels/status, #panels/setup/<id>[/<tab>], #panels/<id>/layout.
@@ -38,12 +41,119 @@
   // ================================================================== state
   let list = null, listAt = 0, cur = null, data = null, tab = "general", roomPick = null, myPics = null, pollT = null;
   const filt = { st: "all", q: "" };
-  M.onReset(() => { list = null; listAt = 0; cur = null; data = null; tab = "general"; roomPick = null; myPics = null; filt.st = "all"; filt.q = ""; clearTimeout(pollT); });
+  M.onReset(() => { list = null; listAt = 0; cur = null; data = null; tab = "general"; roomPick = null; myPics = null; filt.st = "all"; filt.q = ""; clearTimeout(pollT); dropPending(); pinSet = null; });
   const onPage = () => S.route().page === "panels" && document.body.classList.contains("signed-in") && !document.body.classList.contains("bld-open");
   const viewNow = () => S.view("panels") || "status";
   const shown = (id) => (list || []).find((p) => p.id === id);
   const address = (p) => `${location.host}${p.address}`;
-  const liveUrl = (p) => `${p.address === "/" ? "/" : p.address}?live=1`;
+  const rootAddress = () => `${location.protocol}//${location.host}/`;   // (v3.0.2: where every new tablet starts — the pairing page)
+  const liveUrl = (p) => `${p.address}?live=1`;   // (v3.0.2: no "main" at / any more — / is the pairing page)
+  M.panelsKnown = () => list || [];   // (pairing.js: the approve dialog's live hint)
+
+  // ================================================================== changes waiting (v3.0.2, the owner: a real Save)
+  // pend = {path: value} for the open panel (pendPid); a list's change ({room id: …}) is merged like the server's
+  // panel_settings.apply (false / "" / [] = taken out). The tabs, the preview and the map read view() = saved + waiting.
+  const MERGED = new Set(["hiddenRooms", "hiddenDevices", "extraDevices", "deviceOrder", "roomGrids", "roomLayouts", "cameras.hiddenViews", "cameras.viewNames"]);
+  let pend = {}, pendPid = null, pinSet = null, saving = false;
+  const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  const gone = (v) => v === false || v === "" || (Array.isArray(v) && !v.length) || v == null;
+  // (v3.0.2) what a setting that isn't saved means — what the tabs show for it (and the panel does): put back to it, a
+  // change leaves the list ("Celsius" and back to "Fahrenheit" on a panel that never had one is no change)
+  const DEF = { "units.temp": "F", "units.wind": "mph", ledStrip: false, arrangeOnPanel: false, homeAfter: 0, insideSensor: "panel", notifyLight: 0,
+    alertBeeps: true, alertSilence: false, alertMinLevel: 1, quietLevel4: true, quietFrom: -1, quietTo: -1 };
+  const isSaved = (k, v, saved) => (saved[k] == null ? (k in DEF ? same(v, DEF[k]) : v == null || v === "" || (Array.isArray(v) && !v.length)) : same(v, saved[k]));
+  function dropPending() { pend = {}; pendPid = null; }
+  // ("This tablet's own light" is two settings — ledStrip on, notifyLight 0 —, one change: counted once)
+  const pendN = () => Object.entries(pend).reduce((n, [k, v]) => n + (MERGED.has(k) ? Object.keys(v).length : k === "ledStrip" && "notifyLight" in pend && !pend.notifyLight ? 0 : 1), 0);
+  function view() {
+    if (!data) return {};
+    if (pendPid !== cur || !pendN()) return data.managed;
+    const m = { ...data.managed };
+    for (const [k, v] of Object.entries(pend)) {
+      if (!MERGED.has(k)) { m[k] = v; continue; }
+      const o = { ...(m[k] && typeof m[k] === "object" ? m[k] : {}) };
+      for (const [x, y] of Object.entries(v)) { if (gone(y)) delete o[x]; else o[x] = y; }
+      m[k] = o;
+    }
+    return m;
+  }
+  // a change kept for Save; one put back to what's saved leaves the list. redraw: the tab drawn again from view()
+  function stage(set, redraw = true) {
+    if (!data) return;
+    if (pendPid !== cur) { pend = {}; pendPid = cur; }
+    const saved = data.managed;
+    for (const [k, v] of Object.entries(set)) {
+      if (!MERGED.has(k)) { if (isSaved(k, v, saved)) delete pend[k]; else pend[k] = v; continue; }
+      const now = { ...(pend[k] || {}) }, was = saved[k] && typeof saved[k] === "object" ? saved[k] : {};
+      for (const [x, y] of Object.entries(v)) { if (gone(y) ? gone(was[x]) : same(y, was[x])) delete now[x]; else now[x] = y; }
+      if (Object.keys(now).length) pend[k] = now; else delete pend[k];
+    }
+    if (redraw) drawSetup(); else { drawBar(); livePreview(); }
+  }
+  // Save: every change waiting in one PATCH (as save() sends one: {set}); the toast says where it went
+  async function saveAll() {
+    const pid = pendPid, set = { ...pend };
+    if (!pid || !Object.keys(set).length) return true;
+    const p = shown(pid) || { name: pid }, nm = (pid === cur && data && data.managed.panelName) || p.name;
+    if (saving) return false;
+    saving = true; drawBar();
+    try {
+      const r = await api(`/api/manage/panels/${encodeURIComponent(pid)}`, { set });
+      saving = false;
+      if (!r.ok) { toast(r.error === "not-allowed" ? K.t("panels.save.adminOnly") : r.error || K.t("panels.save.notSaved"), true); drawBar(); return false; }
+      if (pendPid === pid) {   // (v3.0.2: only what was sent — a change made while the PATCH was on its way stays waiting)
+        for (const [k, v] of Object.entries(set)) {
+          if (!(k in pend)) continue;
+          if (!MERGED.has(k)) { if (same(pend[k], v)) delete pend[k]; continue; }
+          const now = { ...pend[k] };
+          for (const [x, y] of Object.entries(v)) if (x in now && same(now[x], y)) delete now[x];
+          if (Object.keys(now).length) pend[k] = now; else delete pend[k];
+        }
+        if (!pendN()) dropPending();
+      }
+      if (pid === cur && data) data.managed = r.managed || data.managed;
+      listAt = 0;
+      const nm2 = (set.panelName || nm);
+      toast(stateOf(p) === "online" ? K.t("panels.save.sentOnline", { name: nm2 }) : K.t("panels.save.sent", { name: nm2 }));
+      if ("panelName" in set || "kioskName" in set) await loadList(true).catch(() => {});
+      drawSetup();
+      return true;
+    } catch (e) { saving = false; if (e.message !== "login") toast(K.t("panels.save.offline"), true); drawBar(); return false; }
+    finally { if (saving) { saving = false; drawBar(); } }
+  }
+  // the bar at the bottom (Integrations' drawBar); the marker in the page's data-unsaved box: the Manager's own
+  // "Leave without saving?" (another page, Back, closing the tab) knows about the changes
+  const marker = el("input.sr-hide", { type: "text", tabindex: "-1", "aria-hidden": "true", value: "" });
+  const bar = el("div.in-bar.pn-bar", { role: "region", "aria-label": K.t("panels.bar.label"), hidden: true });
+  // (v3.0.2: the buttons are made once and only switched on / off — a field's change on leaving it redrew them under
+  // the pressed mouse, and Save never got its click; while a save is on its way, both wait for its answer)
+  const barText = el("span"), barBtns = [el("button.btn", { type: "button", onclick: () => { if (saving) return; dropPending(); drawSetup(); } }, K.t("panels.bar.discard")),
+    el("button.btn.pri", { type: "button", onclick: () => { if (!saving) saveAll(); } }, K.t("panels.bar.save"))];
+  bar.append(barText, el("span.sp"), ...barBtns);
+  function drawBar() {
+    const n = pendPid === cur ? pendN() : 0;
+    marker.value = n ? String(n) : "";
+    bar.hidden = !n;
+    barText.textContent = K.t("panels.bar.waiting", { n });
+    for (const b of barBtns) b.disabled = saving;
+  }
+  // the preview and this panel's map in the list follow what's waiting (no redraw — a text field keeps its caret)
+  function livePreview() {
+    const map = mapOf(view());
+    for (const box of M.$main.querySelectorAll(".pn-prevbox, .pn-li.cur .th")) {
+      const old = box.querySelector("svg.pn-map"); box.style.background = mapBg(map);
+      if (old) old.replaceWith(drawMap(map, data.perf, old.getAttribute("aria-label") || ""));
+    }
+  }
+  // leaving this panel's Setup inside the page (another panel, Status, the builder): the Manager's own question first;
+  // "Leave" drops the changes. (The router asks by itself before another page — M.leaveOk below drops them then too.)
+  async function leavePending() {
+    if (!pendN() || pendPid !== cur) return true;
+    if (!(await M.leaveOk())) return false;
+    dropPending(); return true;
+  }
+  const leaveOk0 = M.leaveOk;
+  if (leaveOk0) M.leaveOk = async () => { const ok = await leaveOk0(); if (ok) { if (pendN()) { dropPending(); marker.value = ""; } } return ok; };
 
   // bg: the Status view's 30 s refresh — a background poll (Manage.poll) that never keeps the session alive
   window.addEventListener("manage:refresh", () => { listAt = 0; });   // (v2.9.2: a pull to refresh reads the panels' status again)
@@ -91,12 +201,14 @@
   }
   // (the layout builder open over the page: the page redrawing underneath — a poll, a save — leaves the address alone)
   const builderUp = () => document.body.classList.contains("bld-open");
-  const saveDraw = async (set, box, pid) => { if (await save(set, box, { pid })) drawSetup(); };
+  // (v3.0.2: the setup tabs' controls keep their change for Save — stage(); save() above stays for the builder's layouts)
+  const saveDraw = (set) => stage(set, true);
+  const keep = (set) => stage(set, false);
   // a question first, then the change — to the panel that was open when it was asked; the page moved on meanwhile: no change
   async function askThenSave(q, set) {
     const pid = cur;
     if (!(await ask(q)) || pid !== cur) return drawSetup();
-    await saveDraw(set, null, pid);
+    saveDraw(set);
   }
 
   // a small question in the Manager's own look (not the browser's): resolves true / false
@@ -108,7 +220,7 @@
   function mapOf(m) {
     const one = (v, ok, d) => (ok.includes(v) ? v : d);
     const g = m.homeGrid && Array.isArray(m.homeGrid.cards) ? m.homeGrid : null;
-    return { theme: (window.THEMES || {})[m["look.theme"]] ? m["look.theme"] : "purple", background: m["look.background"] || "mountains",
+    return { theme: (window.THEMES || {})[m["look.theme"]] || m["look.theme"] === "custom" ? m["look.theme"] : "purple", hue: m["look.hue"], background: m["look.background"] || "mountains",
       layout: one(m.homeLayout, ["classic", "agenda", "duo", "security", "minimal", "custom"], "classic"),
       dockAt: one(m.dockAt, ["bottom", "top", "left", "right"], "bottom"), dockOff: m.dockOff === true, dockStyle: m.dockStyle || "pill", maxLoad: m["effects.maxLoad"] || 0,
       grid: g ? { cols: g.cols || 12, rows: g.rows || 8, scr: g.scr, cards: g.cards.slice(0, 60).map((c) => [c.x, c.y, c.w, c.h, c.t,
@@ -132,15 +244,17 @@
   const DARK_T = new Set(["camera", "roomcams", "photos", "picture"]);
   // the colours around a map whose screen isn't the box's shape (a 16:9 panel in a 16:10 tile): the theme's own sky and
   // land, never plain navy bands
+  // (v3.0.2: themes.js themeOf — "custom" is Purple turned to the map's hue)
+  const themeOfMap = (map) => (window.themeOf ? themeOf(map.theme, map.hue) : (window.THEMES || {})[map.theme] || (window.THEMES || {}).purple);
   function mapBg(map) {
-    const T = (window.THEMES || {})[map.theme] || (window.THEMES || {}).purple;
+    const T = themeOfMap(map);
     if (!T) return "#0b0820";
     const sky = (T.sky && (T.sky.night || T.sky.day)) || ["#0b0820", "#1d1145", "#3a1d6e"], land = T.land || [["#5a3399", "#2a1757"]];
     return `linear-gradient(180deg, ${sky[0]}, ${sky[sky.length - 1]} 58%, ${(land[land.length - 1] || land[0])[1] || "#140b30"})`;   // i18n-ok (CSS)
   }
   // drawMap(map, perf) → an <svg> (the screen's proportions; scales to its box)
   function drawMap(map, perf, label) {
-    const T = (window.THEMES || {})[map.theme] || (window.THEMES || {}).purple || { sky: { night: ["#0b0820", "#1d1145", "#3a1d6e"] }, land: [["#5a3399", "#2a1757"], ["#29165a", "#140b30"]], glass: [30, 20, 64], accent: "#8b5cf6" };
+    const T = themeOfMap(map) || { sky: { night: ["#0b0820", "#1d1145", "#3a1d6e"] }, land: [["#5a3399", "#2a1757"], ["#29165a", "#140b30"]], glass: [30, 20, 64], accent: "#8b5cf6" };
     const scr = screenOf(map, perf), W = 320, H = Math.round((W * scr.h) / scr.w), id = `pnm${++mapN}`;
     const s = svg("svg", { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "xMidYMid meet", role: "img", "aria-label": label || K.t("panels.map.label"), class: "pn-map" });   // i18n-ok (CSS)
     const defs = svg("defs", {}), grad = svg("linearGradient", { id: `${id}s`, x1: 0, y1: 0, x2: 0, y2: 1 });
@@ -190,11 +304,15 @@
   }
 
   // ================================================================== a panel's state in words
-  const stateOf = (p) => (p.status && p.status.state) || "never";
-  const DOT = { online: "", offline: "bad", never: "idle" };
+  // (v3.0.2) "unclaimed": no tablet linked (just added, or its tablet unlinked) — waiting for a tablet to be approved
+  const stateOf = (p) => (p.claim && p.claim.state === "unclaimed" ? "unclaimed" : (p.status && p.status.state) || "never");
+  const DOT = { online: "", offline: "bad", never: "idle", unclaimed: "idle" };
+  const ST_NAME = { online: K.t("panels.state.online"), offline: K.t("panels.state.offline"), never: K.t("panels.state.never"), unclaimed: K.t("panels.state.unclaimed") };
+  const stName = (st) => ST_NAME[st] || ST_NAME.never;
   function stateWords(p) {
     const s = p.status || {}, st = stateOf(p);
-    return st === "online" ? K.t("panels.state.onlineAgo", { ago: ago(s.lastSeen) }) : st === "offline" ? K.t("panels.state.offlineAgo", { ago: ago(s.lastSeen) }) : K.t("panels.state.never");
+    return st === "online" ? K.t("panels.state.onlineAgo", { ago: ago(s.lastSeen) }) : st === "offline" ? K.t("panels.state.offlineAgo", { ago: ago(s.lastSeen) })
+      : st === "unclaimed" ? K.t("panels.state.unclaimedLong") : K.t("panels.state.never");
   }
   const sizeWords = (p, map) => { const meas = (p.perf || []).find((x) => x.vw && x.vh); return meas ? `${meas.vw} × ${meas.vh}` : map && map.grid && map.grid.scr ? K.t("panels.screen.layoutSize", { w: map.grid.scr.w, h: map.grid.scr.h }) : K.t("panels.screen.notMeasured"); };
   // (the tile's short form: 1280×800, or — when not measured)
@@ -222,8 +340,12 @@
       el("p", {}, K.t("panels.head.intro"))),
     el("span.sp"), acts, phone() ? null : el("span.vr"), phone() ? null : S.viewSwitch("panels"));
   }
+  // (v3.0.2) under the header, the admin's pairing box (pairing.js): requests, the grace period, unclaimed panels,
+  // notices — in full on Status, only the waiting tablets on Setup, read only on a phone. The same node every time:
+  // its 3 s poll draws only itself
   function frame(...kids) {
-    $page = el("div.pn-page", { "data-view": viewNow() }, header(), ...kids);
+    const pair = M.pairingBox ? M.pairingBox(phone() ? "phone" : viewNow() === "setup" && cur ? "compact" : "full") : null;
+    $page = el("div.pn-page", { "data-view": viewNow() }, header(), pair, ...kids);
     M.swap(M.$main, $page);
   }
 
@@ -254,6 +376,12 @@
 
   // ================================================================== Status
   function showStatus() {
+    // (v3.0.2: changes waiting on a panel's Setup — the view switch, ‹ All panels: the Manager's question first; Stay =
+    // back to that Setup, its changes still waiting)
+    if (pendN() && pendPid === cur && M.$main.querySelector(".pn-setup")) {
+      leavePending().then((ok) => (ok ? showStatus() : S.setView("panels", "setup")));
+      return;
+    }
     if (!list.length) return frame(empty());
     if (S.route().page !== "panels") return;
     if (S.view("panels") !== "status" && !phone()) S.setView("panels", "status", false);
@@ -273,15 +401,18 @@
     const loads = all.map((p) => [p, loadOf(p, maps.get(p.id))]).filter(([, l]) => l && l.measured);
     const benched = all.map((p) => [p, M.benchOf ? M.benchOf(p.perf) : null]).filter(([, b]) => b).sort((a, b) => b[1].at - a[1].at);
     const kpi = (cls, small, big, sub) => el("div.kpi" + (cls ? `.${cls}` : ""), {}, el("small", {}, small), el("b", {}, big, sub ? el("span", {}, sub) : null));
-    const needs = [...off, ...never];
+    const free = all.filter((p) => stateOf(p) === "unclaimed");
+    const needs = [...off, ...never, ...free];
     const kpis = el("div.pn-kpis", {},
       kpi(needs.length ? "warn" : "ok", K.t("panels.state.online"), `${on.length}`, K.t("panels.kpi.ofAll", { n: all.length })),
       kpi(needs.length ? "bad" : "", K.t("panels.kpi.needs"), `${needs.length}`, needs.length > 2 ? K.t("panels.kpi.needsMore", { names: needs.slice(0, 2).map((p) => p.name).join(", "), n: needs.length - 2 })
         : needs.length ? needs.map((p) => p.name).join(", ") : K.t("panels.kpi.allIn")),
       kpi("", K.t("panels.kpi.avgLoad"), loads.length ? `${Math.round(loads.reduce((n, [, l]) => n + l.pct, 0) / loads.length)} %` : "—", loads.length ? K.t("panels.kpi.ofSmooth") : K.t("panels.kpi.notBenched")),
       kpi("", K.t("panels.kpi.benched"), `${benched.length}`, benched.length ? K.t("panels.kpi.lastBench", { name: benched[0][0].name, date: day(benched[0][1].at) }) : K.t("panels.kpi.ofPanels", { n: all.length })));
-    const counts = { all: all.length, online: on.length, offline: off.length, never: never.length };
-    const fseg = el("div.seg.pn-fseg", { role: "group", "aria-label": K.t("panels.filter.label") }, [["all", K.t("panels.filter.all")], ["online", K.t("panels.state.online")], ["offline", K.t("panels.state.offline")], ["never", K.t("panels.state.never")]].map(([k, n]) =>
+    const counts = { all: all.length, online: on.length, offline: off.length, never: never.length, unclaimed: free.length };
+    if (filt.st === "unclaimed" && !free.length) filt.st = "all";
+    const fseg = el("div.seg.pn-fseg", { role: "group", "aria-label": K.t("panels.filter.label") }, [["all", K.t("panels.filter.all")], ["online", K.t("panels.state.online")], ["offline", K.t("panels.state.offline")], ["never", K.t("panels.state.never")],
+      ...(free.length ? [["unclaimed", K.t("panels.state.unclaimed")]] : [])].map(([k, n]) =>
       el("button" + (filt.st === k ? ".on" : ""), { type: "button", "aria-pressed": String(filt.st === k), onclick: () => { filt.st = k; drawStatus(); } }, n, el("span.n", {}, String(counts[k])))));
     const q = el("input.pn-q", { type: "search", placeholder: K.t("panels.find.ph"), value: filt.q, "aria-label": K.t("panels.find.label"), "data-fk": "pn-q",
       oninput: (e) => { filt.q = e.target.value; drawWall(); } });
@@ -300,10 +431,12 @@
   }
   function tile(p, map) {
     const st = stateOf(p), s = p.status || {}, l = loadOf(p, map), mayEdit = M.can("panels", p.id);
+    const nv = st === "never" || (st === "unclaimed" && !s.lastSeen);   // (v3.0.2: no tablet has checked in for it yet)
     const thumb = el("button.pn-thumb", { type: "button", "aria-label": K.t("panels.tile.openSettings", { name: p.name }), onclick: () => openSetup(p.id), style: `background:${mapBg(map)}` },
       drawMap(map, p.perf, K.t("panels.map.labelOf", { name: p.name })),
       el("span.pn-tag", {}, el("span.dot" + (DOT[st] ? `.${DOT[st]}` : "")), p.address),
-      st === "never" ? el("span.pn-over", {}, el("b", {}, K.t("panels.state.never")), K.t("panels.tile.finishSetup", { address: address(p) }))
+      st === "unclaimed" ? el("span.pn-over", {}, el("b", {}, K.t("panels.state.unclaimed")), M.graceUntil && M.graceUntil(p) ? K.t("panels.tile.graceHint", { time: M.graceUntil(p) }) : K.t("panels.tile.pairHint", { address: rootAddress() }))
+        : st === "never" ? el("span.pn-over", {}, el("b", {}, K.t("panels.state.never")), K.t("panels.tile.finishSetup", { address: address(p) }))
         : st === "offline" ? el("span.pn-over.off", {}, el("b", {}, K.t("panels.state.offline")), s.page ? K.t("panels.tile.lastSeenOn", { ago: ago(s.lastSeen), page: s.page }) : K.t("panels.tile.lastSeen", { ago: ago(s.lastSeen) })) : null);
     return el(`article.pn-tile.st-${st}` + (p.id === cur ? ".cur" : ""), { "data-id": p.id },
       thumb,
@@ -313,24 +446,51 @@
           mayEdit && !phone() ? el("button.btn.sm", { type: "button", "aria-label": K.t("panels.tile.layoutLabel", { name: p.name }), "data-tip": K.t("panels.tile.layoutTip"), onclick: () => openSetup(p.id, "look").then(() => openBuilder()) }, ic("layout", 14), el("span.bl", {}, K.t("panels.tile.layout"))) : null,
           el("button.btn.sm", { type: "button", "aria-label": K.t("panels.tile.liveLabel", { name: p.name }), "data-tip": M.isAdmin() ? K.t("panels.tile.liveTipAdmin") : K.t("panels.tile.liveTipView"), onclick: () => openLive(p) }, ic("window", 14), el("span.bl", {}, K.t("panels.tile.live"))))),
       el("div.pn-mt", {},
-        el("div", {}, el("small", {}, K.t("panels.tile.load")), l && !(st === "never" && !l.measured) ? el("b", { style: `color:${l.measured ? loadColour(l.pct) : "var(--t2)"}`, title: l.measured ? K.t("panels.tile.loadTip") : K.t("panels.tile.loadEstimate") }, `${l.measured ? "" : "≈ "}${l.pct} %`) : el("b", { title: st === "never" ? K.t("panels.kv.notMeasured") : null }, st === "never" ? K.t("panels.tile.notYet") : "—")),   // (v3.0.0: a panel never opened isn't measured)
-        el("div", {}, el("small", {}, K.t("panels.tile.checkIn")), el("b", { title: st === "never" ? "" : ago(s.lastSeen) }, st === "never" ? K.t("panels.tile.never") : K.ago(s.lastSeen, "bare") || "—")),   // (how long, without "ago": its own words)
+        el("div", {}, el("small", {}, K.t("panels.tile.load")), l && !(nv && !l.measured) ? el("b", { style: `color:${l.measured ? loadColour(l.pct) : "var(--t2)"}`, title: l.measured ? K.t("panels.tile.loadTip") : K.t("panels.tile.loadEstimate") }, `${l.measured ? "" : "≈ "}${l.pct} %`) : el("b", { title: nv ? K.t("panels.kv.notMeasured") : null }, nv ? K.t("panels.tile.notYet") : "—")),   // (v3.0.0: a panel never opened isn't measured)
+        el("div", {}, el("small", {}, K.t("panels.tile.checkIn")), el("b", { title: nv ? "" : ago(s.lastSeen) }, nv ? K.t("panels.tile.never") : K.ago(s.lastSeen, "bare") || "—")),   // (how long, without "ago": its own words)
         el("div", {}, el("small", {}, K.t("panels.kv.screen")), el("b", { title: sizeWords(p, map) }, sizeShort(p, map))),
         el("div", {}, el("small", {}, K.t("panels.kv.version")), el("b", { title: s.version || "" }, s.version || "—"))));
   }
-  // every 30 s while Status is open: the check-ins
+  // every 30 s while Status is open: the check-ins; (v3.0.2) Setup too — every 5 s while its panel never checked in
+  // (just added: the tablet's first check-in shows without a refresh), redrawn only when that panel's state changed
+  const polled = () => phone() || viewNow() === "status" || (viewNow() === "setup" && !!cur);
+  // fn after the mouse / finger that's down now is lifted (its click done), at once when none is
+  let down = false;
+  document.addEventListener("pointerdown", () => { down = true; }, true);
+  document.addEventListener("pointerup", () => setTimeout(() => { down = false; }), true);
+  document.addEventListener("pointercancel", () => { down = false; }, true);
+  const afterPress = (fn) => {
+    if (!down) return setTimeout(fn);
+    let done = false;
+    const go = () => { if (done) return; done = true; document.removeEventListener("pointerup", go, true); document.removeEventListener("pointercancel", go, true); setTimeout(fn, 30); };
+    document.addEventListener("pointerup", go, true); document.addEventListener("pointercancel", go, true);
+    setTimeout(go, 3000);
+  };
   function poll() {
     clearTimeout(pollT);
+    const setupNever = !phone() && viewNow() === "setup" && cur && ["never", "unclaimed"].includes(stateOf(shown(cur) || {}));
     pollT = setTimeout(async () => {
-      if (!onPage() || (viewNow() !== "status" && !phone())) return;
+      if (!onPage() || !polled()) return;
       if (document.visibilityState === "hidden") return;   // (v2.8.0: a hidden tab asks nothing — visibilitychange starts it again)
       const busy = (document.activeElement && document.activeElement.classList.contains("pn-q") && filt.q) || (phone() && touching);
+      const was = cur ? stateOf(shown(cur) || {}) : null;
       try { await loadList(true, true); } catch (e) { if (e.message === "login") return; }
-      if (onPage() && (viewNow() === "status" || phone()) && !document.querySelector(".modal-bg, .pn-live") && !busy) { if (phone()) drawCarousel(); else drawStatus(); }
+      if (onPage() && polled() && !document.querySelector(".modal-bg, .pn-live") && !busy) {
+        if (phone()) drawCarousel();
+        else if (viewNow() === "status") drawStatus();
+        else if (!builderUp() && stateOf(shown(cur) || {}) !== was) {   // (else a form being edited stays as it is)
+          // (v3.0.2: a name being typed when the tablet checks in: drawn again once it leaves the field — never over the typing)
+          const a = document.activeElement, pid = cur;
+          // (v3.0.2: and only after the press that left it — a click on Save must land on Save, not on a bar drawn anew)
+          if (a && a.closest(".pn-setup") && (a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && /^(text|search|number|email|url|tel|password)$/.test(a.type))))
+            a.addEventListener("blur", () => afterPress(() => { if (onPage() && viewNow() === "setup" && cur === pid && !builderUp() && !document.querySelector(".modal-bg, .pn-live")) drawSetup(); }), { once: true });
+          else drawSetup();
+        }
+      }
       poll();
-    }, 30000);
+    }, setupNever ? 5000 : 30000);
   }
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && onPage() && (viewNow() === "status" || phone())) poll(); });
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && onPage() && polled()) poll(); });
 
   // ================================================================== the phone: the carousel (v2.8.0; V280-PLAN.md §5)
   // One card a screen (the next one peeking), each the panel's drawn map — the same drawing as Status (decision 3,
@@ -338,7 +498,7 @@
   // Under it: the selected panel's details, its address to copy, and Open live (full screen; the admin may switch
   // things there, the others look —). Setup and the builder stay on a computer.
   let selP = null, touching = false;
-  const STATE_WORD = { online: K.t("panels.state.onlineLow"), offline: K.t("panels.state.offlineLow"), never: K.t("panels.state.neverLow") };
+  const STATE_WORD = { online: K.t("panels.state.onlineLow"), offline: K.t("panels.state.offlineLow"), never: K.t("panels.state.neverLow"), unclaimed: K.t("panels.state.unclaimedLow") };
   function showCarousel(rest) {
     if (!list.length) { frame(empty()); return; }
     const views = ["status", "setup"];
@@ -359,7 +519,7 @@
       return el("li.pnc-card", { "aria-roledescription": "slide", "aria-label": K.t("panels.carousel.slide", { name: p.name, state: STATE_WORD[st], n: n + 1, total: list.length }), "data-id": p.id },
         el("div.pnc-map", { style: `background:${mapBg(map)}` }, drawMap(map, p.perf, K.t("panels.map.labelOf", { name: p.name }))),
         el("div.pnc-ft", {}, el("b", {}, p.name), el("span.pill" + (st === "online" ? "" : st === "offline" ? ".bad" : ".idle"), {},
-          el("span.dot" + (DOT[st] ? `.${DOT[st]}` : "")), st === "online" ? K.t("panels.state.online") : st === "offline" ? K.t("panels.state.offline") : K.t("panels.state.never"))));
+          el("span.dot" + (DOT[st] ? `.${DOT[st]}` : "")), stName(st))));
     }));
     const dots = el("div.pnc-dots", { role: "group", "aria-label": K.t("panels.carousel.pick") }, list.map((p, n) =>
       el("button", { type: "button", "aria-label": K.t("panels.carousel.show", { name: p.name }), onclick: () => go(n, true) }, el("i"))));
@@ -400,6 +560,7 @@
   }
   function details(p) {
     const st = stateOf(p), s = p.status || {}, map = p.map || mapOf({}), bench = M.benchOf ? M.benchOf(p.perf) : null, pg = pageOf(map);
+    const nv = st === "never" || (st === "unclaimed" && !s.lastSeen);
     const O = M.overview ? M.overview() : null;
     const waiting = O && O.alerts && Array.isArray(O.alerts.items) ? O.alerts.items.filter((a) => (a.panels || []).includes("all") || (a.panels || []).includes(p.name)).length : null;
     const kv = (k, v) => [el("span", {}, k), el("b", {}, v)];
@@ -408,7 +569,7 @@
     return [
       el("div.ps-kv", {},
         ...kv(K.t("panels.shared.status"), stateWords(p)),
-        ...kv(K.t("panels.kv.lastCheckIn"), st === "never" ? K.t("panels.shared.never") : K.when(s.lastSeen, "dayTime")),
+        ...kv(K.t("panels.kv.lastCheckIn"), nv ? K.t("panels.shared.never") : K.when(s.lastSeen, "dayTime")),
         ...kv(K.t("panels.kv.screen"), sizeWords(p, map)),
         ...kv(K.t("panels.kv.showing"), s.page || "—"),
         ...kv(K.t("panels.kv.homePage"), pg.own ? K.t("panels.kv.ownCards", { n: pg.cards.length }) : (M.layoutPresets && (M.layoutPresets()[map.layout] || [])[0]) || K.t("panels.layout.classic")),
@@ -452,14 +613,15 @@
     const words = s.split("-").filter(Boolean);
     while (words.length > 1 && /^(panel|tablet|screen|dashboard)$/.test(words[words.length - 1])) words.pop();   // i18n-ok (words dropped from an address)
     s = words.join("-").replace(/^[^a-z]+/, "") || "panel";   // i18n-ok (the fallback address)
-    if (/^(manager|api$|manage$|admin$)/.test(s)) s = `panel-${s}`;   // i18n-ok (kept for the pages / the Manager)
+    if (/^(manager|api$|manage$|admin$|connect$)/.test(s)) s = `panel-${s}`;   // i18n-ok (kept for the pages / the Manager)
     s = s.slice(0, 32).replace(/-+$/, "");
-    const used = new Set([...(taken || [])].map((x) => String(x).toLowerCase()).concat("main"));
+    const used = new Set([...(taken || [])].map((x) => String(x).toLowerCase()).concat("main"));   // (v3.0.2: no main panel any more, but the server still keeps its address back — LEGACY_MAIN)
     if (!used.has(s)) return s;
     for (let n = 2; ; n++) { const t = `${s.slice(0, 31 - String(n).length).replace(/-+$/, "")}-${n}`; if (!used.has(t)) return t; }
   }
   const looksLikeAddress = (v) => /:\/\/|^\s*www\.|^\s*\d{1,3}(\.\d{1,3}){1,3}(:\d+)?\s*$|^\s*\[?[0-9a-f]*:[0-9a-f:]+\]?\s*$/i.test(v);
   // <slug
+  M.panelSlug = (name) => panelSlug(name, (list || []).flatMap((p) => [p.id, String(p.address || "").slice(1)]));   // (pairing.js: "Creates a new panel at /…")
   async function addPanel() {
     if (!M.isAdmin()) return;
     const taken = (list || []).flatMap((p) => [p.id, String(p.address || "").slice(1)]);   // (a moved panel's /admin-panel too)
@@ -500,12 +662,13 @@
       if (!id) { nameIn.focus(); return; }
       go.disabled = true;
       try {
-        const r = await api("/api/manage/panels", { action: "add", id, name: name || id });
+        // (v3.0.2: an unclaimed panel — no tablet yet; the address as typed or made from the name)
+        const r = await api("/api/manage/panels", { action: "add", name: name || id, address: id });
         if (!r.ok) {
-          const why = r.error === "exists" ? K.t("panels.add.exists") : r.error || K.t("panels.add.notAdded");
+          const why = r.error === "exists" ? K.t("panels.add.exists") : r.error === "name-taken" ? K.t("panels.add.nameTaken") : r.error || K.t("panels.add.notAdded");
           idRow.hidden = false; change.hidden = true; mark(idIn, why); return toast(why, true);
         }
-        toast(r.id && r.id !== id ? K.t("panels.add.savedAs", { id: r.id }) : K.t("panels.add.added"));
+        toast(r.id && r.id !== id ? K.t("panels.add.savedAsPair", { id: r.id, url: rootAddress() }) : K.t("panels.add.addedPair", { url: rootAddress() }));
         close();
         await loadList(true);
         await openSetup(r.id, "general");
@@ -521,12 +684,14 @@
   // ================================================================== Setup
   async function openSetup(id, t) {
     if (!id) return showStatus();
+    if (id !== cur && !(await leavePending())) return drawSetup();   // (v3.0.2: another panel — its changes waiting first)
     if (t) tab = t;
     let d;
     try { d = await loadPanel(id); } catch { return; }
     if (S.route().page !== "panels") return;
     if (!d) {   // (removed meanwhile, or this login may not see it any more)
       toast(K.t("panels.setup.gone"), true);
+      if (pendPid === id) dropPending();
       await M.meAgain();
       if (!M.can("panels")) return M.go("panels");
       try { await loadList(true); } catch { return; }
@@ -537,7 +702,7 @@
     cur = id; data = d;
     if (S.view("panels") !== "setup" && !phone()) S.setView("panels", "setup", false);
     drawSetup();
-    clearTimeout(pollT);
+    if (phone()) clearTimeout(pollT); else poll();   // (v3.0.2: was clearTimeout — a tablet's first check-in showed only after a refresh; a phone's poll redraws the carousel)
   }
   function drawSetup() {
     if (!data || !onPage()) return;
@@ -572,42 +737,49 @@
     else if (adminTab && !admin) notes.push(el("p.pn-note", {}, ic("lock", 15), tab === "alerts" ? K.t("panels.setup.noteAlerts")
       : K.t("panels.setup.noteSafety")));
     const ptop = el("div.pn-top", {}, phone() ? el("button.btn.sm.ghost.pn-back", { type: "button", onclick: () => showStatus() }, ic("chevL", 14), K.t("panels.setup.allPanels")) : null, head, el("div.pn-addr", {}, el("span", {}, K.t("panels.add.address")), copy));
-    const main = el("div.pn-main", {}, tabs, ...notes, el("div.pn-body", { role: "tabpanel", "aria-label": TABS.find(([k]) => k === tab)[1] }, body));
+    const main = el("div.pn-main", {}, marker, tabs, ...notes, el("div.pn-body", { role: "tabpanel", "aria-label": TABS.find(([k]) => k === tab)[1] }, body));
     const plist = phone() ? null : el("nav.pn-list", { "aria-label": K.t("panels.shared.aboutpanels") }, el("div.gh", {}, K.t("panels.shared.aboutpanels"), el("span.r", {}, K.t("panels.list.online", { n: list.filter((x) => stateOf(x) === "online").length, total: list.length }))),
       el("div.grp", {}, list.map((x) => el("button.pn-li" + (x.id === cur ? ".cur" : ""), { type: "button", "aria-current": x.id === cur ? "true" : null, "data-fk": `pn-li:${x.id}`,
-        onclick: () => openSetup(x.id) }, el("span.th", { style: `background:${mapBg(x.id === cur ? mapOf(data.managed) : x.map || mapOf({}))}` }, drawMap(x.id === cur ? mapOf(data.managed) : x.map || mapOf({}), x.perf, "")),
-        el("span.tx", {}, el("b", {}, x.id === cur ? name : x.name), el("small", {}, el("span.dot" + (DOT[stateOf(x)] ? `.${DOT[stateOf(x)]}` : "")), stateOf(x) === "online" ? K.t("panels.state.online") : stateOf(x) === "offline" ? K.t("panels.state.offline") : K.t("panels.state.never")))))));
-    frame(el("div.pn-setup", {}, plist, ptop, main, aside(p, name)));
+        onclick: () => openSetup(x.id) }, el("span.th", { style: `background:${mapBg(x.id === cur ? mapOf(view()) : x.map || mapOf({}))}` }, drawMap(x.id === cur ? mapOf(view()) : x.map || mapOf({}), x.perf, "")),
+        el("span.tx", {}, el("b", {}, x.id === cur ? name : x.name), el("small", {}, el("span.dot" + (DOT[stateOf(x)] ? `.${DOT[stateOf(x)]}` : "")), stName(stateOf(x))))))));
+    // (v3.0.2) data-unsaved + the marker: leaving with changes waiting asks; the bar sticks to the bottom — a phone's too
+    // (Add a panel opens Setup there: its changes wait for Save as anywhere, and the leave question names that button)
+    frame(el("div.pn-setup", { "data-unsaved": K.t("panels.bar.unsavedName", { name }), "data-save": K.t("panels.bar.save") }, plist, ptop, main, aside(p, name)), bar);
+    drawBar();
     if (M.routeSync && !builderUp()) M.routeSync(["setup", cur, tab], name);   // (the builder open over it: its own address stays — #panels/<id>/layout)
   }
   // beside the settings: the map (as saved now — it follows each change) and the panel's status
   function aside(p, name) {
-    const map = mapOf(data.managed), st = stateOf(p), s = p.status || {}, l = loadOf({ ...p, perf: data.perf }, map, { views: data.views });
+    const map = mapOf(view()), st = stateOf(p), s = p.status || {}, l = loadOf({ ...p, perf: data.perf }, map, { views: data.views });
+    const nv = st === "never" || (st === "unclaimed" && !s.lastSeen);
     const meas = (data.perf || []).find((x) => x.vw && x.vh), bench = M.benchOf ? M.benchOf(data.perf) : null;
     const pg = pageOf(map);
     const kv = (k, v, style) => [el("span", {}, k), el("b", style ? { style } : {}, v)];
     return el("aside.pn-aside", {},
       el("section.card.flush.pn-prev", {}, el("h3.ch", {}, K.t("panels.prev.title"), el("small", {}, meas ? `${meas.vw} × ${meas.vh}` : "1280 × 800")),
         el("div.pn-prevbox", { style: `background:${mapBg(map)}` }, drawMap(map, data.perf, K.t("panels.map.labelOf", { name })),
-          st === "never" ? el("span.pn-over", {}, el("b", {}, K.t("panels.prev.waiting")), K.t("panels.prev.finishSetup", { address: address(p) })) : null),
+          st === "unclaimed" ? el("span.pn-over", {}, el("b", {}, K.t("panels.prev.waiting")), K.t("panels.prev.finishSetup", { address: rootAddress() }))
+          : nv ? el("span.pn-over", {}, el("b", {}, K.t("panels.prev.waiting")), K.t("panels.prev.pairedWaiting")) : null),   // (v3.0.2: approved, not opened yet)
         el("div.pn-prevft", {}, el("small", {}, pg.own ? K.t("panels.prev.own") : K.t("panels.prev.builtIn")),
           el("button.btn.sm", { type: "button", "data-ro-ok": "", onclick: () => openLive(p) }, ic("window", 14), K.t("panels.openLive")))),
       el("section.card.flush", {}, el("h3.ch", {}, K.t("panels.shared.status")),
         el("div.pn-kv", {},
-          ...kv(K.t("panels.kv.lastCheckIn"), st === "never" ? K.t("panels.shared.never") : ago(s.lastSeen)),
+          ...kv(K.t("panels.kv.lastCheckIn"), nv ? K.t("panels.shared.never") : ago(s.lastSeen)),
           ...kv(K.t("panels.kv.showing"), s.page || "—"),
           ...kv(K.t("panels.kv.version"), s.version || "—"),
           ...kv(K.t("panels.kv.screen"), meas ? `${meas.vw} × ${meas.vh}` : K.t("panels.kv.notMeasured")),
           ...kv(pg.own ? K.t("panels.kv.cardsOnHome") : K.t("panels.kv.homePage"), pg.own ? String(pg.cards.length) : (M.layoutPresets && (M.layoutPresets()[map.layout] || [])[0]) || K.t("panels.layout.classic")),
-          ...kv(K.t("panels.kv.drawingLoad"), st === "never" && !(l && l.measured) ? K.t("panels.kv.notMeasured") : l ? K.t(l.measured ? "panels.kv.loadPct" : "panels.kv.loadPctEst", { pct: l.pct }) : "—", l && l.measured ? `color:${loadColour(l.pct)}` : ""),
-          ...kv(K.t("panels.kv.benchmark"), bench ? K.t("panels.kv.scoreLow", { score: `${bench.frameScore}${bench.capped ? "+" : ""}`, date: day(bench.at) }) : K.t("panels.kv.notRun")))));
+          ...kv(K.t("panels.kv.drawingLoad"), nv && !(l && l.measured) ? K.t("panels.kv.notMeasured") : l ? K.t(l.measured ? "panels.kv.loadPct" : "panels.kv.loadPctEst", { pct: l.pct }) : "—", l && l.measured ? `color:${loadColour(l.pct)}` : ""),
+          ...kv(K.t("panels.kv.benchmark"), bench ? K.t("panels.kv.scoreLow", { score: `${bench.frameScore}${bench.capped ? "+" : ""}`, date: day(bench.at) }) : K.t("panels.kv.notRun")))),
+      // (v3.0.2) its tablet: the device, last IP, paired; Unlink / Move / Rename / Re-trust — actions, at once (pairing.js)
+      M.panelDevice ? M.panelDevice(p) : null);
   }
 
   // ---------- the controls (each has data-key = the setting it changes: the admin's are locked for the others) ----------
   const keyed = (n, key) => { if (key) n.dataset.key = key; return n; };
   const text = (key, value, opts = {}) => keyed(el("input", { type: "text", value: value || "", maxlength: String(opts.max || 40), placeholder: opts.ph || "",
     autocapitalize: opts.lower ? "none" : null, spellcheck: opts.lower ? "false" : null, "aria-label": opts.label || null, "data-fk": `pn:${key}`,
-    onchange: opts.onchange || (async (e) => { const v = opts.lower ? e.target.value.trim().toLowerCase() : e.target.value.trim(); if (await save({ [key]: v }, e.target) && opts.after) opts.after(); }) }), key);
+    onchange: opts.onchange || ((e) => { const v = opts.lower ? e.target.value.trim().toLowerCase() : e.target.value.trim(); keep({ [key]: v }); }) }), key);
   const select = (key, opts, curv, pick, label) => keyed(el("select", { "aria-label": label || null, "data-fk": `pn:${key}`, onchange: (e) => pick(e.target.value, e.target) },
     opts.map(([v, l]) => (Array.isArray(l) ? el("optgroup", { label: v }, l.map(([v2, l2]) => el("option", { value: String(v2), selected: String(curv) === String(v2) }, l2)))
       : el("option", { value: String(v), selected: String(curv) === String(v) }, l)))), key);
@@ -622,49 +794,49 @@
 
   // ================================================================== General
   function general(p) {
-    const g = data.managed;
-    const after = async () => { await loadList(true); drawSetup(); };
-    const url = `http://${address(p)}`;
+    const g = view();
+    const url = rootAddress();   // (v3.0.2: a tablet starts at the Skypane address and is approved by its code)
     const secs = (n) => K.t("panels.time.seconds", { n }), mins = (n) => K.t("panels.time.minutes", { n });
     const HOME_AFTER = [[0, K.t("panels.shared.never")], [30, secs(30)], [60, mins(1)], [120, mins(2)], [300, mins(5)], [600, mins(10)], [1800, mins(30)]];
     const ha = +g.homeAfter || 0;
     return el("div", {},
       ...G("Panel", [
-        R(K.t("panels.add.name"), K.t("panels.gen.nameHint"), text("panelName", g.panelName || p.name, { label: K.t("panels.add.name"), after })),
+        R(K.t("panels.add.name"), K.t("panels.gen.nameHint"), text("panelName", g.panelName || p.name, { label: K.t("panels.add.name") })),
         // (v3.0.0) the panel's own language (settings.language → PANEL_LANG); one language so far: said in words
         R(K.t("panels.gen.language"), K.t("panels.gen.languageHint"), (data.languages || ["en"]).length > 1
-          ? select("language", data.languages.map((c) => [c, K.t(`lang.${c}`)]), g.language || "en", (v) => save({ language: v }), K.t("panels.gen.language"))
+          ? select("language", data.languages.map((c) => [c, K.t(`lang.${c}`)]), g.language || "en", (v) => keep({ language: v }), K.t("panels.gen.language"))
           : el("span.ac-lang", {}, el("b", {}, K.t("lang.en")), " " + K.t("account.lang.more"))),
         // (v3.0.0) how this panel shows the weather: settings.units {temp, wind} (unset: °F and mph, as the panel does)
         R(K.t("panels.gen.unitTemp"), K.t("panels.gen.unitTempHint"), select("units.temp", [["F", K.t("panels.gen.unitF")], ["C", K.t("panels.gen.unitC")]],
-          g["units.temp"] || "F", (v) => save({ "units.temp": v }), K.t("panels.gen.unitTemp"))),
+          g["units.temp"] || "F", (v) => keep({ "units.temp": v }), K.t("panels.gen.unitTemp"))),
         R(K.t("panels.gen.unitWind"), K.t("panels.gen.unitWindHint"), select("units.wind", [["mph", K.t("panels.gen.unitMph")], ["km/h", K.t("panels.gen.unitKmh")]],
-          g["units.wind"] || "mph", (v) => save({ "units.wind": v }), K.t("panels.gen.unitWind"))),
+          g["units.wind"] || "mph", (v) => keep({ "units.wind": v }), K.t("panels.gen.unitWind"))),
         R(K.t("panels.gen.kiosk"), K.t("panels.gen.kioskHint"),
-          text("kioskName", g.kioskName || p.kiosk, { lower: true, label: K.t("panels.gen.kiosk"), after })),
+          text("kioskName", g.kioskName || p.kiosk, { lower: true, label: K.t("panels.gen.kiosk") })),
         R(K.t("panels.gen.music"), K.t("panels.gen.musicHint"), text("music.url", g["music.url"], { max: 300, ph: "http://…", label: K.t("panels.gen.music") })),
       ]),
       ...G(K.t("panels.gen.thisTablet"), [
         R(K.t("panels.gen.led"), K.t("panels.gen.ledHint"),
-          swi("ledStrip", g.ledStrip !== false, (on) => save({ ledStrip: on }), K.t("panels.gen.led"))),
+          swi("ledStrip", g.ledStrip === true, (on) => keep({ ledStrip: on }), K.t("panels.gen.led"))),   // (v3.0.2: unset = off, as the panel reads it — settings.js; was shown on)
         R(K.t("panels.gen.inside"), K.t("panels.gen.insideHint"), insideSel(g)),
         R(K.t("panels.gen.homeAfter"), K.t("panels.gen.homeAfterHint"),
-          select("homeAfter", HOME_AFTER.concat(HOME_AFTER.some(([v]) => v === ha) ? [] : [[ha, secs(ha)]]), ha, (v) => save({ homeAfter: +v }), K.t("panels.gen.homeAfter"))),
+          select("homeAfter", HOME_AFTER.concat(HOME_AFTER.some(([v]) => v === ha) ? [] : [[ha, secs(ha)]]), ha, (v) => keep({ homeAfter: +v }), K.t("panels.gen.homeAfter"))),
         R(K.t("panels.gen.arrange"), K.t("panels.gen.arrangeHint"),
-          swi("arrangeOnPanel", g.arrangeOnPanel === true, (on) => save({ arrangeOnPanel: on }), K.t("panels.gen.arrange"))),
+          swi("arrangeOnPanel", g.arrangeOnPanel === true, (on) => keep({ arrangeOnPanel: on }), K.t("panels.gen.arrange"))),
         R(K.t("panels.gen.goRtc"), K.t("panels.gen.goRtcHint"), text("cameras.go2rtc", g["cameras.go2rtc"], { max: 300, ph: K.t("panels.gen.goRtcPh"), label: K.t("panels.gen.goRtc") })),
       ], K.t("panels.gen.tabletFoot")),
       ...G(K.t("panels.gen.setUp"), [block(el("ol.pn-steps", {},
         el("li", {}, ...withEls("panels.gen.stepStart", { url: el("code", {}, url) })),
         el("li", {}, ...withEls("panels.gen.stepMqtt", { broker: el("code", {}, `${location.hostname}:1883`), name: el("code", {}, g.kioskName || p.kiosk) })),
         el("li", {}, K.t("panels.gen.stepOpen"))))]),
-      p.id === "main" || list.length < 2 || !M.isAdmin() ? null : el("div.pn-later", {}, ...G(K.t("panels.remove"), [R(K.t("panels.gen.removeRow"), K.t("panels.gen.removeHint"),
+      !M.isAdmin() ? null :   // (v3.0.2: no built-in main panel — any panel may go, the last one too)
+ el("div.pn-later", {}, ...G(K.t("panels.remove"), [R(K.t("panels.gen.removeRow"), K.t("panels.gen.removeHint"),
         el("button.btn.pn-danger", { type: "button", onclick: async () => {
           if (!(await ask({ title: K.t("panels.gen.removeAsk", { name: p.name }), text: K.t("panels.gen.removeText", { address: address(p) }), yes: K.t("panels.gen.removeYes"), danger: true }))) return;
           const r = await api("/api/manage/panels", { action: "remove", id: p.id }).catch(() => ({}));
           if (!r.ok) return toast(r.error || K.t("panels.gen.notRemoved"), true);
           toast(K.t("panels.gen.removed", { name: p.name }));
-          cur = null; data = null; await loadList(true); showStatus();
+          dropPending(); cur = null; data = null; await loadList(true); showStatus();
         } }, ic("x", 15), K.t("panels.gen.removeBtn")))])));
   }
   // where the Home page's "Inside" temperature comes from: this tablet's sensors, a Hubitat sensor, or the thermostat
@@ -674,7 +846,7 @@
     const now = g.insideSensor ?? "panel";
     return select("insideSensor", [["panel", K.t("panels.gen.insidePanel")], ["none", K.t("panels.gen.insideNone")],
       ...(temps.length ? [[K.t("panels.gen.insideHubitat"), temps.map((c) => [c.id, c.room ? K.t("panels.withDetail", { name: c.label, detail: c.room }) : c.label])]] : [])], now,
-    (v) => save({ insideSensor: /^\d+$/.test(v) ? +v : v }), K.t("panels.gen.inside"));
+    (v) => keep({ insideSensor: /^\d+$/.test(v) ? +v : v }), K.t("panels.gen.inside"));
   }
 
   // ================================================================== Look & layout
@@ -700,8 +872,42 @@
     el("span.dbar", {}, Array.from({ length: n }, (_, i) => el("i" + (j === all.length - 1 && i === n - 2 ? ".c" : ""))))));
   const mini = (cols) => el("span.lmini", {}, cols.map(([w, parts]) => el("span.lcol", { style: `flex:${w}` }, parts.map((x) => el("i", {}, x)))));
   const pickTile = (on, onclick, ...kids) => el("button.pn-pick" + (on ? ".on" : ""), { type: "button", "aria-pressed": String(on), onclick }, ...kids);
+  // (v3.0.2) the owner's own colour, after the 12: a rainbow button (the chosen colour once it's in use) → a hue slider
+  // under it, the preview beside following the drag; saved on release (an arrow key: each step), the slider kept open
+  const hueOf = (m) => (Number.isInteger(m["look.hue"]) && m["look.hue"] >= 0 && m["look.hue"] <= 359 ? m["look.hue"] : window.CUSTOM_HUE || 200);
+  const hueBg = (h) => { const g = window.themeFromHue ? themeFromHue(h).grad : ["#a78bfa", "#7c3aed"]; return `linear-gradient(135deg,${g[0]},${g[1]})`; };   // i18n-ok (CSS)
+  const RAINBOW = "conic-gradient(#f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)";   // i18n-ok (CSS)
+  const customSwatch = (on, h) => keyed(el("button.pn-hue" + (on ? ".on" : ""), { type: "button", role: "radio", "aria-checked": String(on), "aria-haspopup": "dialog",
+    "aria-label": K.t("panels.look.custom"), "data-tip": K.t("panels.look.custom"), style: `background:${on ? hueBg(h) : RAINBOW}`,
+    onclick: (e) => hueOpen(e.currentTarget) }), "look.theme");
+  function hueOpen(anchor) {
+    const pid = cur, h0 = hueOf(view()), wasOn = view()["look.theme"] === "custom";
+    const swatch = el("i.hue-prev", { style: `background:${hueBg(h0)}` });
+    const live = (h, on = true) => {   // (the button, the slider's thumb, the preview and this panel's map in the list)
+      anchor.style.background = on ? hueBg(h) : RAINBOW; swatch.style.background = hueBg(h); range.style.setProperty("--thumb", window.hueColour ? hueColour(h) : "#8b5cf6");
+      const map = mapOf(on ? { ...view(), "look.theme": "custom", "look.hue": h } : view());
+      for (const box of M.$main.querySelectorAll(".pn-prevbox, .pn-li.cur .th")) {
+        const old = box.querySelector("svg.pn-map"); box.style.background = mapBg(map);
+        if (old) old.replaceWith(drawMap(map, data.perf, old.getAttribute("aria-label") || ""));
+      }
+    };
+    const range = el("input.hue-range", { type: "range", min: "0", max: "359", step: "1", value: String(h0), "aria-label": K.t("panels.look.hue"),
+      oninput: (e) => live(+e.target.value),
+      onchange: async (e) => {
+        const h = +e.target.value, focused = document.activeElement === e.target;
+        await saveDraw({ "look.theme": "custom", "look.hue": h }, null, pid);
+        const nb = pop.isConnected && pid === cur && M.$main.querySelector(".pn-swatches .pn-hue");
+        if (nb) { hueOpen(nb); if (!focused) nb.focus({ preventScroll: true }); }   // (the redrawn button: the slider stays open)
+      } });
+    const pop = popover(anchor, el("b", {}, K.t("panels.look.custom")), el("div.hue-row", {}, swatch, range), el("small.muted", {}, K.t("panels.look.customHint")));
+    pop.classList.add("pn-huepop");
+    pop.setAttribute("role", "dialog"); pop.setAttribute("aria-label", K.t("panels.look.custom"));
+    live(h0, wasOn);
+    // (closed without a change — Esc, a click outside: the preview goes back to what is saved)
+    new MutationObserver((_, ob) => { if (!pop.isConnected) { ob.disconnect(); if (pid === cur && view()["look.theme"] !== "custom" && anchor.isConnected) live(h0, false); } }).observe(document.body, { childList: true });
+  }
   function look() {
-    const m = data.managed, theme = m["look.theme"] || "purple", home = m.homeLayout || "classic", roomDef = m.roomLayout || "G";
+    const m = view(), theme = m["look.theme"] || "purple", home = m.homeLayout || "classic", roomDef = m.roomLayout || "G";
     const per = m.roomLayouts || {}, dock = m.dockAt || "bottom";
     const dockStyle = DOCK_STYLES.some(([k]) => k === m.dockStyle) ? m.dockStyle : "pill", dockLabels = typeof m.dockLabels === "boolean" ? m.dockLabels : dockStyle !== "rail";
     const pick = (set) => saveDraw(set);
@@ -710,10 +916,10 @@
     const noBuild = phone() ? K.t("panels.look.noBuild") : null;
     return el("div", {},
       noBuild ? el("div.phone-note", {}, ic("layout", 20), el("span", {}, noBuild)) : null,
-      ...G(K.t("panels.look.theme"), [R(K.t("panels.shared.abouttheme"), ((window.THEMES || {})[theme] || {}).name || theme,
-        keyed(el("div.pn-swatches", { role: "radiogroup", "aria-label": K.t("panels.look.theme") }, themes.map(([k, t]) => keyed(el("button" + (k === theme ? ".on" : ""), {
+      ...G(K.t("panels.look.theme"), [R(K.t("panels.shared.abouttheme"), theme === "custom" ? K.t("panels.look.custom") : ((window.THEMES || {})[theme] || {}).name || theme,
+        keyed(el("div.pn-swatches", { role: "radiogroup", "aria-label": K.t("panels.look.theme") }, ...themes.map(([k, t]) => keyed(el("button" + (k === theme ? ".on" : ""), {
           type: "button", role: "radio", "aria-checked": String(k === theme), "aria-label": t.name, "data-tip": t.name, style: `background:linear-gradient(135deg,${t.grad[0]},${t.grad[1]})`,   // i18n-ok (CSS)
-          onclick: () => pick({ "look.theme": k }) }), "look.theme"))), "look.theme"))],
+          onclick: () => pick({ "look.theme": k }) }), "look.theme")), customSwatch(theme === "custom", hueOf(m))), "look.theme"))],
       K.t("panels.look.themeFoot")),
       ...G(K.t("panels.kv.homePage"), [
         block(el("div.pn-picks.pn-homes", {}, HOME_LAYOUTS.map(([k, n, d, cols, built]) => keyed(pickTile(k === home, () => pick({ homeLayout: k }), mini(cols),
@@ -726,9 +932,12 @@
       ...G(K.t("panels.look.roomPages"), [
         R(K.t("panels.look.everyRoom"), K.t("panels.look.everyRoomHint"), seg("roomLayout", ROOM_LAYOUTS.map(([k, n]) => [k, n]), roomDef, (v) => pick({ roomLayout: v }), K.t("panels.look.everyRoom"))),
         R(K.t("panels.look.ownRooms"), roomsN ? K.t("panels.look.ownRoomsHintN", { n: roomsN }) : K.t("panels.look.ownRoomsHint"),
-          el("button.btn.sm", { type: "button", disabled: phone(), onclick: () => openBuilder({ room: true }) }, ic("layout", 14), roomsN ? K.t("panels.edit") : K.t("panels.buildOne"))),
-        ...data.rooms.map((r) => R(r.name, null, select("roomLayouts", [["", K.t("panels.look.sameAsEvery")], ...ROOM_LAYOUTS.map(([k, n]) => [k, n])], per[r.id] || "",
-          (v) => pick({ roomLayouts: { [r.id]: v } }), K.t("panels.look.roomPage", { name: r.name })))),
+          el("button.btn.sm", { type: "button", disabled: phone(), onclick: () => roomBuild() }, ic("layout", 14), roomsN ? K.t("panels.edit") : K.t("panels.buildOne"))),
+        // (v3.0.2: a room with its own page: its row opens that page in the builder straight away)
+        ...data.rooms.map((r) => R(r.name, null, el("div.pn-btns", {}, select("roomLayouts", [["", K.t("panels.look.sameAsEvery")], ...ROOM_LAYOUTS.map(([k, n]) => [k, n])], per[r.id] || "",
+          (v) => pick({ roomLayouts: { [r.id]: v } }), K.t("panels.look.roomPage", { name: r.name })),
+          ownRoom(m, r.id) ? el("button.btn.sm", { type: "button", disabled: phone(), "aria-label": K.t("panels.roomBuild.editOwn", { room: r.name }),
+            onclick: () => openBuilder({ room: true, key: r.id }) }, ic("layout", 14), K.t("panels.edit")) : null))),
       ], ROOM_LAYOUTS.map(([, n, d]) => K.t("panels.look.roomLayoutLine", { name: n, desc: d })).join(" · ")),
       ...skyGroup(m, pick),
       ...G(K.t("panels.look.roomBar"), [
@@ -764,12 +973,41 @@
     ]);
   }
 
+  // (v3.0.2) Room pages' Build one / Edit: it used to open every room's page with the first room on it — it looked like
+  // that room was picked. Now first: which page (every room's, or one room's own) and from what (empty, or as it is now)
+  const ownRoom = (m, k) => !!((m.roomGrids || {})[k] && Array.isArray(m.roomGrids[k].cards));
+  async function roomBuild() {
+    if (phone() || !data) return openBuilder({ room: true });
+    const m = data.managed, rooms = data.rooms || [];
+    const RP = (window.LayoutMaps || {}).ROOM_PRESETS || {}, builtIn = (RP.rclassic || [K.t("layoutmaps.room.classic")])[0];
+    // (what the builder starts that page from: its own, else every room's own, else the built-in room layout)
+    const nowName = (k) => (k !== "*" && ownRoom(m, k) ? K.t("panels.roomBuild.itsOwn") : ownRoom(m, "*") ? K.t("panels.roomBuild.everyOwn") : builtIn);
+    const forSel = el("select", { "aria-label": K.t("panels.roomBuild.for"), onchange: () => { curT.textContent = K.t("panels.roomBuild.fromNow", { name: nowName(forSel.value) }); } },
+      el("option", { value: "*" }, K.t("panels.roomBuild.every")),
+      rooms.length ? el("optgroup", { label: K.t("panels.roomBuild.oneRoom") }, rooms.map((r) => el("option", { value: r.id }, ownRoom(m, r.id) ? K.t("panels.roomBuild.hasOwn", { room: r.name }) : r.name))) : null);
+    const radio = (v, on, kid) => el("label.pn-radio", {}, el("input", { type: "radio", name: "pn-rb-start", value: v, checked: on }), kid);
+    const curT = el("span", {}, K.t("panels.roomBuild.fromNow", { name: nowName("*") }));
+    const starts = el("div.pn-radios", { role: "radiogroup", "aria-label": K.t("panels.roomBuild.start") },
+      radio("empty", false, el("span", {}, K.t("panels.roomBuild.fromEmpty"))), radio("now", true, curT));
+    const ok = await ask({ title: K.t("panels.roomBuild.title"), yes: K.t("panels.roomBuild.open"),
+      extra: el("div.pn-ask-opt.pn-rb", {}, el("label.pn-rb-f", {}, el("b", {}, K.t("panels.roomBuild.for")), forSel),
+        el("div.pn-rb-f", {}, el("b", {}, K.t("panels.roomBuild.start")), starts)) });
+    if (!ok) return;
+    const empty = !!starts.querySelector('input[value="empty"]:checked');   // i18n-ok (a selector)
+    openBuilder({ room: true, key: forSel.value, start: empty ? "empty" : "" });
+  }
   // the layout builder (builder.js) in place of the page; Done → this panel's Look & layout again
   // room: true = the rooms' own grids (one for every room, and any room's own) instead of Home
+  // (v3.0.2) key: the room page to open ("*" every room's, else a room's id), start: "empty" = no cards
   async function openBuilder(opts = {}) {
     // (a phone: no red error — the Look & layout tab with its "open this on a computer" note)
     if (phone()) { tab = "look"; drawSetup(); return toast(K.t("panels.builder.needsBig")); }
     if (!data) return;
+    // (v3.0.2) changes waiting: the builder works on what's saved — Save them first, or stay
+    if (pendN() && pendPid === cur) {
+      if (!(await ask({ title: K.t("panels.bar.builderAsk"), text: K.t("panels.bar.builderText", { n: pendN() }), yes: K.t("panels.bar.builderYes") }))) return;
+      if (!(await saveAll())) return;
+    }
     // (the panel as saved now: the builder's save is checked against what it opened with — another tab's save is noticed)
     const fresh = await loadPanel(cur).catch(() => null);
     if (fresh && fresh.id === data.id) data = fresh;
@@ -778,7 +1016,7 @@
     const name = data.managed.panelName || p.name;
     if (!M.openBuilder) { toast(K.t("panels.builder.notLoaded"), true); return; }   // (a lazily loaded script that failed)
     M.openBuilder({ panel: { id: p.id, name, address: p.address }, managed: data.managed, rooms: data.rooms, views: data.views, perf: data.perf, room: !!opts.room,
-      panels: list.map((x) => ({ id: x.id, name: x.name })), save, latest: () => data.managed, back: () => { tab = "look"; listAt = 0; drawSetup(); } });
+      key: opts.key || "*", start: opts.start || "", panels: list.map((x) => ({ id: x.id, name: x.name })), save, latest: () => data.managed, back: () => { tab = "look"; listAt = 0; drawSetup(); } });
     if (M.routeSync) M.routeSync([p.id, "layout"], K.t(opts.room ? "panels.builder.titleRooms" : "panels.builder.titleHome", { name }));
   }
 
@@ -805,7 +1043,7 @@
     return box;
   }
   function rooms() {
-    const m = data.managed, hiddenRooms = m.hiddenRooms || {}, hiddenDevices = m.hiddenDevices || {};
+    const m = view(), hiddenRooms = m.hiddenRooms || {}, hiddenDevices = m.hiddenDevices || {};
     const order = m.roomOrder || [];
     const rank = (r, i) => { const k = order.indexOf(r.id); return k < 0 ? order.length + i : k; };
     const ordered = data.rooms.map((r, i) => [r, rank(r, i)]).sort((a, b) => a[1] - b[1]).map(([r]) => r);
@@ -813,7 +1051,7 @@
     const devN = (r) => r.devices.length + (r.members || []).length;
     const roomList = ordered.length ? orderList(ordered.map((r) => ({ id: r.id, label: r.name, sub: K.t(r.custom ? "panels.rooms.devicesYours" : "search.roomDevices", { n: devN(r) }),
       extra: swi("hiddenRooms", !hiddenRooms[r.id], (on) => saveDraw({ hiddenRooms: { [r.id]: !on } }), K.t("panels.shownHere", { name: r.name })) })),
-    (ids) => save({ roomOrder: ids }), K.t("panels.rooms.group")) : el("p.pn-info", {}, K.t("panels.rooms.none"));
+    (ids) => keep({ roomOrder: ids }), K.t("panels.rooms.group")) : el("p.pn-info", {}, K.t("panels.rooms.none"));
 
     if (!roomPick || !data.rooms.some((r) => r.id === roomPick)) roomPick = ordered[0] && ordered[0].id;
     const r = data.rooms.find((x) => x.id === roomPick);
@@ -829,11 +1067,11 @@
         const fromElsewhere = extra.includes(id);
         return { id, label: r.custom ? d.full || d.name : d.name, sub: d.room && d.room !== r.name ? K.t("panels.rooms.kindFrom", { kind: d.kind, room: d.room }) : d.kind,
           extra: el("span.pn-btns", {}, fromElsewhere ? keyed(el("button.btn.sm.ghost", { type: "button", onclick: () => setExtra(extra.filter((x) => x !== id)) }, K.t("panels.remove")), "extraDevices") : null,
-            swi("hiddenDevices", !hiddenDevices[id], (on) => save({ hiddenDevices: { [id]: !on } }), r.custom ? K.t("panels.rooms.shownCustom", { name: d.name }) : K.t("panels.shownHere", { name: d.name }))) }; });
+            swi("hiddenDevices", !hiddenDevices[id], (on) => keep({ hiddenDevices: { [id]: !on } }), r.custom ? K.t("panels.rooms.shownCustom", { name: d.name }) : K.t("panels.shownHere", { name: d.name }))) }; });
       const add = select("extraDevices", [["", K.t("panels.rooms.addPh")], ...data.rooms.filter((x) => x.id !== r.id && !x.custom).map((x) => [x.name,
         x.devices.filter((d) => !ids.includes(d.id)).map((d) => [d.id, K.t("panels.withDetail", { name: d.name, detail: d.kind })])]).filter(([, l]) => l.length)], "",
       (v) => { if (v) setExtra([...extra, +v]); }, K.t("panels.rooms.addLabel", { name: r.name }));
-      devBox = el("div", {}, items.length ? orderList(items, (next) => save({ deviceOrder: { [r.id]: next } }), K.t("panels.rooms.devicesIn", { name: r.name }))
+      devBox = el("div", {}, items.length ? orderList(items, (next) => keep({ deviceOrder: { [r.id]: next } }), K.t("panels.rooms.devicesIn", { name: r.name }))
         : el("p.pn-info", {}, K.t("panels.rooms.noDevices")), el("div.pn-addrow", {}, add));
     }
     return el("div", {},
@@ -844,15 +1082,15 @@
 
   // ================================================================== Cameras
   function cameras() {
-    const m = data.managed, hidden = m["cameras.hiddenViews"] || {}, names = m["cameras.viewNames"] || {};
+    const m = view(), hidden = m["cameras.hiddenViews"] || {}, names = m["cameras.viewNames"] || {};
     const order = m["cameras.viewOrder"] || [];
     const rank = (v, i) => { const k = order.indexOf(v.id); return k < 0 ? order.length + i : k; };
     const views = data.views.map((v, i) => [v, rank(v, i)]).sort((a, b) => a[1] - b[1]).map(([v]) => v);
     const list2 = views.length ? orderList(views.map((v) => ({ id: v.id, label: names[v.id] || v.name, sub: names[v.id] ? K.t("panels.cams.countProtect", { n: v.cameras, name: v.name }) : K.t("panels.cams.count", { n: v.cameras }),
       extra: el("span.pn-btns", {}, keyed(el("input.pn-vname", { type: "text", value: names[v.id] || "", placeholder: K.t("panels.cams.namePh"), maxlength: "40", "aria-label": K.t("panels.cams.nameLabel", { name: v.name }),
         onchange: (e) => saveDraw({ "cameras.viewNames": { [v.id]: e.target.value.trim() } }, e.target) }), "cameras.viewNames"),
-      swi("cameras.hiddenViews", !hidden[v.id], (on) => save({ "cameras.hiddenViews": { [v.id]: !on } }), K.t("panels.shownHere", { name: v.name }))) })),
-    (ids) => save({ "cameras.viewOrder": ids }), K.t("panels.cams.views")) : el("p.pn-info", {}, K.t("panels.cams.none"));
+      swi("cameras.hiddenViews", !hidden[v.id], (on) => keep({ "cameras.hiddenViews": { [v.id]: !on } }), K.t("panels.shownHere", { name: v.name }))) })),
+    (ids) => keep({ "cameras.viewOrder": ids }), K.t("panels.cams.views")) : el("p.pn-info", {}, K.t("panels.cams.none"));
     const sec = (n) => K.t("panels.time.s", { n }), min = (n) => K.t("panels.time.min", { n });
     const opt = (label, hint, path, opts, def) => R(label, hint, seg(path, opts, m[path] ?? def, (v) => saveDraw({ [path]: v }), label));
     return el("div", {},
@@ -919,12 +1157,19 @@
   };
   const faceBtn = (key, o, initial, label, onclick) => keyed(el("button.pn-face", { type: "button", "aria-label": label, "data-tip": K.t("panels.icon.tip"), onclick }, faceOf(o, initial)), key);
   const colourBtn = (key, color, label, onclick) => keyed(el("button.dot.pn-col", { type: "button", style: `background:${color}`, "aria-label": label, "data-tip": K.t("panels.colour.tip"), onclick }), key);
+  // a presence device's label → the person: "Phone - Jane's" → "Jane" (the same as the panel's settings.js)
+  const personName = (label) => String(label || "").replace(/^[^-]{1,24}\s-\s*/, "").replace(/['’]s$/i, "").trim() || String(label || "");
   function people() {
-    const m = data.managed;
-    const fromPanel = Array.isArray(m.people) && m.people.length;
+    const m = view();
+    // (v3.0.2: a saved list — even an empty one, everyone switched off — is the list; null = never saved)
+    const fromPanel = Array.isArray(m.people);
     const clean = (l) => (l || "").replace(/^(owntracks|phone)\s*-\s*/i, "");
-    // (no list saved yet: the panel shows the OwnTracks people — the same start here)
-    const lst = fromPanel ? m.people : data.presence.filter((p) => /owntracks/i.test(p.type || "")).map((p, i) => ({ id: p.id, name: clean(p.label), color: COLORS[i % 4], image: null }));
+    // (no list saved yet: the panel's own first-run rule — settings.js — so the switches show who the panel really shows.
+    // Before v3.0.2 only OwnTracks devices started on here while the panel showed every presence person: switching
+    // someone off needed on, then off)
+    const NOT_PERSON = /presence sensor|mm-?wave|motion|occupan|radar|\bfp[12]\b/i;   // (v3.0.2: settings.js had backspace characters instead of its word boundaries)
+    const lst = fromPanel ? m.people : data.presence.filter((p) => !NOT_PERSON.test(`${p.label} ${p.type || ""}`)).slice(0, 8)
+      .map((p, i) => ({ id: p.id, name: personName(p.label), color: COLORS[i % 4], image: null }));
     const chosen = new Map(lst.map((p) => [p.id, p]));
     const setPeople = (next) => saveDraw({ people: next });
     const rows = data.presence.map((p) => {
@@ -980,17 +1225,17 @@
   const hourName = (h) => new Date(2000, 0, 1, h).toLocaleTimeString([], { hour: "numeric" });
   const HOURS = [[-1, "—"], ...Array.from({ length: 24 }, (_, h) => [h, hourName(h)])];
   async function quiet(path, v) {
-    const m = data.managed, other = path === "quietFrom" ? m.quietTo : m.quietFrom;
+    const m = view(), other = path === "quietFrom" ? m.quietTo : m.quietFrom;
     if (v >= 0 && v === other) { toast(K.t("panels.alerts.sameHourToast"), true); return drawSetup(); }
     await saveDraw({ [path]: v });
   }
   function alerts(p) {   // (v3.0.0: p — its name in the Silence question)
-    const m = data.managed;
+    const m = view();
     const qf = m.quietFrom ?? -1, qt = m.quietTo ?? -1;
     const modes = text("quietModes", (m.quietModes || []).join(", "), { max: 200, ph: K.t("panels.alerts.modesPh"), label: K.t("panels.alerts.modesLabel"), onchange: (e) => {
       const l = e.target.value.split(",").map((x) => x.trim()).filter(Boolean);
       if (l.length > 12 || l.some((x) => x.length > 40)) { mark(e.target, K.t("panels.alerts.modesMax")); return toast(K.t("panels.alerts.modesMaxToast"), true); }
-      save({ quietModes: l }, e.target);
+      keep({ quietModes: l }, e.target);
     } });
     const notes = [];
     if (qf >= 0 && qf === qt) notes.push(warn(K.t("panels.alerts.sameHour")));
@@ -998,7 +1243,7 @@
     return el("div", {},
       block(info(K.t("panels.alerts.info"))),
       ...G(K.t("panels.alerts.onPanel"), [
-        R(K.t("panels.alerts.beep"), K.t("panels.alerts.levelsHigh"), swi("alertBeeps", m.alertBeeps !== false, (on) => save({ alertBeeps: on }), K.t("panels.alerts.beep"))),
+        R(K.t("panels.alerts.beep"), K.t("panels.alerts.levelsHigh"), swi("alertBeeps", m.alertBeeps !== false, (on) => keep({ alertBeeps: on }), K.t("panels.alerts.beep"))),
         R(K.t("panels.alerts.silence"), K.t("panels.alerts.silenceHint"),
           swi("alertSilence", m.alertSilence === true, async (on) => {
             if (!on) return saveDraw({ alertSilence: false }, null, cur);
@@ -1006,24 +1251,31 @@
           }, K.t("panels.alerts.silence"))),
       ]),
       ...G(K.t("panels.alerts.levelsGroup"), [
-        R(K.t("panels.alerts.minLevel"), K.t("panels.alerts.minLevelHint"), select("alertMinLevel", LEVELS_TXT, m.alertMinLevel || 1, (v) => save({ alertMinLevel: +v }), K.t("panels.alerts.minLevel"))),
+        R(K.t("panels.alerts.minLevel"), K.t("panels.alerts.minLevelHint"), select("alertMinLevel", LEVELS_TXT, m.alertMinLevel || 1, (v) => keep({ alertMinLevel: +v }), K.t("panels.alerts.minLevel"))),
         R(K.t("panels.alerts.quiet"), K.t("panels.alerts.quietHint"), el("div.pn-btns", {}, select("quietFrom", HOURS, qf, (v) => quiet("quietFrom", +v), K.t("panels.alerts.quietFrom")), el("span.pn-to", {}, K.t("panels.alerts.to")),
           select("quietTo", HOURS, qt, (v) => quiet("quietTo", +v), K.t("panels.alerts.quietUntil")))),
         notes.length ? block(...notes) : null,
         R(K.t("panels.alerts.orMode"), K.t("panels.alerts.orModeHint"), modes),
         R(K.t("panels.alerts.quietDamage"), K.t("panels.alerts.quietDamageHint"),
-          swi("quietLevel4", m.quietLevel4 !== false, (on) => save({ quietLevel4: on }), K.t("panels.alerts.quietDamage"))),
+          swi("quietLevel4", m.quietLevel4 !== false, (on) => keep({ quietLevel4: on }), K.t("panels.alerts.quietDamage"))),
       ], K.t("panels.alerts.levelsFoot")),
-      ...G(K.t("panels.alerts.light"), [R(K.t("panels.alerts.pulses"), K.t("panels.alerts.pulsesHint"), notifySel(m))],
+      ...G(K.t("panels.alerts.light"), [R(K.t("panels.alerts.pulses"), K.t("panels.alerts.pulsesHintOwn"), notifySel(m)),
+        // (the panel doesn't say yet whether it has a light of its own: a check-in's led=1 — status.led — once it does)
+        (p.status || {}).led === true ? null : block(info(K.t("panels.alerts.ownNotReported")))],
         K.t("panels.alerts.lightFoot")));
   }
+  // (v3.0.2, the owner: the tablet's own light first) "This tablet's own light" is its LED strip (the panel agent,
+  // panelagent/<kiosk>/led/set): alarm.js flashes it red during a level 4–5 alert whenever settings.ledStrip is on —
+  // so it is stored as {ledStrip: true, notifyLight: 0}, nothing new for the panel. None switches the strip off too
+  // (never sent anything then); a Hubitat light leaves the strip as it is (both pulse). (v3.0.2: with the strip on, None
+  // says that it switches the strip off — the same switch as General's LED strip)
   function notifySel(m) {
-    const now = +m.notifyLight || 0;
+    const now = +m.notifyLight || 0, own = m.ledStrip === true;
     const lights = data.rooms.map((r) => [r, r.devices.filter((d) => d.kind === "light")]).filter(([, ds]) => ds.length);
     const known = lights.some(([, ds]) => ds.some((d) => d.id === now));
-    return select("notifyLight", [[0, K.t("panels.none")], ...(now && !known ? [[now, K.t("panels.alerts.lightGone", { id: now })]] : []),
-      ...lights.map(([r, ds]) => [r.name, ds.map((d) => [d.id, d.group ? K.t("panels.alerts.lightGroup", { name: d.full || d.name }) : d.full || d.name])])], now,
-    (v) => saveDraw({ notifyLight: +v }), K.t("panels.alerts.light"));
+    return select("notifyLight", [["own", K.t("panels.alerts.ownLight")], [0, own ? K.t("panels.alerts.noneStripOff") : K.t("panels.none")], ...(now && !known ? [[now, K.t("panels.alerts.lightGone", { id: now })]] : []),
+      ...lights.map(([r, ds]) => [r.name, ds.map((d) => [d.id, d.group ? K.t("panels.alerts.lightGroup", { name: d.full || d.name }) : d.full || d.name])])], now || (own ? "own" : 0),
+    (v) => saveDraw(v === "own" ? { notifyLight: 0, ledStrip: true } : +v ? { notifyLight: +v } : { notifyLight: 0, ledStrip: false }), K.t("panels.alerts.light"));
   }
 
   // ================================================================== Safety (the admin's)
@@ -1032,13 +1284,66 @@
   const tSec = (n) => K.t("panels.time.seconds", { n }), tMin = (n) => K.t("panels.time.minutes", { n });
   const WIN_ALARM = [[0, K.t("panels.safety.never")], [15, tSec(15)], [30, K.t("panels.time.secondsRec", { n: 30 })], [60, tMin(1)], [120, tMin(2)], [300, tMin(5)]];
   const WIN_GENERAL = [[0, K.t("panels.safety.never")], [15, tSec(15)], [30, tSec(30)], [60, K.t("panels.time.minutesRec", { n: 1 })], [120, tMin(2)], [300, tMin(5)], [600, tMin(10)]];
+  // (v3.0.2) the panel PIN from the Manager (the admin; PATCH /api/manage/pin): set / change and clear, each with the
+  // admin's own Manager password — no old PIN needed. The PIN lives only in its two fields and the one request's body:
+  // never in a variable here, never logged; the fields are emptied once the answer is in.
+  let pinAsking = false;
+  function pinGroup() {
+    if (pinSet === null && !pinAsking) {
+      pinAsking = true;
+      api("/api/manage/pin").then((r) => { pinSet = r && typeof r.set === "boolean" ? r.set : "unknown"; }).catch(() => { pinSet = "unknown"; })
+        .finally(() => { pinAsking = false; if (onPage() && tab === "safety") drawSetup(); });
+    }
+    const state = pinSet === true ? el("span.pill.acc", {}, K.t("panels.pin.isSet")) : pinSet === false ? el("span.pill.idle", {}, K.t("panels.pin.notSet"))
+      : el("span.pill.idle", {}, pinSet === null ? K.t("common.loading") : K.t("panels.pin.unknown"));
+    return G(K.t("panels.pin.group"), [R(K.t("panels.pin.row"), K.t("panels.pin.rowHint"), el("div.pn-btns", {}, state,
+      el("button.btn.sm", { type: "button", "data-fk": "pn-pin-set", disabled: pinSet === null, onclick: () => pinDialog(true) }, ic("key", 14), pinSet === true ? K.t("panels.pin.change") : K.t("panels.pin.set")),
+      pinSet === true ? el("button.btn.sm.ghost", { type: "button", "data-fk": "pn-pin-clear", onclick: () => pinDialog(false) }, K.t("panels.pin.clear")) : null))],
+    K.t("panels.pin.foot"));
+  }
+  function pinDialog(setting) {
+    const field = (id, label, attrs) => el("label.pn-fld", { for: id }, el("b", {}, label), el("input", { id, type: "password", spellcheck: "false", ...attrs }));
+    const digits = { inputmode: "numeric", autocomplete: "new-password", maxlength: "8", pattern: "[0-9]*" };
+    const one = setting ? field("pn-pin-a", K.t("panels.pin.new"), digits) : null, two = setting ? field("pn-pin-b", K.t("panels.pin.again"), digits) : null;
+    const pw = field("pn-pin-pw", K.t("panels.pin.password"), { autocomplete: "current-password", maxlength: "200" });
+    const err = el("p.pn-warn", { role: "alert", hidden: true });
+    const inA = one && one.querySelector("input"), inB = two && two.querySelector("input"), inP = pw.querySelector("input");
+    const wipe = () => { for (const i of [inA, inB, inP]) if (i) i.value = ""; };
+    const say = (msg, box) => { err.hidden = false; err.replaceChildren(ic("alert", 15), msg); if (box) { box.focus(); box.select(); } };
+    let close = null;
+    const go = el("button.btn" + (setting ? ".pri" : ".pn-danger"), { type: "submit" }, setting ? K.t("panels.pin.save") : K.t("panels.pin.clearYes"));
+    const form = el("form.modal.small.pn-ask", { role: "dialog", "aria-labelledby": "pn-pin-h", autocomplete: "off", onsubmit: async (e) => {
+      e.preventDefault();
+      if (setting && !/^\d{4,8}$/.test(inA.value)) return say(K.t("panels.pin.digits"), inA);
+      if (setting && inA.value !== inB.value) return say(K.t("panels.pin.mismatch"), inB);
+      if (!inP.value) return say(K.t("panels.pin.needPassword"), inP);
+      go.disabled = true;
+      try {
+        const r = await api("/api/manage/pin", setting ? { action: "set", pin: inA.value, password: inP.value } : { action: "clear", password: inP.value });
+        if (!r.ok) {
+          inP.value = "";
+          const why = r.status === 429 || r.status === 423 ? K.t("panels.pin.tooMany") : /password/.test(r.error || "") || r.status === 403 ? K.t("panels.pin.wrongPassword") : r.error || K.t("panels.pin.notSaved");
+          return say(why, inP);
+        }
+        wipe(); close();
+        pinSet = setting;
+        toast(setting ? K.t("panels.pin.saved") : K.t("panels.pin.cleared"));
+        if (onPage() && tab === "safety") drawSetup();
+      } catch (e2) { if (e2.message !== "login") say(K.t("panels.save.offline")); } finally { go.disabled = false; }
+    } }, el("h2", { id: "pn-pin-h" }, setting ? (pinSet === true ? K.t("panels.pin.changeTitle") : K.t("panels.pin.setTitle")) : K.t("panels.pin.clearTitle")),
+      el("p.pn-hint", {}, setting ? K.t("panels.pin.dialogHint") : K.t("panels.pin.clearHint")), one, two, pw, err,
+      el("div.pn-ask-acts", {}, el("button.btn", { type: "button", onclick: () => { wipe(); close(); } }, K.t("control.cancel")), go));
+    const shade = el("div.modal-bg.top", { onclick: (e) => { if (e.target === shade) { wipe(); close(); } } }, form);
+    close = M.dialog(shade, inA || inP, () => { wipe(); close(); });
+  }
   function safety(p) {
-    const m = data.managed, a = Number.isInteger(m.pinAlarmSeconds) ? m.pinAlarmSeconds : 30, g = Number.isInteger(m.pinGeneralSeconds) ? m.pinGeneralSeconds : 60;
+    const m = view(), a = Number.isInteger(m.pinAlarmSeconds) ? m.pinAlarmSeconds : 30, g = Number.isInteger(m.pinGeneralSeconds) ? m.pinGeneralSeconds : 60;
     const win = (opts, v, key, label) => select(key, opts.concat(opts.some(([x]) => x === v) ? [] : [[v, tSec(v)]]), v, (x) => saveDraw({ [key]: +x }), label);
     const on = m.allowUnlock === true;
     const D = M.devices && M.devices(), names = new Map(((D && D.devices) || []).map((c) => [c.id, c.label]));
     const locks = ((D && D.unlockable) || []).map((id) => names.get(id) || `#${id}`);
     return el("div", {},
+      ...(M.isAdmin() ? pinGroup() : []),
       ...G(K.t("panels.safety.group"), [
         R(K.t("panels.shared.alarm"), K.t("panels.safety.alarmHint"), win(WIN_ALARM, a, "pinAlarmSeconds", K.t("panels.safety.alarmLabel"))),
         a === 0 || a > 60 ? block(warn(a === 0 ? K.t("panels.safety.alarmOff")
@@ -1068,7 +1373,7 @@
 
   // ================================================================== Guest Wi-Fi card
   function guest() {
-    const show = data.managed["guest.show"] || "always";
+    const show = view()["guest.show"] || "always";
     return el("div", {}, ...G(K.t("panels.guest.group"), [R(K.t("panels.guest.home"), K.t("panels.guest.homeHint"),
       seg("guest.show", [["always", K.t("panels.show")], ["off", K.t("panels.hide")], ...(show === "guestMode" ? [["guestMode", K.t("panels.guest.onlyGuest")]] : [])], show, (v) => saveDraw({ "guest.show": v }), K.t("panels.tab.guest")))],
     K.t("panels.guest.foot")));
@@ -1076,7 +1381,7 @@
 
   // ================================================================== Weather effects, the test, the benchmark
   function effects() {
-    const m = data.managed, devs = Array.isArray(data.perf) ? data.perf : [];
+    const m = view(), devs = Array.isArray(data.perf) ? data.perf : [];
     const now = m["effects.maxLoad"] || 0;
     const useIt = (lvl) => (now === lvl ? el("span.pill.acc", {}, K.t("panels.inUse")) : keyed(el("button.btn.sm", { type: "button", onclick: () => saveDraw({ "effects.maxLoad": lvl }) }, K.t("panels.useIt")), "effects.maxLoad"));
     const line = (l, ...v) => el("div.pn-mline", {}, el("span", {}, l), el("span.v", {}, ...v));
@@ -1206,5 +1511,15 @@
   // (the others' way in: search → a panel, Health / Overview / Devices → Open)
   M.openPanel = (id, layout) => (layout ? M.go(`panels/${id}/layout`) : M.go(`panels/setup/${id}`));
   M.renderPanels = () => { if (S.route().page === "panels") route(S.route().rest); };
+  // (v3.0.2, pairing.js) a tablet approved, unlinked, moved; a panel renamed or removed: the list read again and the
+  // view drawn again where it is (gone: the panel that was removed)
+  M.panelsAfter = async (o = {}) => {
+    try { await loadList(true); } catch { return; }
+    if (S.route().page !== "panels" || builderUp()) return;
+    if (o.gone && o.gone === cur) { dropPending(); cur = null; data = null; }
+    if (phone()) return drawCarousel();
+    if (viewNow() === "setup" && cur && shown(cur)) { const d = await loadPanel(cur).catch(() => null); if (d && cur === d.id) { data = d; drawSetup(); } return; }
+    if (viewNow() === "status" || !cur) showStatus();
+  };
   M.panelsTopic = () => (!$page || !$page.isConnected ? "panels-status" : $page.dataset.view === "setup" ? TOPIC[tab] || "panel-general" : "panels-status");
 })();

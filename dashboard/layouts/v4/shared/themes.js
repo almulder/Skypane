@@ -177,5 +177,32 @@
     set("--water-hi", theme.waterHi);
   };
 
+  // (v3.0.2: the owner's own colour — "custom" + look.hue: Purple with every colour turned round the colour wheel to
+  // that hue; saturation and lightness kept, so the contrast stays as Purple's was designed)
+  const hslOf = ([r, g, b]) => {
+    r /= 255; g /= 255; b /= 255;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+    if (!d) return [0, 0, l];
+    const s = d / (1 - Math.abs(2 * l - 1)), h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return [(h * 60 + 360) % 360, s, l];
+  };
+  const rgbOfHsl = ([h, s, l]) => {
+    const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = l - c / 2;
+    const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+    return [r, g, b].map((v) => Math.round((v + m) * 255));
+  };
+  const turnRgb = (c, by) => { const [h, s, l] = hslOf(c); return rgbOfHsl([(h + by + 360) % 360, s, l]); };
+  const turn = (v, by) => (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? hexOf(turnRgb(rgbOf(v), by))
+    : Array.isArray(v) && v.length === 3 && v.every((n) => typeof n === "number") ? turnRgb(v, by)
+    : Array.isArray(v) ? v.map((x) => turn(x, by)) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, turn(x, by)])) : v);
+  const BASE_HUE = Math.round(hslOf(rgbOf(TH.purple.accent))[0]);
+  window.CUSTOM_HUE = 200;   // (the default look.hue: panel_settings.py CUSTOM_HUE)
+  window.hueOk = (h) => (Number.isInteger(h) && h >= 0 && h <= 359 ? h : window.CUSTOM_HUE);
+  window.themeFromHue = (h) => ({ ...turn(TH.purple, window.hueOk(h) - BASE_HUE), name: "Custom" });   // i18n-ok (the panel shows T("theme.custom"))
+  // a look's theme: one of the 12, or the owner's own colour ("custom" + its hue); anything else is Purple
+  window.themeOf = (id, hue) => (id === "custom" ? window.themeFromHue(hue) : TH[id] || TH.purple);
+  // the colour a hue's button / slider thumb shows (the custom theme's accent)
+  window.hueColour = (h) => window.themeFromHue(h).accent;
+
   window.THEMES = TH;
 })();

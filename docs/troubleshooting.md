@@ -20,11 +20,13 @@ First places to look:
 
 - **`/manage` says "The Manager moved":** since Skypane 3.0.1 the Manager is at **`/admin`** (e.g. `http://192.168.1.50/admin/`).
   Update your bookmark or home-screen icon; the old address doesn't forward.
+- **The bare address shows Skypane's status, not a panel:** that's normal since 3.0.2 — a panel has its own
+  address (e.g. `http://192.168.1.50/kitchen`), and a tablet is paired first. See [Pairing problems](#pairing-problems).
 - **Nothing answers:** is the container running? Is the address right (Docker: port `8088`, e.g.
   `http://192.168.1.20:8088/`)? On Unraid with br0, the Unraid server itself can't reach a container's br0 address by
   default — try from another device.
 - **"Skypane doesn't know this address":** you opened Skypane by a name instead of its IP. Add that name in
-  **Integrations → General → Other names for this server** and press **Save and restart**, or use the IP.
+  **Integrations → General → Extra names for this server (optional)** and press **Save and restart**, or use the IP.
 - **"Skypane can't save to its data folder"** on the sign-in page: see [the next section](#the-data-folder-isnt-writable).
 - **The page says "Restarting — back in a few seconds" for longer than a minute:** look at the container's log for a
   line from `[run_all]` or `[server]` that says what's wrong, then reload the page.
@@ -52,10 +54,44 @@ tab → the Skypane icon → **Restart**; Docker: `docker restart skypane`) and 
   Address** on.
 - A device is missing: tick it in the **Maker API** app. It shows within a few minutes.
 
-## A panel says "This panel isn't set up yet"
+## Pairing problems
 
-The tablet opened an address that isn't a panel. Add it in **Panels → Add panel**, or fix the address in FreeKiosk
-(the main panel is `http://<skypane>/`, others `http://<skypane>/<address>`).
+Since 3.0.2 each panel works only on the tablet approved for it ([panel-pairing.md](panel-pairing.md)).
+
+- **The tablet shows Skypane's status and "Connect this panel" instead of its panel:** it isn't paired (yet), or it lost
+  its key. Approve its code in **Panels → New panel requests**. After an upgrade from 3.0.1, a tablet that opened the
+  bare address (`http://192.168.1.50/`) used to show the main panel — that panel is gone; approve the tablet with a
+  name ([upgrade.md](upgrade.md#301--302-panel-pairing)).
+- **"Unable to connect. This panel is connected to another device (…)":** another tablet has this panel. That's the
+  lock working — you opened the address on the wrong device (a phone, a laptop). To give the panel to this tablet:
+  **Panels → Setup →** the panel **→ Unlink device**, then press **Connect this device** on the tablet and approve it
+  with the panel's name. To look at a panel from a computer, use **Live** in the Manager.
+- **"Unable to connect. This panel isn't connected yet.":** no tablet was approved for that address (or there's no
+  panel there). Press **Connect this device** and approve the code with the panel's name.
+- **"Pairing is closed. Ask the admin to open it in the Manager.":** **Accept new panels** is off. Switch it on in
+  **Panels** (the New panel requests box), and the tablet asks again by itself.
+- **The code doesn't work:**
+  - The code renews every 10 minutes (*New code in …*). Type the one the tablet shows now.
+  - *That isn't the code on the tablet — 2 tries left*: check for look-alikes — codes never use 0, O, 1 or I.
+  - *Too many wrong codes — the request was cancelled*: 5 wrong codes end a request (and raise a notice). The tablet
+    starts a new one with a new code.
+- **The tablet isn't under New panel requests, or "This tablet has left the pairing screen":** a request lasts only
+  while the pairing screen is open. A tablet that went to sleep or opened another page drops out. Wake it and reload
+  `http://192.168.1.50/`.
+- **"… is already claimed by another device. Unlink it first or choose another name.":** that panel has a tablet.
+  **Unlink device** on it first, or type another name.
+- **Cleared browser data, a new browser, a reinstalled FreeKiosk or a new tablet:** the key is gone. (If only one of
+  the two copies went, the tablet says *Reconnecting this panel…* and goes on by itself.) Otherwise it shows the
+  pairing screen: **Unlink device** on its old panel, then approve the tablet with that panel's name — its settings
+  are kept. Or approve it with a new name, if you want a new panel.
+- **A notice "Possible copy of …'s device key":** an old copy of that panel's key was used from another device. If
+  you know why (you restored a tablet from a backup, say), press **Re-trust this device** on the panel. If not, press
+  **Unlink device** and pair the tablet again — the copy then stops working. With **Lock a panel when its key is
+  copied** on, the panel stays stopped until you choose one of the two.
+- **A notice "… looks like a different device now":** a valid key came from a quite different browser or system.
+  After a browser change on the tablet that's normal. Otherwise, treat it like a copy.
+- **A panel's page stopped and went to the pairing screen:** its key was refused — unlinked, moved, removed, or a
+  copy alert with the lock on. **Health → Timeline** says which.
 
 ## A panel shows old values, or "can't reach"
 
@@ -93,20 +129,11 @@ in **Accounts**.)
 
 ## I forgot the panel PIN
 
-Only the server can reset it. In Skypane's data folder, open the `house` folder and delete these two files —
-**only these two**; the rest of `house/` holds your house:
+An admin sets a new one in the Manager: **Panels → Setup →** any panel **→ Safety → Panel PIN → Change PIN…**. Type
+the new PIN twice and your own Manager password — the old PIN isn't needed, and it also ends any PIN lock-out.
+**Clear…** removes the PIN altogether.
 
-- `panel-pin.json` (the PIN)
-- `panel-pin-attempts.json` (the wrong tries, so nothing stays locked)
-
-Where that is:
-
-- **Unraid:** **Shares → appdata → skypane → house** (or in the terminal:
-  `rm /mnt/user/appdata/skypane/house/panel-pin.json /mnt/user/appdata/skypane/house/panel-pin-attempts.json`).
-- **Docker:** your data folder's `house/`, e.g. `sudo rm /srv/skypane/house/panel-pin.json /srv/skypane/house/panel-pin-attempts.json`.
-- **Docker with a named volume** (Docker Desktop): `docker exec skypane rm /data/house/panel-pin.json /data/house/panel-pin-attempts.json`.
-
-Then set a new PIN on the main panel (**settings gear → Panel → Panel PIN**).
+Forgot your Manager password as well? Reset that first ([above](#i-forgot-the-owner-password)).
 
 ## "Too many wrong tries"
 
@@ -129,8 +156,8 @@ Your Skypane server needs internet access to send a report. Press **Copy report*
 - **Can I open it from outside my home?** Not by port-forwarding — keep it on your home network. Use a VPN (e.g.
   WireGuard or Tailscale) to reach your home network instead.
 - **Where are my settings?** All in the data folder (`appdata/skypane` or your Docker folder): `panels/` (each panel),
-  `house/` (house files), `backups/` (automatic backups of each panel), `private/` (logins and secrets — keep it
-  private). Back up the whole folder.
+  `house/` (house files), `backups/` (automatic backups of each panel), `private/` (logins, secrets and the
+  panels' device keys — keep it private). Back up the whole folder.
 - **What's in a feedback report?** Only what you see before sending: your words, the Skypane version, the page, your
   browser, and counts (panels, devices, cameras, logins). Skypane adds no names, addresses or passwords; your
   words go as you typed them, so leave out private details.

@@ -8,29 +8,75 @@
   // this panel's topics (stage 5): its FreeKiosk / panel agent name — set per panel on the Manager page
   const agentTopic = () => `panelagent/${api.kiosk()}`;
 
-  // Event icon is picked from words in the title (first match wins).
+  // Event icon is picked from words in the title (first match wins). (v3.0.2) The house's list — Manager →
+  // Integrations → Calendars → Event icons — comes with the events (/api/panel/<id>/events "icons"); until it does (and
+  // in the builder, the sample house, an offline panel): these, the English defaults — the same list as
+  // service/event_icons.py DEFAULTS["en"] (test_event_icons.py checks; docs/calendar-icons.md)
   const CATEGORIES = [
-    { key: "surgery", icon: "bandage", color: "#f43f5e", words: ["surgery", "operation", "procedure"] },
-    { key: "hospital", icon: "hospital", color: "#ef4444", words: ["hospital", "er visit", "urgent care"] },
-    { key: "dentist", icon: "tooth", color: "#22d3ee", words: ["dentist", "dental", "teeth", "orthodont"] },
-    { key: "pain", icon: "pill", color: "#fb7185", words: ["pain dr", "pain doctor", "pain clinic", "pain"] },
-    { key: "doctor", icon: "stethoscope", color: "#38bdf8", words: ["doctor", "dr.", " dr ", "checkup", "physical", "clinic"] },
-    { key: "hair", icon: "scissors", color: "#f472b6", words: ["hair", "salon", "barber", "haircut"] },
-    { key: "groomer", icon: "dog", color: "#fbbf24", words: ["groom"] },
-    { key: "vet", icon: "paw", color: "#f59e0b", words: ["vet"] },
-    { key: "travel", icon: "plane", color: "#60a5fa", words: ["flight", "fly ", "trip", "travel", "vacation", "airport"] },
-    { key: "work", icon: "briefcase", color: "#a78bfa", words: ["work", "meeting", "call", "conference"] },
-    { key: "birthday", icon: "cake", color: "#e879f9", words: ["birthday", "party", "anniversary"] },
-    { key: "dinner", icon: "utensils", color: "#fb923c", words: ["dinner", "lunch", "breakfast", "brunch", "restaurant"] },
-    { key: "church", icon: "church", color: "#c4b5fd", words: ["church", "temple"] },
-    { key: "car", icon: "car", color: "#94a3b8", words: ["oil change", "mechanic", "car service", "tires"] },
-    { key: "shopping", icon: "cart", color: "#34d399", words: ["shopping", "costco", "groceries", "store"] },
-    { key: "gym", icon: "dumbbell", color: "#4ade80", words: ["gym", "workout", "yoga"] },
+    { id: "surgery", name: "Surgery", icon: "bandage", color: "#f43f5e", words: ["surgery", "operation", "procedure"], on: true },   // i18n-ok
+    { id: "hospital", name: "Hospital", icon: "hospital", color: "#ef4444", words: ["hospital", "er visit", "urgent care", "emergency room"], on: true },   // i18n-ok
+    { id: "dentist", name: "Dentist", icon: "tooth", color: "#22d3ee", words: ["dentist", "dental", "teeth", "orthodont", "cleaning appointment"], on: true },   // i18n-ok
+    { id: "eyes", name: "Eyes", icon: "eye", color: "#2dd4bf", words: ["eye", "eyes", "optometr", "ophthalmolog", "optician", "eye exam", "vision", "glasses", "contacts"], on: true },   // i18n-ok
+    { id: "pain", name: "Pain clinic", icon: "pill", color: "#fb7185", words: ["pain dr", "pain doctor", "pain clinic"], on: true },   // i18n-ok
+    { id: "vet", name: "Pets: vet", icon: "paw", color: "#f59e0b", words: ["vet", "vaccination", "vaccine", "shots"], on: true },   // i18n-ok
+    { id: "groomer", name: "Pets: groomer", icon: "dog", color: "#fbbf24", words: ["groom", "grooming", "dog walk", "kennel", "boarding"], on: true },   // i18n-ok
+    { id: "spa", name: "Self-care & spa", icon: "sparkles", color: "#f0abfc", words: ["spa", "massage", "facial", "nails", "manicure", "pedicure", "self-care", "relax", "mental health day"], on: true },   // i18n-ok
+    { id: "hair", name: "Hair", icon: "scissors", color: "#f472b6", words: ["hair", "salon", "barber", "haircut"], on: true },   // i18n-ok
+    { id: "car", name: "Car", icon: "car", color: "#94a3b8", words: ["oil change", "mechanic", "car service", "tires", "inspection", "registration", "car wash"], on: true },   // i18n-ok
+    { id: "doctor", name: "Doctor", icon: "stethoscope", color: "#38bdf8", words: ["doctor", "dr", "dr.", "checkup", "physical", "clinic", "appointment", "appt"], on: true },   // i18n-ok
+    { id: "meds", name: "Medication", icon: "pill", color: "#fda4af", words: ["medication", "meds", "pills", "prescription", "pharmacy", "refill", "vitamins", "supplements"], on: true },   // i18n-ok
+    { id: "birthday", name: "Birthday", icon: "cake", color: "#e879f9", words: ["birthday", "bday"], on: true },   // i18n-ok
+    { id: "anniversary", name: "Anniversary & date night", icon: "heart", color: "#ec4899", words: ["anniversary", "wedding", "date night"], on: true },   // i18n-ok
+    { id: "holiday", name: "Holiday", icon: "gift", color: "#f87171", words: ["holiday", "christmas", "thanksgiving", "easter", "halloween", "new year", "hanukkah", "diwali", "eid"], on: true },   // i18n-ok
+    { id: "party", name: "Party", icon: "party", color: "#c084fc", words: ["party", "get-together", "bbq", "barbecue", "celebration", "shower"], on: true },   // i18n-ok
+    { id: "coffee", name: "Coffee & meetups", icon: "coffee", color: "#d6a26b", words: ["coffee", "catch up", "catch-up", "meetup", "hang out"], on: true },   // i18n-ok
+    { id: "meals", name: "Meals", icon: "utensils", color: "#fb923c", words: ["dinner", "lunch", "breakfast", "brunch", "restaurant", "potluck"], on: true },   // i18n-ok
+    { id: "try", name: "New place to try", icon: "pin", color: "#fca5a5", words: ["try", "new place", "explore"], on: true },   // i18n-ok
+    { id: "travel", name: "Travel & hotels", icon: "plane", color: "#60a5fa", words: ["flight", "fly", "trip", "travel", "vacation", "airport", "getaway", "hotel", "check-in", "check-out", "airbnb", "stay"], on: true },   // i18n-ok
+    { id: "phone", name: "Call / keep in touch", icon: "phone", color: "#5eead4", words: ["call mom", "call dad", "check in", "facetime", "keep in touch"], on: true },   // i18n-ok
+    { id: "work", name: "Work meeting", icon: "briefcase", color: "#a78bfa", words: ["work", "meeting", "call", "conference", "zoom", "teams", "standup", "huddle", "client"], on: true },   // i18n-ok
+    { id: "bills", name: "Bills", icon: "receipt", color: "#facc15", words: ["bill", "bills", "rent", "mortgage", "payment", "utilities", "credit card", "due date"], on: true },   // i18n-ok
+    { id: "deadline", name: "Deadline", icon: "flag", color: "#fb923c", words: ["deadline", "due", "submit"], on: true },   // i18n-ok
+    { id: "shopping", name: "Shopping", icon: "cart", color: "#34d399", words: ["shopping", "costco", "groceries", "grocery", "store", "target", "walmart"], on: true },   // i18n-ok
+    { id: "games", name: "Games", icon: "gamepad", color: "#818cf8", words: ["game night", "video game", "release", "launch", "board game"], on: true },   // i18n-ok
+    { id: "gym", name: "Gym & workout", icon: "dumbbell", color: "#4ade80", words: ["gym", "workout", "yoga", "pilates", "run", "running", "crossfit", "training session", "spin"], on: true },   // i18n-ok
+    { id: "hobby", name: "Hobby", icon: "palette", color: "#f9a8d4", words: ["craft", "crafts", "hobby", "puzzle", "painting class", "guitar", "piano"], on: true },   // i18n-ok
+    { id: "church", name: "Church & prayer", icon: "church", color: "#c4b5fd", words: ["church", "temple", "mass", "service", "prayer", "mosque", "synagogue", "bible study", "meditation"], on: true },   // i18n-ok
+    { id: "school", name: "School", icon: "school", color: "#fde047", words: ["school", "class", "homework", "project", "exam", "parent-teacher", "pta"], on: true },   // i18n-ok
+    { id: "sports", name: "Kids' sports", icon: "trophy", color: "#22c55e", words: ["practice", "game", "match", "soccer", "baseball", "football", "basketball", "hockey", "swim", "tournament"], on: true },   // i18n-ok
+    { id: "learning", name: "Learning & reading", icon: "book", color: "#93c5fd", words: ["course", "study", "lesson", "training", "webinar", "lecture", "book club", "reading", "read"], on: true },   // i18n-ok
+    { id: "community", name: "Community event", icon: "users", color: "#fdba74", words: ["festival", "market", "farmers market", "fair", "parade", "fundraiser", "volunteer"], on: true },   // i18n-ok
+    { id: "movie", name: "Movie & TV", icon: "film", color: "#a5b4fc", words: ["movie", "film", "cinema", "premiere", "episode", "season", "finale"], on: true },   // i18n-ok
+    { id: "concert", name: "Concert & show", icon: "ticket", color: "#d946ef", words: ["concert", "show", "theater", "theatre", "play", "recital", "gig"], on: true },   // i18n-ok
+    { id: "money", name: "Payday & money", icon: "wallet", color: "#86efac", words: ["payday", "paycheck", "budget", "savings", "taxes", "tax"], on: true },   // i18n-ok
+    { id: "subscription", name: "Subscription", icon: "refresh", color: "#7dd3fc", words: ["subscription", "renewal", "renew", "membership", "trial ends"], on: true },   // i18n-ok
+    { id: "cleaning", name: "Cleaning & chores", icon: "broom", color: "#67e8f9", words: ["cleaning", "clean", "laundry", "chores", "vacuum"], on: true },   // i18n-ok
+    { id: "trash", name: "Trash day", icon: "trashBin", color: "#a3a3a3", words: ["trash", "garbage", "recycling", "bins", "bulk pickup"], on: true },   // i18n-ok
+    { id: "garden", name: "Garden & plants", icon: "plant", color: "#84cc16", words: ["water plants", "plants", "garden", "gardening", "mow", "lawn", "fertilize"], on: true },   // i18n-ok
+    { id: "delivery", name: "Delivery", icon: "package", color: "#fcd34d", words: ["delivery", "package", "parcel", "shipment", "pickup", "mail", "po box"], on: true },   // i18n-ok
   ];
   const DEFAULT_CAT = { key: "event", icon: "calendar", color: "#a99fd0" };
+  // (v3.0.2: whole words only — plus everyday endings, so "groom" still finds Groomer and "orthodont" Orthodontist —
+  // where any part of a word used to count: "Painting" got the pain clinic, "Homework" work, "Velvet" the vet; a word's
+  // edges are any language's letters / marks / digits — "café", "école" —, and a word ending in y finds its "ies" too:
+  // "party" → "Parties")
+  // (the Manager's "Try a title" has this very line: dashboard/manage/eventicons.js — test_event_icons.py checks)
+  const wordRe = (words) => new RegExp(`(?:^|[^\\p{L}\\p{M}\\p{N}])(?:${words.map((w) => w.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).map((w) => (/[^\\]y$/.test(w) ? `${w}|${w.slice(0, -1)}ies` : w)).join("|")})(?:s|es|er|ers|ing|ed|ist|ists)?(?![\\p{L}\\p{M}\\p{N}])`, "u");
+  // the list in use: switched-on icons with words, each checked (a colour goes into the page's HTML: #rrggbb only)
+  let CATS = [], catsKey = "";
+  const useIcons = (list) => {
+    const key = JSON.stringify(list);
+    if (key === catsKey) return false;
+    catsKey = key;
+    CATS = list.filter((c) => c && c.on !== false && typeof c.icon === "string" && /^#[0-9a-f]{6}$/i.test(c.color || "") && Array.isArray(c.words))
+      .map((c) => ({ c, words: c.words.filter((w) => typeof w === "string" && w.trim()).slice(0, 30) })).filter((x) => x.words.length)
+      .map(({ c, words }) => ({ key: String(c.id || ""), icon: c.icon, color: c.color, re: wordRe(words.map((w) => w.toLowerCase())) }));
+    return true;
+  };
+  useIcons(CATEGORIES);
   const category = (title) => {
-    const t = ` ${title.toLowerCase()} `;
-    return CATEGORIES.find((c) => c.words.some((w) => t.includes(w))) || DEFAULT_CAT;
+    const t = String(title || "").toLowerCase();
+    return CATS.find((c) => c.re.test(t)) || DEFAULT_CAT;
   };
 
   // sample events: [days from today, time, title, who]
@@ -159,7 +205,7 @@
   // on any command; the panel also asks it to close a garage door controller, by the owner's choice)
   // device groups that only some panels may control (Manager → Devices → Groups): {id: [panel ids]}
   const ONLY = HUB.onlyPanels && typeof HUB.onlyPanels === "object" ? HUB.onlyPanels : {};
-  const panelId = () => ((window.PanelStore && PanelStore.id) || "main").toLowerCase();
+  const panelId = () => String((window.PanelStore && PanelStore.id) || "").toLowerCase();   // (v3.0.2: no "main")
   const mayControl = (id) => !Array.isArray(ONLY[id]) || ONLY[id].includes(panelId());
   // The relays / switches this panel's cards use as a garage door's opener (a Garage door card, a Picture & values
   // garage, a blank card's garage piece), with the door's own name when the owner gave one: {id → label}. Such a
@@ -670,11 +716,12 @@
   // (nor the Manager's "Open live", v2.5.0: no check-in, LEDs, speech, measurements or benchmark from there)
   api.isPanel = !DESIGN && !window.PANEL_LIVE && (/Android/i.test(navigator.userAgent) || /[?&]panel\b/.test(location.search));
   // this panel's FreeKiosk device name (its MQTT topics freekiosk/<name>/…, panelagent/<name>/…, panel/<name>/show):
-  // Manager → Panels → General; the main panel's default is "skypane", another panel's its own id
+  // Manager → Panels → General; else the panel's own id (v3.0.2: no built-in "main" with its "skypane" — a tablet that
+  // had it keeps it as its kioskName, set when it was approved)
   api.kiosk = () => {
-    const s = window.Settings && Settings.v, id = ((window.PanelStore && PanelStore.id) || "main").toLowerCase();
+    const s = window.Settings && Settings.v, id = String((window.PanelStore && PanelStore.id) || "").toLowerCase();
     return (s && typeof s.kioskName === "string" && /^[a-z0-9_-]{1,40}$/.test(s.kioskName) && s.kioskName)
-      || (id === "main" ? "skypane" : id.replace(/[^a-z0-9_-]/g, "_").slice(0, 40));
+      || id.replace(/[^a-z0-9_-]/g, "_").slice(0, 40);
   };
   api.publish = () => {};
   api.subscribe = () => {};
@@ -928,6 +975,8 @@
       const d = await r.json();
       if (veil.hidden && (!ticket || veil.ticket !== ticket)) return false;
       if (veil.hidden && d && d.hidden === true) return false;   // (the service didn't take the ticket)
+      // (v3.0.2: the house's event icons — changed: the samples drawn again too, when they're what shows)
+      if (d && Array.isArray(d.icons) && useIcons(d.icons)) { const was = events; events = samples(); if (state.events === was) { state.events = events; changed(); } }
       if (!d || d.configured !== true || !Array.isArray(d.events)) {
         // (hidden: without a ticket nothing — never the samples behind the veil; shown with one and the house has no
         // calendar: what any panel without one shows, the samples)
@@ -948,7 +997,8 @@
   // a calendar changed (Manager, or a fetch found new events): every panel loads again — spread over a few seconds
   api.subscribe("dashboard/calendars/changed", () => setTimeout(loadEvents, Math.random() * 8000));
   // this panel's own choices changed (Manager → People & calendars): the list of calendars it shows may differ
-  if (window.PanelStore && PanelStore.onChange) PanelStore.onChange((keys) => { if (cal.live && (!Array.isArray(keys) || keys.includes("settings"))) setTimeout(loadEvents, 500); });
+  // (also while the samples show: the house may have calendars by now that this page hasn't heard of yet)
+  if (window.PanelStore && PanelStore.onChange) PanelStore.onChange((keys) => { if (!Array.isArray(keys) || keys.includes("settings")) setTimeout(loadEvents, 500); });
   api.reloadEvents = loadEvents;
 
   window.Home = api;

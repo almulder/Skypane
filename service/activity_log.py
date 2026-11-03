@@ -42,7 +42,8 @@ TEXT_MAX = 80
 LIST_MAX = 20
 PAGE_MAX = 500
 FOLD = 60                # wrong sign-ins from one address within this many seconds: one event and a count
-FOLD_KINDS = {"signin.unknown", "signin.wrong", "signin.locked", "signin.code-wrong"}   # (what an unauthenticated client can cause)
+FOLD_KINDS = {"signin.unknown", "signin.wrong", "signin.locked", "signin.code-wrong",   # (what an unauthenticated client can cause)
+              "panel.pair", "panel.blocked"}   # (v3.0.2: a tablet asking to pair, a refused panel visit)
 DIR = "activity"
 FILE_RE = re.compile(r"(s-|r-)?(\d{4})-(\d{2})\.jsonl")   # (s-: the sign-ins' own shelf; r-: refused device commands)
 SIGNIN_SHARE = 0.3       # the sign-ins' share of MAX_BYTES: anyone can cause them, so they get their own budget
@@ -59,10 +60,16 @@ KINDS = {
     "account.admin": "accounts", "account.user": "accounts", "account.owner": "accounts", "account.password": "accounts",
     "account.password-set": "accounts", "account.code": "accounts", "account.code-dead": "accounts", "account.unlock": "accounts", "account.reset-command": "accounts",
     "settings.change": "settings", "settings.guest": "settings", "settings.guest-now": "settings", "settings.guest-mode": "settings",
-    "settings.lockdown": "settings", "settings.check": "settings", "settings.weather": "settings",
+    "settings.lockdown": "settings", "settings.check": "settings", "settings.weather": "settings", "settings.event-icons": "settings",
     "weather.alert": "alerts", "weather.clear": "alerts",   # (v3.0.0: a weather device's warnings — the event name, never its text)
     "panel.add": "panels", "panel.remove": "panels", "panel.setup": "panels", "panel.layout": "panels", "panel.pin": "panels",
     "panel.pin-locked": "panels", "panel.live": "panels", "panel.ack": "alerts",
+    # (v3.0.2: panel pairing — a tablet's request, the admin's answers, the device key's alarms; never a key or a code)
+    "panel.pair": "panels", "panel.approve": "panels", "panel.reject": "panels", "panel.wrong-code": "panels",
+    "panel.cancelled": "panels", "panel.unlink": "panels", "panel.move": "panels", "panel.rename": "panels",
+    "panel.retrust": "panels", "panel.pin-admin": "panels", "panel.adopt": "panels", "panel.copy": "panels",
+    "panel.blocked": "panels", "panel.profile": "panels", "panel.accept": "panels", "panel.lock-on-copy": "panels",
+    "panel.lock-now": "panels",
     "library.upload": "library", "library.remove": "library", "library.card": "library", "library.card-remove": "library",
     "device.change": "devices", "device.command": "devices", "device.refused": "devices", "house.mode": "devices", "house.hsm": "devices", "feedback.send": "settings", "camera.add": "cameras", "camera.remove": "cameras", "camera.change": "cameras",
 }

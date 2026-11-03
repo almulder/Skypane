@@ -436,7 +436,7 @@
     const view = C.view(C.current) || C.views[0];
     if (view) C.current = view.id;
     const edit = C.fromProtect()
-      ? `<span class="cam-edit pv">${ic("settings", 18)}${esc(T("cam.fromProtect"))}</span>`
+      ? ""   // (v3.0.2, the owner: Protect's views need no "views come from UniFi Protect" line — the live status is enough)
       : `<button class="cam-edit"${Acts.on("cam.editor")}>${ic("settings", 20)}${esc(T("cam.editViews"))}</button>`;
     const mode = view && C.go2rtc ? (isLive(view) ? `<span class="cam-mode live">${esc(T("cam.live"))}</span>` : `<span class="cam-mode">${esc(T("cam.still", { n: C.snapEvery }))}</span>`) : "";
     return `<section class="cam-page">

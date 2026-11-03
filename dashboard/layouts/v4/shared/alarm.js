@@ -213,6 +213,9 @@
     H.publish(LED_TOPIC(), state);
 
   };
+  // (v3.0.2 rev. 2) the LED agent (re)connected — agentlink.js: led/set isn't retained and send() skips repeats, so the
+  // state now is sent again
+  A.resendLed = () => { ledLast = ""; A.updateLed(); };
   A.ledState = () => {
     // (orange while anything that needs doing is up — a level 3+, on screen or waiting in the list)
     const warn = window.HubAlerts && HubAlerts.shown().some((a) => a.lvl >= 3);

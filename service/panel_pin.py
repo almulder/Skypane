@@ -40,7 +40,8 @@ Rules:
     to a fast guessing path. Which purpose applies is decided by the server (server.py), never taken from the page
     on trust.
   - A forgotten PIN is reset only on the server: delete panel-pin.json (and panel-pin-attempts.json to clear a
-    lock-out). There is deliberately no way to do it from a panel.
+    lock-out), or (v3.0.2) an admin in the Manager: admin_set / clear (no old PIN; both end every lock-out).
+    There is deliberately no way to do it from a panel.
   - A damaged / missing attempts file counts as "no fails" (it holds nothing secret).
   - A panel-pin.json that is present but unreadable / damaged is NOT treated as "no PIN": verify answers "wrong"
     (and counts the attempt) and set refuses with "wrong-pin", so a corrupted file never opens things up.
@@ -201,6 +202,38 @@ class PanelPin:
             self._write(self.pin_path, {"v": 1, "salt": salt.hex(), "iter": n, "hash": digest.hex()})
             self._reset(att, who)
             return True, None
+
+    def admin_set(self, new):
+        """(v3.0.2: an admin login is enough) A new PIN from the Manager, no old PIN asked; also over a damaged
+        file. Every lock-out and "trusted" client goes with the old PIN. (True, None) or (False, "bad-format").
+        The caller checks the admin; the PIN is never logged."""
+        if not valid_format(new):
+            return False, "bad-format"
+        with _lock:
+            n = self.iterations or ITERATIONS
+            salt = os.urandom(16)
+            digest = hashlib.pbkdf2_hmac("sha256", new.encode("ascii"), salt, n)
+            self._write(self.pin_path, {"v": 1, "salt": salt.hex(), "iter": n, "hash": digest.hex()})
+            self._clear_attempts()
+            return True, None
+
+    def clear(self):
+        """(v3.0.2) The PIN removed from the Manager (admins): no PIN set any more, every lock-out ended. True when there
+        was one."""
+        with _lock:
+            try:
+                self.pin_path.unlink()
+                had = True
+            except FileNotFoundError:
+                had = False
+            self._clear_attempts()
+            return had
+
+    def _clear_attempts(self):
+        try:
+            self.attempts_path.unlink()
+        except FileNotFoundError:
+            pass
 
     # ---- one-time tickets (the PIN never goes over MQTT) ---------------------------------------------------------
     def ticket(self, device_id, command, value=None):

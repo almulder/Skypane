@@ -394,7 +394,7 @@ def options(t, o):
     if t == "roomdevs":
         if o.get("show") in ("lights", "switches", "fans", "shades", "all"):
             out["show"] = o["show"]
-        if o.get("look") in ("list", "tiles"):
+        if o.get("look") in ("list", "tiles", "orbs"):   # (v3.0.2: orbs — the builder offers them, the panel draws them)
             out["look"] = o["look"]
     if t == "roomhead" and isinstance(o.get("allOff"), bool):
         out["allOff"] = o["allOff"]

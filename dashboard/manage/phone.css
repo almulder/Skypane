@@ -268,6 +268,9 @@ html.phone .pn-lbar .pn-lsize, html.phone .pn-lbar a.btn, html.phone .pn-lbar .p
 html.phone .pn-lbar .pill { font-size: 12px; }
 html.phone .pn-lbar .btn { min-height: 44px; min-width: 44px; }
 html.phone .pn-lfoot { padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); font-size: 13px; }
+/* (v3.0.2) a panel's Setup reached on a phone (Add a panel) keeps its Save bar — above the bottom tabs, the buttons a finger's size */
+html.phone .pn-bar { bottom: calc(72px + env(safe-area-inset-bottom)); flex-wrap: wrap; }
+html.phone .pn-bar .btn { min-height: 44px; }
 
 /* ---------- a phone on its side (lower than 500 px): the tabs become a rail on the left, the page keeps its height ---------- */
 @media (orientation: landscape) {
@@ -277,6 +280,7 @@ html.phone .pn-lfoot { padding: 8px 16px calc(8px + env(safe-area-inset-bottom))
   html.phone .topbar { padding-left: 12px; }
   html.phone #main { padding: 12px max(20px, env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) 20px; }
   html.phone #toast { left: calc(86px + env(safe-area-inset-left)); bottom: calc(14px + env(safe-area-inset-bottom)); }
+  html.phone .pn-bar { bottom: calc(12px + env(safe-area-inset-bottom)); }
   html.phone .ph h1 { font-size: 22px; }
   html.phone .ovp-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   html.phone .dvp-rooms { grid-template-columns: repeat(3, minmax(0, 1fr)); }

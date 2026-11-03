@@ -36,6 +36,9 @@
   animation: cm-shimmer 1.6s linear infinite; }
 @keyframes cm-shimmer { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .cm-media:not(.has)::before { animation: none; } }
+/* (v3.0.2: waiting for the Protect sync's first camera list) */
+.cm-wait .ei svg { animation: cm-spin 1.4s linear infinite; } @keyframes cm-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cm-wait .ei svg { animation: none; } }
 .cm-media.off img.cm-img { filter: grayscale(.8) brightness(.6); }
 .cm-media .cm-video { position: absolute; inset: 0; display: block; opacity: 0; transition: opacity .3s; }
 .cm-media.playing .cm-video { opacity: 1; }

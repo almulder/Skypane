@@ -34,9 +34,11 @@
   let follow = null;
   function followUp() {
     clearInterval(follow);
-    const until = Date.now() + 60000;
+    // (v3.0.2: while the Protect sync still reads the cameras — C.protectPending — up to 2 min, not 1)
+    const from = Date.now();
     follow = setInterval(() => {
-      if (Date.now() > until || S.route().page !== "cameras") { clearInterval(follow); return; }
+      const left = Date.now() - from < 60000 || (C && C.protectPending && Date.now() - from < 120000);
+      if (!left || S.route().page !== "cameras") { clearInterval(follow); follow = null; return; }
       if (!sending && !document.querySelector(".modal-bg")) render();
     }, 5000);
   }
@@ -60,7 +62,10 @@
     for (const n of document.querySelectorAll(`[data-err="${id}"]`)) { n.textContent = f && f.err ? f.err : ""; n.hidden = !(f && f.err && !f.url); }
   }
   // after an error (offline, no picture, the camera video down) a camera is asked again only after BACKOFF ms
+  // (v3.0.2: the first 2 min after the page opens — go2rtc restarting with a fresh install's streams — 5 s instead)
   const BACKOFF = 30000, notBefore = new Map();
+  let opened = Date.now();
+  const backoff = () => (Date.now() - opened < 120000 ? 5000 : BACKOFF);
   async function pull(id) {
     if (inFlight.has(id) || inFlight.size >= MAX_FLIGHT || Date.now() < (notBefore.get(id) || 0)) return;
     inFlight.add(id); asked.set(id, Date.now());
@@ -79,7 +84,7 @@
         try { words = (await r.json()).error || words; } catch {}
         const old = frames.get(id) || {};
         frames.set(id, { ...old, err: words });
-        notBefore.set(id, Date.now() + BACKOFF);
+        notBefore.set(id, Date.now() + backoff());
         if (r.status === 503 && /isn't running|isn't answering/.test(words) && !banner) { banner = words; drawBanner(); }
       }
     } catch { /* (the server unreachable a moment: next time) */ }
@@ -199,12 +204,21 @@
   }
   async function render() {
     stopFrames();
+    if (!C) opened = Date.now();   // (v3.0.2: the short picture back-off counts from here)
     if (!C) M.$main.replaceChildren(S.isPhone() ? el("div.p-skel", { role: "status", "aria-label": K.t("common.loading") }, el("i"), el("i"), el("i")) : el("p.muted", {}, K.t("common.loading")));   // (v2.9.0: a phone, skeleton rows)
     try { await load(); } catch (e) { if (e.message !== "login") M.$main.replaceChildren(K.empty("camera", K.t("cameras.cantRead"), K.t("cameras.cantReadWhy"))); return; }
     if (!onPage()) return;
+    if (C.protectPending && !follow) followUp();   // (v3.0.2: the Protect sync still reading — the page re-reads by itself)
     if (viewNow() === "setup") drawSetup(); else drawLive();
   }
   function noCameras() {
+    // (v3.0.2: Protect set up, its first camera list not written yet — or Protect said no: its words)
+    if (C.protectPending) {
+      const w = K.empty("refresh", K.t("cameras.protect.waitTitle"), K.t("cameras.protect.wait"));
+      w.classList.add("cm-wait"); w.setAttribute("role", "status"); return w;
+    }
+    if (C.protectError) return K.empty("alert", K.t("cameras.protect.errorTitle"), C.protectError,
+      M.isAdmin() ? el("div.cm-eacts", {}, el("button.btn.pri", { type: "button", onclick: () => M.go("integrations") }, K.t("cameras.openIntegrations"))) : null);
     const why = C.builtin ? K.t("cameras.none.builtin")
       : C.separate ? K.t("cameras.none.separate")
         : K.t("cameras.none.noVideo");

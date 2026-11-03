@@ -1343,13 +1343,14 @@
   const LSCENES = fresh(() => ([["bright", T("rg.bright"), () => glyph("sun", 22)], ["relax", T("rg.relax"), () => ic("sofa", 22)], ["night", T("rg.nightLight"), () => glyph("moon", 22)], ["cozy", T("rg.cozy"), () => glyph("cozy", 22)]]));
   const FSCENES = fresh(() => ([["off", T("rg.off"), () => glyph("pwr", 22)], ["breeze", T("rg.breeze"), () => glyph("air", 22)], ["sleep", T("rg.sleep"), () => glyph("bed", 22)], ["max", T("rg.max"), () => glyph("fan", 22)]]));
 
-  function orbHtml(d, m) {
+  // (solo: a card's orb — the custom grid's room card, grid.js — its name a plain label, no dock to open; fb: its icon)
+  function orbHtml(d, m, solo, fb) {
     return `<div class="${P}-orb${d.dim ? " dim" : ""}" data-light="${esc(d.id)}">
       <div class="${P}-ow"><div class="${P}-glow"></div>
         <svg class="${P}-oring" viewBox="0 0 100 100" aria-hidden="true"><circle class="${P}-rt" cx="50" cy="50" r="45" pathLength="100" transform="rotate(135 50 50)"/><circle class="${P}-rv" cx="50" cy="50" r="45" pathLength="100" transform="rotate(135 50 50)"/></svg>
-        <div class="${P}-bulb"><div class="${P}-lit"></div><div class="${P}-bc">${pic(d.icon, 24, glyph("bulb", 24))}<span class="${P}-pct num" data-k="pct"></span></div></div>
+        <div class="${P}-bulb"><div class="${P}-lit"></div><div class="${P}-bc">${pic(d.icon, 24, fb || glyph("bulb", 24))}<span class="${P}-pct num" data-k="pct"></span></div></div>
         ${d.group ? `<span class="${P}-grp">GROUP</span>` : ""}<span class="${P}-bub num" data-k="bub"></span></div>
-      <button class="${P}-lab" data-act="name:${esc(d.id)}"><b>${esc(nice(d.name, m.name))}</b><small data-k="st"></small></button></div>`;
+      ${solo ? `<span class="${P}-lab"><b>${esc(nice(d.name, m.name))}</b><small data-k="st"></small></span>` : `<button class="${P}-lab" data-act="name:${esc(d.id)}"><b>${esc(nice(d.name, m.name))}</b><small data-k="st"></small></button>`}</div>`;
   }
   const scenesHtml = (kind, defs) => `<div class="${P}-presets">${defs.map(([k, n, g]) => `<button data-scene="${kind}:${k}" data-name="${esc(n)}">${g()}${esc(n)}<i></i></button>`).join("")}</div>`;
   const rowWrap = (cls, inner) => `<div class="${P}-rw ${P}-${cls}"><div class="${P}-scr"><div class="${P}-track">${inner}</div></div><i class="${P}-fade l"></i><i class="${P}-fade r"></i></div>`;
@@ -2151,6 +2152,13 @@
   function onDown(e) {
     if (!root || (e.button != null && e.button > 0)) return;
     if (arrDown(e)) return;
+    // (v3.0.2) hold an orb still = the light's pop-up (on / off, brightness, white, colour: grid.js), as on every room look;
+    // a tap still switches it, a slide still dims it. Not where arranging is allowed on this panel: there a hold arranges.
+    const ho = !arrHold && !sheetFor && window.Grid && Grid.longPress && e.target.closest && e.target.closest("[data-light]");
+    // (v3.0.2: not on the ring band of a light that dims — there the press is the ring drag ("arm" below), a still finger included)
+    const ow0 = ho && e.target.closest(`.${P}-ow`), rw0 = ow0 && ow0.closest(`.${P}-rw`), r0 = ow0 && ow0.getBoundingClientRect();
+    const ring = !!(r0 && !(rw0 && rw0.classList.contains("ovf")) && onRingBand({ r: r0, cx: r0.left + r0.width / 2, cy: r0.top + r0.height / 2 }, e.clientX, e.clientY));
+    if (ho && root.contains(ho)) { const hd = devById(ho.dataset.light); if (hd && Grid.holdable(hd.id) && !(ring && hd.dim)) Grid.longPress(e, ho, () => { drag = null; Grid.holdDev(ho, hd.id); }); }
     // a long press that opened the sheet may get no click on Android: a stale "eat the next click" must not swallow the
     // next real tap (e.g. Save) — a new press more than EAT_FRESH ms after it was armed clears it
     if (eatClick && Date.now() - eatClick > EAT_FRESH) eatClick = 0;
@@ -2421,5 +2429,18 @@ ${String(XA.css || "").split(".xa-on ").join(`.${P}-run `)}`;
   }
 
   const artInfo = (k) => (XA.items[k] ? { name: XA.items[k].name, fits: XA.items[k].fits || [] } : null);
-  (window.RoomLayouts ||= {}).G = { name: "Layout G", mount, update, unmount, artKeys: ART_KEYS, artPreview, artInfo };
+  // (v3.0.2) one orb on its own, drawn as this layout draws it (the room card's "Orbs" look: grid.js): its HTML with the
+  // light's state already painted in (the card is redrawn on a change); orbPaint: the live level while a finger dims it
+  // (ov {on, level}; null = as it is)
+  function orbPaint(el, d, ov) {
+    if (!el || !d) return;
+    paintOrb(el, d, lightLook(ov ? { ...d, ...ov } : d)); cls(el, "sel", false); cls(el, "drag", !!ov);
+    if (ov) txt(K(el, "bub"), ov.on ? `${ov.level}%` : T("rg.off"));
+  }
+  function orb(d, room, fb, st) {   // (st: a switch / fan / shade's own state words, in place of a light's)
+    if (!document.getElementById(`${P}-css`)) { const s = document.createElement("style"); s.id = `${P}-css`; s.textContent = CSS; document.head.appendChild(s); }
+    const t = document.createElement("template"); t.innerHTML = orbHtml(d, { name: str(room) }, true, fb);
+    const el = t.content.firstElementChild; orbPaint(el, d, null); if (st != null) txt(K(el, "st"), st); return el.outerHTML;
+  }
+  (window.RoomLayouts ||= {}).G = { name: "Layout G", mount, update, unmount, artKeys: ART_KEYS, artPreview, artInfo, orb, orbPaint };
 })();

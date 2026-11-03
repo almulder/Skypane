@@ -13,11 +13,12 @@
   const GROUPS = [
     ["hub", "server", ["Hubitat"], "Hubitat"],   // i18n-ok (the server's names)
     ["broker", "broker", ["MQTT broker"], "MQTT broker"],   // i18n-ok (the server's names)
-    ["cameras", "camera", ["UniFi Protect", "Cameras"], "Cameras"],   // i18n-ok (the server's group names)
+    ["cameras", "camera", ["UniFi Protect", "Cameras"], ["UniFi Protect", "Cameras"]],   // i18n-ok (the server's group names; v3.0.2: Protect's own status too)
     ["guest", "wifi", ["Guest Wi-Fi"], "Guest Wi-Fi"],   // i18n-ok (the server's group and status names)
     ["music", "zap", ["Music"], "Music"],   // i18n-ok (the server's names)
     ["general", "settings", ["General"], "General"],   // i18n-ok (the server's names)
   ];
+  const CONNECTS = { "Hubitat": 1, "UniFi Protect": 1, "Guest Wi-Fi": 1, "Music": 1, "MQTT broker": 1 };   // i18n-ok (the server's group names: the ones with a Connect)
   // each group's title and what it's for
   const TITLE = { hub: K.t("integrations.group.hub"), broker: K.t("integrations.shared.aboutbroker"), cameras: K.t("integrations.shared.aboutcameras"),
     guest: K.t("integrations.group.guest"), music: K.t("integrations.group.music"), general: K.t("integrations.group.general"), calendars: K.t("integrations.group.calendars") };
@@ -49,8 +50,12 @@
     TZ: [K.t("integrations.field.tz"), K.t("integrations.field.tzHint")],
   };
   const labelOf = (f) => (WORDS[f.key] || [f.label, f.help]);
-  const pill = (st) => (!st ? null : el("span.pill" + (st.state === "problem" ? ".bad" : st.state === "off" ? ".idle" : ""), {}, el("span.dot" + (st.state === "problem" ? ".bad" : st.state === "off" ? ".idle" : ""), { "aria-hidden": "true" }),
-    st.state === "problem" ? K.t("integrations.pill.trouble") : st.state === "off" ? K.t("integrations.pill.notSetUp") : K.t("integrations.pill.working")));
+  // (v3.0.2: "waiting" — set up, but no answer since the last save yet: never "Working" before the hub / console really answered)
+  const tone = (st) => (st.state === "problem" ? ".bad" : st.state === "off" ? ".idle" : st.state === "waiting" ? ".warn" : "");
+  const pill = (st) => (!st ? null : el("span.pill" + tone(st), {}, el("span.dot" + tone(st), { "aria-hidden": "true" }),
+    st.state === "problem" ? K.t("integrations.pill.trouble") : st.state === "off" ? K.t("integrations.pill.notSetUp")
+      : st.state === "waiting" ? K.t("integrations.pill.checking") : K.t("integrations.pill.working")));
+  const fineWords = (st, short) => (st.state === "waiting" ? K.t("integrations.status.waiting") : short ? K.t("integrations.status.fineShort") : K.t("integrations.status.fine"));
 
   // ---------- the save bar ----------
   const marker = el("input.sr-hide", { type: "text", tabindex: "-1", "aria-hidden": "true", value: "" });   // (the unsaved guard reads it)
@@ -61,21 +66,79 @@
     bar.hidden = !n;
     bar.replaceChildren(el("span", {}, K.t("integrations.bar.waiting", { n })), el("span.sp"),
       el("button.btn", { type: "button", onclick: () => { for (const k of Object.keys(pending)) delete pending[k]; draw(); } }, K.t("integrations.bar.discard")),
-      el("button.btn.pri", { type: "button", onclick: saveAll }, K.t("integrations.bar.save")));
+      el("button.btn.pri", { type: "button", onclick: () => saveAll() }, K.t("integrations.bar.save")));
+    drawConnects();
   }
-  async function saveAll() {
-    const body = { ...pending };
+  // (v3.0.2) each section's Connect row follows the typing: it shows up as soon as the section has a change waiting (and
+  // takes the place of "Try again" — that one only checks, it saves nothing), and goes when the change is taken back
+  const slots = [];   // {groups, statusName, kind, node} — the sections drawn now
+  const connectKind = (groups, statusName) => {
+    if (phone() || !groups.some((g) => g in CONNECTS)) return null;
+    if (Object.keys(pending).some((k) => groups.includes(groupOfKey(k)))) return "connect";
+    const bad = [].concat(statusName).some((n) => { const st = stateOf(n); return st && st.state === "problem" && st.reason !== "nokey" && st.reason !== "noaddress"; });
+    return bad ? "again" : null;   // (working, checking or not set up: nothing to press)
+  };
+  function connectRow(s) {
+    s.kind = connectKind(s.groups, s.statusName);
+    const btn = connectBtn(s.groups, s.kind);
+    const n = K.row(K.t("integrations.connect.label"), K.t("integrations.connect.hint"), btn || el("span"));
+    if (!btn) n.hidden = true;
+    return n;
+  }
+  function drawConnects() {
+    for (const s of slots) {
+      if (connectKind(s.groups, s.statusName) === s.kind) continue;   // (the same button: left as it is)
+      const n = connectRow(s); s.node.replaceWith(n); s.node = n;
+    }
+  }
+  // (v3.0.2: a Connect per section — only its own changes; the same save, the same restart. The owner: "connect it right
+  // away" instead of the bar at the bottom; the status then says Checking… until the hub / console really answered)
+  const groupOfKey = (k) => { const f = (DATA.fields || []).find((x) => x.key === k); return f ? f.group : null; };
+  // (v3.0.2: every save restarts Skypane and reloads the page — other sections' changes would be dropped without a word:
+  // asked first, "save them too" or "only this section")
+  async function connect(groups) {
+    const mine = Object.keys(pending).filter((k) => groups.includes(groupOfKey(k))), rest = Object.keys(pending).filter((k) => !mine.includes(k));
+    if (!mine.length) return;
+    if (rest.length) {
+      const pick = await K.choose({ title: K.t("integrations.connect.restTitle"), text: K.t("integrations.connect.restText", { n: rest.length }),
+        buttons: [["only", K.t("integrations.connect.restOnly")], ["all", K.t("integrations.connect.restAll"), "pri"]] });
+      if (!pick) return;
+      if (pick === "all") return saveAll();
+    }
+    return saveAll(mine);
+  }
+  const idOf = (k) => `in-${String(k).replace(/[^\w-]/g, "-")}`;
+  // (v3.0.2) a save restarts Skypane and reloads the page: another form on it with typed changes (Event icons, a calendar
+  // being added) is asked about first — the event icons can be saved along, anything else would be lost
+  const changedIn = (f) => [...f.querySelectorAll("input, select, textarea")].some((i) => (i.type === "checkbox" || i.type === "radio" ? i.checked !== i.defaultChecked
+    : i.tagName === "SELECT" ? i.selectedIndex !== Math.max(0, [...i.options].findIndex((o) => o.defaultSelected)) : i.value !== i.defaultValue));   // (manage.js's own check)
+  async function othersOk() {
+    const main = M.$main.querySelector(".in-main");
+    const forms = main ? [...main.querySelectorAll("[data-unsaved]")].filter(changedIn) : [];
+    if (!forms.length) return true;
+    const icons = forms.some((f) => f.classList.contains("ei-card")) && M.saveEventIcons;
+    const pick = await K.choose({ title: K.t("integrations.restart.otherTitle"),
+      text: K.t("integrations.restart.otherText", { what: forms.map((f) => f.dataset.unsaved).join(", ") }),
+      buttons: [["go", K.t("integrations.restart.anyway"), icons ? "" : "pri"], icons ? ["save", K.t("integrations.restart.saveIcons"), "pri"] : null].filter(Boolean) });
+    if (!pick) return false;
+    if (pick === "save") return !!(await M.saveEventIcons());
+    return true;
+  }
+  async function saveAll(keys) {
+    const body = {};
+    for (const k of Array.isArray(keys) ? keys : Object.keys(pending)) body[k] = pending[k];
+    if (!Object.keys(body).length) return;
+    if (!(await othersOk())) return;
     try {
       const before = await M.bootId();
       const r = await api("/api/manage/settings", { set: body });
       if (!r.ok) return toast(r.error || K.t("integrations.notSaved"), true);
-      for (const k of Object.keys(body)) delete pending[k];
+      // (v3.0.2: only the saved fields count as saved — the marker keeps the rest's count, so the unsaved guard still sees them)
+      for (const k of Object.keys(body)) { delete pending[k]; const i = document.getElementById(idOf(k)); if (i) i.defaultValue = i.value; }
       drawBar();
-      if (M.markSaved) M.markSaved(document.querySelector(".in-main"));   // (saved: no "Leave site?" on the reload)
       if (r.restarting && M.waitRestart) return M.waitRestart(before);   // (v3.0.0: "Restarting…", then a reload)
       toast(K.t("integrations.saved"));
-      setTimeout(() => { if (S.route().page === "integrations") render(); }, 8000);
-      drawBar();
+      setTimeout(() => { if (S.route().page === "integrations") refresh(); }, 8000);
     } catch (e) { if (e.message !== "login") toast(K.t("integrations.unreachable"), true); }
   }
   const mark = (k, v, was) => { if (was !== undefined && v === was) delete pending[k]; else pending[k] = v; drawBar(); };
@@ -86,6 +149,7 @@
     const input = el("input", { type: "password", autocomplete: "off", maxlength: "200", "aria-label": f.label });
     const form = el("form.modal.small.pn-ask", { role: "dialog", "aria-labelledby": "in-rp-h", onsubmit: (e) => {
       e.preventDefault(); if (!input.value) return; mark(f.key, input.value); close(); after();
+      connect([f.group]);   // (v3.0.2: "Save" saves it — and connects that section — at once; no "kept for saving" any more)
     } }, el("h2", { id: "in-rp-h" }, f.set ? K.t("integrations.secret.replaceTitle", { label: f.label }) : K.t("integrations.secret.setTitle", { label: f.label })), el("p", {}, K.t("integrations.secret.text")),
     el("label.pn-fld", {}, el("b", {}, f.label), input),
     el("div.pn-ask-acts", {}, el("button.btn", { type: "button", onclick: () => close() }, K.t("control.cancel")), el("button.btn.pri", { type: "submit" }, K.t("integrations.secret.keep"))));
@@ -109,7 +173,7 @@
     }
     // (v2.9.0 gate 2: a phone reads the value as text — no form to fill in)
     if (!may) return K.row(...labelOf(f), f.value ? el("b.in-ro", {}, f.value) : el("span.muted", {}, K.t("integrations.notSet")));
-    const id = `in-${String(f.key).replace(/[^\w-]/g, "-")}`;
+    const id = idOf(f.key);
     const input = el("input", { type: "text", id, value: pending[f.key] !== undefined ? pending[f.key] : f.value || "", autocomplete: "off", spellcheck: "false",
       placeholder: f.placeholder || "", disabled: !may, "aria-label": f.label, oninput: (e) => mark(f.key, e.target.value, f.value || "") });
     input.defaultValue = f.value || "";
@@ -124,15 +188,24 @@
         el("button.btn.sm.ghost", { type: "button", onclick: async () => toast((await M.copyText(MQ.user)) ? K.t("integrations.mqtt.copiedUser") : K.t("integrations.mqtt.copyFailed")) }, ic("copy", 14), K.t("integrations.mqtt.copyUser")),
         el("button.btn.sm.ghost", { type: "button", onclick: async () => toast((await M.copyText(MQ.pass)) ? K.t("integrations.mqtt.copied") : K.t("integrations.mqtt.copyFailed")) }, ic("copy", 14), K.t("integrations.mqtt.copyPassword"))))];
   }
-  function statusRow(name) {
+  // (data-st: refresh() draws it again in place — the fields around it are never touched)
+  function statusRow(name, label) {
     const st = stateOf(name);
-    return st ? K.row(K.t("integrations.shared.status"), st.state === "problem" ? (st.since ? K.t("integrations.status.since", { words: st.words, ago: ago(st.since) }) : st.words)
-      : st.state === "off" ? K.t("integrations.status.off") : K.t("integrations.status.fine"), pill(st)) : null;
+    return st ? K.row(label || K.t("integrations.shared.status"), st.state === "problem" ? (st.since ? K.t("integrations.status.since", { words: st.words, ago: ago(st.since) }) : st.words)
+      : st.state === "off" ? K.t("integrations.status.off") : fineWords(st), pill(st), { "data-st": name, "data-stl": label || "" }) : null;
+  }
+  function lastAlertRow() {
+    if (!stateOf("Hubitat") || stateOf("Hubitat").state === "off") return null;
+    const la = stateOf("Hubitat").lastAlert;
+    return K.row(K.t("integrations.hub.lastAlert"), K.t("integrations.hub.lastAlertHint"),
+      la ? el("span", {}, el("b", {}, la.title || la.text || "—"), " ", el("small.muted", {}, ago(la.at))) : el("span.muted", {}, K.t("integrations.hub.noAlert")), { "data-la": "" });
   }
   function group([id, icon, groups, statusName]) {
     const rows = [];
-    const sr = statusRow(statusName);
-    if (sr) rows.push(sr);
+    for (const n of [].concat(statusName)) {   // (cameras: Protect's and the camera video's, each with its name)
+      const sr = statusRow(n, Array.isArray(statusName) ? (n === "UniFi Protect" ? K.t("integrations.status.protect") : K.t("integrations.status.video")) : null);   // i18n-ok (status name)
+      if (sr) rows.push(sr);
+    }
     if (id === "broker") {
       rows.push(...mqttRows());
       const sep = fieldsOf("MQTT broker");
@@ -140,31 +213,48 @@
       const det = el("details.in-sep", open ? { open: true } : {}, el("summary", {}, K.t("integrations.mqtt.separate")), el("div.grp", {}, sep.map(settingRow)));
       rows.push(el("div.grp-row.in-det", {}, det));
     } else for (const g of groups) rows.push(...fieldsOf(g).map(settingRow));
+    if (id === "hub") rows.push(lastAlertRow() || el("div.grp-row", { "data-la": "", hidden: true }));   // (v3.0.2: the Notifier's "Test" shows up here — no panel needed)
+    if (!phone() && groups.some((g) => g in CONNECTS)) {
+      const s = { groups, statusName, kind: null, node: null };
+      s.node = connectRow(s); slots.push(s); rows.push(s.node);
+    }
     if (LINKS[id]) rows.push(K.row(LINKS[id][0], LINKS[id][1], el("button.btn.sm", { type: "button", onclick: () => M.go(LINKS[id][2]) }, K.t("control.open"), ic("arrowR", 13))));
     return el("section.in-group", { "aria-label": TITLE[id] }, el("div.gh", {}, ic(icon, 15), ` ${TITLE[id]}`), el("div.grp", {}, rows), el("p.gf", {}, WHAT[id]));
   }
+  function connectBtn(groups, kind) {
+    if (kind === "connect") return el("button.btn.sm.pri", { type: "button", onclick: () => connect(groups) }, ic("link", 14), K.t("integrations.connect.now"));
+    if (kind !== "again") return null;
+    const b = el("button.btn.sm", { type: "button", onclick: async () => {
+      b.disabled = true;
+      const r = await api("/api/manage/health", { action: "check" }).catch(() => ({}));
+      if (b.isConnected) b.disabled = false;
+      if (!r.ok) return toast(r.error || K.t("integrations.notChecked"), true);
+      refresh();
+    } }, ic("refresh", 14), K.t("integrations.connect.again"));
+    return b;
+  }
   function side() {
-    const lines = [["server", TITLE.hub, "Hubitat"], ["broker", TITLE.broker, "MQTT broker"], ["camera", TITLE.cameras, "Cameras"], ["wifi", TITLE.guest, "Guest Wi-Fi"],   // i18n-ok (status names)
-      ["calendar", TITLE.calendars, "Calendars"], ["sun", K.t("weather.title"), "Weather"]].map(([i, n, k]) => {   // i18n-ok (status names)
+    const lines = [["server", TITLE.hub, "Hubitat"], ["broker", TITLE.broker, "MQTT broker"], ["camera", K.t("integrations.status.protect"), "UniFi Protect"], ["camera", TITLE.cameras, "Cameras"], ["wifi", TITLE.guest, "Guest Wi-Fi"],   // i18n-ok (status names)
+      ["calendar", TITLE.calendars, "Calendars"], ["sun", K.t("weather.title"), "Weather"], ["zap", TITLE.music, "Music"]].map(([i, n, k]) => {   // i18n-ok (status names)
       const st = stateOf(k);
       // (v3.0.0: the weather device — its name and last change, or why the panels use Open-Meteo)
       const wx = k === "Weather" && st && st.state !== "off" ? (st.reason === "stale" ? K.t("weather.side.stale", { ago: st.updatedAt ? ago(st.updatedAt) : "—" })
         : st.reason === "no-data" ? K.t("weather.side.noData") : st.reason === "waiting" ? K.t("weather.side.waiting")
           : K.t("weather.side.ok", { name: st.device || K.t("weather.thisDevice"), ago: st.updatedAt ? ago(st.updatedAt) : "—" })) : null;
-      return el("div.nl", {}, el("span.ni" + (st && st.state === "problem" ? ".bad" : st && st.state === "off" ? "" : ".ok"), {}, ic(i, 16)),
-        el("div", {}, el("b", {}, n), el("small", {}, !st ? "" : wx || (st.state === "problem" ? st.words : st.state === "off" ? K.t("integrations.pill.notSetUp") : K.t("integrations.status.fineShort")))), pill(st));
+      return el("div.nl", {}, el("span.ni" + (st && st.state === "problem" ? ".bad" : st && (st.state === "off" || st.state === "waiting") ? "" : ".ok"), {}, ic(i, 16)),
+        el("div", {}, el("b", {}, n), el("small", {}, !st ? "" : wx || (st.state === "problem" ? st.words : st.state === "off" ? K.t("integrations.pill.notSetUp") : fineWords(st, true)))), pill(st));
     });
     const check = el("button.btn.sm", { type: "button", onclick: async () => {
       check.disabled = true;
       const r = await api("/api/manage/health", { action: "check" }).catch(() => ({}));
       check.disabled = false;
       if (!r.ok) return toast(r.error || K.t("integrations.notChecked"), true);
-      toast(K.t("integrations.checkedNow")); render();
+      toast(K.t("integrations.checkedNow")); refresh();
     } }, ic("refresh", 14), K.t("integrations.checkNow"));
     const words = { "settings.change": (e) => (e.data && e.data.keys ? K.t("integrations.recent.changedKeys", { keys: e.data.keys.join(", ") }) : K.t("integrations.recent.changed")),
       "settings.check": () => K.t("integrations.recent.checked"), "settings.guest": () => K.t("integrations.recent.guest"),
       "settings.guest-now": () => K.t("integrations.recent.guestNow"), "settings.lockdown": () => K.t("integrations.recent.lockdown"),
-      "settings.weather": () => K.t("integrations.recent.weather") };
+      "settings.weather": () => K.t("integrations.recent.weather"), "settings.event-icons": () => K.t("integrations.recent.eventIcons") };
     return el("section.card.flush.in-side", { "aria-label": K.t("integrations.side.title") }, el("h3.ch", {}, K.t("integrations.side.title"),
       el("small", {}, DATA.checkedAt ? K.t("integrations.side.checkedAgo", { ago: ago(DATA.checkedAt) }) : K.t("integrations.side.notChecked"))),
       el("div.in-lines", {}, ...lines), el("div.cm-acts.foot", {}, check),
@@ -174,6 +264,7 @@
   }
   function draw() {
     if (!DATA || S.route().page !== "integrations") return;
+    slots.length = 0;
     const cal = M.calendarsCard ? M.calendarsCard() : null;
     const main = el("div.in-main", { "data-unsaved": K.t("integrations.unsavedName"), "data-save": K.t("integrations.bar.save") }, marker,
       ...GROUPS.slice(0, 4).map(group),
@@ -189,13 +280,62 @@
     phone() ? el("div.ac-narrow", {}, side(), el("p.pn-info", {}, K.t("integrations.phoneInfo")), main)
       : window.innerWidth < 900 ? el("div.ac-narrow", {}, main, side()) : K.sideLayout(main, side()), phone() ? null : bar));
   }
+  // (v3.0.2: a page that couldn't be read — mostly Skypane restarting — asks again by itself: every 5 s for a minute,
+  // and when the tab is shown again)
+  let retryT = null, retries = 0, failed = false;
   async function render() {
+    clearTimeout(retryT); retryT = null;
     if (!DATA) M.$main.replaceChildren(S.isPhone() ? el("div.p-skel", { role: "status", "aria-label": K.t("common.loading") }, el("i"), el("i"), el("i")) : el("p.muted", {}, K.t("common.loading")));   // (v2.9.0: a phone, skeleton rows)
-    try { await load(); } catch (e) { if (e.message !== "login") M.$main.replaceChildren(K.empty("link", K.t("integrations.loadFailed"), K.t("integrations.tryAgain"))); return; }
+    try { await load(); } catch (e) {
+      if (e.message === "login") return;
+      DATA = null; failed = true;
+      M.$main.replaceChildren(K.empty("link", K.t("integrations.loadFailed"), K.t("integrations.tryAgain")));
+      if (retries++ < 12) retryT = setTimeout(() => { retryT = null; if (S.route().page === "integrations" && !document.hidden) render(); }, 5000);
+      return;
+    }
+    failed = false; retries = 0;
     draw();
+    arm();
   }
-  M.onReset(() => { DATA = null; MQ = null; for (const k of Object.keys(pending)) delete pending[k]; });
+  // the states, read again and drawn in place: the status rows, Hubitat's last alert, the Connect rows and the side card —
+  // never the fields, the calendars or the event icons (what's being typed there stays as it is)
+  let busy = false;
+  async function refresh() {
+    if (busy || !DATA || S.route().page !== "integrations" || !M.$main.querySelector(".in-main")) return;
+    busy = true;
+    try {
+      const d = await api("/api/manage/settings");
+      const r = await api("/api/manage/activity?kinds=settings&limit=5").catch(() => ({}));
+      if (!d || !Array.isArray(d.fields) || S.route().page !== "integrations") return;
+      DATA = d; if (Array.isArray(r.events)) recent = r.events;
+    } catch (e) { return; } finally { busy = false; }
+    const root = M.$main;
+    for (const n of root.querySelectorAll(".in-main [data-st]")) { const x = statusRow(n.dataset.st, n.dataset.stl || null); if (x) n.replaceWith(x); }
+    for (const n of root.querySelectorAll(".in-main [data-la]")) n.replaceWith(lastAlertRow() || el("div.grp-row", { "data-la": "", hidden: true }));
+    drawConnects();
+    const sd = root.querySelector(".in-side");
+    if (sd) M.swap(sd, ...side().childNodes);   // (swap: a focused "Check now" keeps the focus)
+    arm();
+  }
+  // (v3.0.2: "Checking…" turns into Working / Trouble by itself — asked again every 4 s for up to 2 min, drawn in place:
+  // what's being typed anywhere on the page stays; a hidden tab asks again once it is shown)
+  let waitT = null, waits = 0;
+  const waiting = () => !!DATA && Object.values(DATA.status || {}).some((st) => st && st.state === "waiting");
+  function arm() {
+    clearTimeout(waitT); waitT = null;
+    if (!waiting()) { waits = 0; return; }
+    if (waits++ >= 30) return;
+    waitT = setTimeout(() => { waitT = null;
+      if (S.route().page !== "integrations" || document.hidden) return;
+      refresh(); }, 4000);
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden || S.route().page !== "integrations") return;
+    if (failed && !retryT) { retries = 0; render(); return; }
+    if (!waitT && waits < 30 && waiting()) arm();
+  });
+  M.onReset(() => { DATA = null; MQ = null; clearTimeout(retryT); retryT = null; failed = false; for (const k of Object.keys(pending)) delete pending[k]; });
   S.page("integrations", { title: K.t("integrations.title"), group: "admin", icon: "link", allowed: () => M.isAdmin(), words: "settings hubitat protect unifi mqtt calendars music time zone token",
-    render: () => render() });
+    render: () => { retries = 0; render(); } });
   M.renderSettings = () => { if (S.route().page === "integrations") render(); };
 })();

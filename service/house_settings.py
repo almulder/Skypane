@@ -56,6 +56,15 @@ class Invalid(ValueError):
     pass
 
 
+def ip_ok(host):
+    """(v3.0.2) False for digits and dots that aren't an IPv4 address: "192.168.1" (for 192.168.1.1) was read as a public
+    address and timed out. Names and IPv6 are left to the pattern."""
+    if not re.fullmatch(r"[0-9.]+", host):
+        return True
+    parts = host.split(".")
+    return len(parts) == 4 and all(p and len(p) <= 3 and int(p) <= 255 for p in parts)
+
+
 def check(key, value):
     """The value to store ("" = not set); Invalid when it isn't acceptable."""
     if key not in FIELDS:
@@ -65,8 +74,16 @@ def check(key, value):
     if not isinstance(value, str):
         raise Invalid(f"{FIELDS[key][1]}: text")
     value = value.strip()
+    if FIELDS[key][2] == URL and value and not re.match(r"[A-Za-z][A-Za-z0-9+.-]*://", value) \
+            and re.fullmatch(HOST + r"(/[^\s\"'<>\\]*)?", value):
+        # (v3.0.2: "192.168.1.20" for the Music page was "not a valid value" — a bare address gets its http:// / ws://)
+        value = ("ws://" if key == "MQTT_WS_URL" else "http://") + value
     if value and not re.fullmatch(FIELDS[key][2], value):
-        raise Invalid(f"{FIELDS[key][1]}: not a valid value")
+        raise Invalid(f"{FIELDS[key][1]}: not a valid web address (e.g. http://192.168.1.20:8080)" if FIELDS[key][2] == URL
+                      else f"{FIELDS[key][1]}: not a valid value")
+    host = value if FIELDS[key][2] == HOST else re.sub(r"^[A-Za-z]+://([^/:?#]*).*$", r"\1", value) if FIELDS[key][2] == URL else ""
+    if host and not ip_ok(host.split(":")[0] if host.count(":") == 1 else host):
+        raise Invalid(f"{FIELDS[key][1]}: not a valid IP address (four numbers 0–255, e.g. 192.168.1.10)")
     if key in ("MQTT_PORT", "MQTT_WS_PORT") and value and not 1 <= int(value) <= 65535:
         raise Invalid(f"{FIELDS[key][1]}: 1-65535")
     if key == "TILE_MEDIUM_MODELS" and value:   # compiled by protect_sync.py: must be a valid pattern

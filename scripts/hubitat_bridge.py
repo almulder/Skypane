@@ -590,6 +590,51 @@ class WS:
             pass
 
 
+# (v3.0.2) whether the hub really answers with this token: DATA_DIR/private/hubitat-status.json, read by the server's
+# health check — "online" on MQTT only ever meant the bridge runs, so a wrong token used to show "Working"
+HUB_STATUS = "hubitat-status.json"
+
+
+def read_rule(rule_file, fallback):
+    """(v3.0.2) The house's "may switch" rule ({"switchRule", "neverSwitch"}, service/switch_rule.py): rule_file
+    (house/switch-rule.json) when it exists, else `fallback` as given — the main panel's settings on an install the
+    pairing migration hasn't moved yet. False when the file is there but can't be read now (the last values stay)."""
+    p = pathlib.Path(rule_file) if rule_file else None
+    if not (p and p.exists()):
+        return fallback
+    try:
+        doc = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(doc, dict):
+            raise ValueError("rule")
+    except (OSError, ValueError, RecursionError):
+        return False
+    return doc or {"switchRule": {}}   # (an empty rule file: the name rule alone — still read as "set")
+
+
+def hub_words(err):
+    """A failed Maker API read (safe_err text, never a URL or token) in the owner's words."""
+    if "HTTP 401" in err or "HTTP 403" in err:
+        return "The hub refused the Maker API token. Copy it again from the Maker API app."
+    if "HTTP 404" in err:
+        return "The hub has no Maker API app with that number. Check the app number."
+    if "HTTP " in err:
+        return f"The hub answered with an error ({err.split('failed: ')[-1]})."
+    return f"The hub doesn't answer at that address ({err.split('failed: ')[-1]})."
+
+
+def write_status(path, ok, error, **more):
+    """{"ok", "error", "readAt", …} → path (mode 0600, replaced in one go); never fails the caller."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump({"ok": ok, "error": error or "", "readAt": int(time.time()), **more}, f)
+        os.replace(tmp, path)
+    except OSError:
+        pass
+
+
 # ---------- bridge ----------
 class Bridge:
     def __init__(self, args, env):
@@ -657,7 +702,12 @@ class Bridge:
     def _resync(self, announce_changes):
         with self.lock:
             start = self.seq
-        devices = self.maker.get("devices/all", timeout=60)
+        try:
+            devices = self.maker.get("devices/all", timeout=60)
+        except Exception as e:
+            self.hub_status(hub_words(str(e)))
+            raise
+        self.hub_status(None, len(devices) if isinstance(devices, list) else 0)
         new = build_state(devices)
         if isinstance(devices, list):
             media = media_cmds(devices)
@@ -685,6 +735,11 @@ class Bridge:
         self.resync_notifiers(devices)   # (publishes the alerts — the weather warnings with them)
         self.wx_flush(alerts=False)
         return devices
+
+    def hub_status(self, error, devices=0):
+        data_dir = os.environ.get("DATA_DIR")
+        if data_dir:
+            write_status(pathlib.Path(data_dir) / "private" / HUB_STATUS, error is None, error, devices=devices)
 
     # --- the Skypane Notifier (release 2) ---
     def resync_notifiers(self, devices):
@@ -1302,8 +1357,9 @@ class Bridge:
                     raise ValueError("settings")
         except (OSError, ValueError, AttributeError, TypeError):
             settings = False   # can't be read right now: keep the last values
-        if settings:
-            never = settings.get("neverSwitch")
+        rule = read_rule(getattr(self.args, "rule_file", None), settings)   # (v3.0.2: house/switch-rule.json first)
+        if rule:
+            never = rule.get("neverSwitch")
             if never is None:
                 self.never = None
             elif isinstance(never, dict):
@@ -1312,7 +1368,7 @@ class Bridge:
                 except (ValueError, TypeError):
                     pass
             # the Manager's exceptions to the name rule (used while there's no explicit neverSwitch list)
-            rule = settings.get("switchRule")
+            rule = rule.get("switchRule")
             ids = lambda d: {int(k) for k, v in (d if isinstance(d, dict) else {}).items() if v and str(k).isdecimal()}  # noqa: E731
             self.switch_rule = (ids(rule.get("allow")), ids(rule.get("never"))) if isinstance(rule, dict) else (set(), set())
         # the device choices (stage 4: house/device-settings.json from the Manager page; before that the main panel's
@@ -1376,7 +1432,9 @@ class Bridge:
         """Called for every command and every few seconds: when the main panel's settings file was saved, re-read the
         owner's choices; overrides changed → rebuild the model from the last device list, else just the allowlist."""
         sig = []
-        for p in (pathlib.Path(self.args.panel_file) if self.args.panel_file else None, self.device_file(), self.card_file()):
+        rf = getattr(self.args, "rule_file", None)
+        for p in (pathlib.Path(self.args.panel_file) if self.args.panel_file else None, self.device_file(), self.card_file(),
+                  pathlib.Path(rf) if rf else None):
             try:
                 st = p.stat() if p else None
                 sig.append((st.st_ino, st.st_mtime_ns, st.st_size) if st else ("none",))   # every save = a new file
@@ -1388,7 +1446,7 @@ class Bridge:
                 return
             self.never_sig = sig
             before = self.overrides
-            if self.args.panel_file or self.args.house_dir:
+            if self.args.panel_file or self.args.house_dir or rf:
                 self.read_owner()
             changed = self.overrides != before
         if changed and rebuild and self.devices is not None:
@@ -2003,6 +2061,9 @@ def main():
                     help="write the house model (hubitat-data.js) here and allow every device it shows (default: $DATA_DIR/house)")
     ap.add_argument("--panel-file", default=str(pathlib.Path(data_dir) / "panels" / "main.json") if data_dir else "",
                     help="the main panel's saved settings (its neverSwitch list); default $DATA_DIR/panels/main.json")
+    ap.add_argument("--rule-file", default=str(pathlib.Path(data_dir) / "house" / "switch-rule.json") if data_dir else "",
+                    help="(v3.0.2) the house's \"may switch\" rule; default $DATA_DIR/house/switch-rule.json — while it "
+                         "doesn't exist, the rule is read from --panel-file")
     ap.add_argument("--dry-run", action="store_true", help="never send commands to the hub")
     ap.add_argument("--once", action="store_true", help="fetch state, print a summary and exit")
     ap.add_argument("--mqtt-host", default="localhost")

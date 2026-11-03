@@ -85,6 +85,9 @@
     "weather.alert": (e) => [K.t("timeline.say.weatherAlert", { title: (e.data || {}).title || "", level: (e.data || {}).level || "" }), ""],
     "weather.clear": (e) => [K.t("timeline.say.weatherClear", { title: (e.data || {}).title || "" }), ""],
     "settings.weather": (e) => [K.t("timeline.say.settingsWeather", { who: name(e.who) }), ((e.data || {}).keys || []).join(", ")],
+    // (v3.0.2) the house's calendar event icons — saved or reset, how many
+    "settings.event-icons": (e) => [K.t((e.data || {}).what === "reset" ? "timeline.say.eventIconsReset" : "timeline.say.eventIcons", { who: name(e.who) }),
+      K.t("timeline.say.eventIconsCount", { n: (e.data || {}).count || 0 })],
     "library.upload": (e) => [K.t("timeline.say.libraryUpload", { who: name(e.who), name: e.target }), ""],
     "library.remove": (e) => [K.t("timeline.say.libraryRemove", { who: name(e.who) }), ""],
     "library.card": (e) => [K.t("timeline.say.libraryCard", { who: name(e.who), name: e.target }), ""],

@@ -15,6 +15,7 @@ The API key comes from the environment only; it and the stream URLs are never pr
 Usage: python -I -u service/protect_sync.py --house-dir /data/house --private-dir /data/private [--once]
 """
 import argparse
+import json
 import os
 import pathlib
 import re
@@ -27,6 +28,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import protect_to_go2rtc as pt  # noqa: E402  (Protect client, names → stream slugs, the panel's camera file)
 sys.path.insert(0, str(ROOT / "service"))
 import own_cameras  # noqa: E402  (cameras that aren't Protect's, added on the Manager page)
+
+STATUS = "protect-status.json"   # (v3.0.2: whether Protect really answered — see Sync.status)
 
 CAMERAS_EVERY = 60          # s between camera list checks (one small request)
 VIEWS_EVERY = 300           # s between live view checks
@@ -209,18 +212,40 @@ class Sync:
                 f"{' - camera list updated' if wrote_js else ''}{' - go2rtc streams updated' if wrote_cfg else ''}")
         return wrote_js, wrote_cfg
 
+    def status(self, error):
+        """(v3.0.2) private/protect-status.json for the server's health check: did Protect really answer with this key?
+        (Only a TCP knock on :443 before — a wrong key showed "Working".) No Protect key: no file, nothing to report."""
+        path = self.private / STATUS
+        if not self.api:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+            return
+        try:
+            tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump({"ok": error is None, "error": error or "", "readAt": int(time.time()), "cameras": self.count}, f)
+            os.replace(tmp, path)
+        except OSError:
+            pass
+
     def run(self, stop=lambda: False):
         while not stop():
             try:
                 self.once()
+                self.status(None)
                 if self.problem:
                     log("Protect answers again")
                     self.problem = None
             except pt.Fail as e:
+                self.status(str(e))
                 if str(e) != self.problem:
                     log(f"ERROR {e} - the panel keeps the last camera list; trying again every minute")
                     self.problem = str(e)
             except Exception as e:  # never print details that could contain a URL
+                self.status(f"Can't read the cameras from Protect ({type(e).__name__}).")
                 if type(e).__name__ != self.problem:
                     log(f"ERROR camera sync failed ({type(e).__name__}) - trying again in a minute")
                     self.problem = type(e).__name__

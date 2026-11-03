@@ -100,7 +100,7 @@ class Protect:
                 ra = e.headers.get("Retry-After") if e.headers else None
                 raise HttpError(429, float(ra) if ra and ra.replace(".", "", 1).isdigit() else None) from None
             if e.code in (401, 403):
-                raise Fail(f"Protect refused the API key (HTTP {e.code}). Check the Protect API key (Manager page → Settings; .env on the laptop), and that the key was "
+                raise Fail(f"Protect refused the API key (HTTP {e.code}). Check the Protect API key (Manager → Integrations → UniFi Protect), and that the key was "
                            "created by an Owner/Super Admin on the Protect console.") from None
             if e.code == 404 and path == "/cameras":
                 raise Fail("Protect's Integration API was not found (HTTP 404). Update UniFi Protect to 6.x or newer.") from None

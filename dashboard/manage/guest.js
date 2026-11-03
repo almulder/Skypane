@@ -18,14 +18,26 @@
     LIB = M.isAdmin() ? await api("/api/manage/pictures").catch(() => null) : null;
     who = M.isAdmin() ? await api("/api/manage/users").catch(() => null) : null;
   }
-  async function send(body, words) {
+  async function send(body, words, quiet) {
     try {
       const r = await api("/api/manage/guest-wifi", body);
       if (!r.ok) { toast(r.error || K.t("guest.notSaved"), true); return false; }
       if (words) toast(words);
-      setTimeout(() => { if (S.route().page === "guest") render(); }, 1200);
+      if (!quiet) setTimeout(() => { if (S.route().page === "guest") render(); }, 1200);
       return true;
     } catch (e) { if (e.message !== "login") toast(K.t("guest.unreachable"), true); return false; }
+  }
+  // (v3.0.2: "Change password now" said nothing until a refresh — the console takes a few seconds; ask until it's done)
+  async function waitChanged(before) {
+    for (let i = 0; i < 20; i++) {
+      await new Promise((ok) => setTimeout(ok, 2000));
+      if (S.route().page !== "guest") return;
+      const g = await api("/api/manage/guest-wifi").catch(() => null);
+      if (!g) continue;
+      if (g.changedAt && g.changedAt !== before) { toast(K.t("guest.newPw.done")); return render(); }
+      if (g.error && i >= 2) { toast(g.error, true); return render(); }
+    }
+    toast(K.t("guest.newPw.slow"), true); render();
   }
   const seg = (label, opts, cur, pick, may = true) => el("div.seg", { role: "group", "aria-label": label }, opts.map(([v, n]) =>
     el("button" + (cur === v ? ".on" : ""), { type: "button", "aria-pressed": String(cur === v), disabled: !may, onclick: () => cur !== v && pick(v) }, n)));
@@ -53,8 +65,12 @@
       K.row(K.t("guest.newPw.afterGuests"), K.t("guest.newPw.afterGuestsHint"), seg(K.t("guest.newPw.afterGuests"), [[true, K.t("guest.on")], [false, K.t("guest.off")]], set.afterGuests !== false, (v) => send({ settings: { afterGuests: v } }, K.t("guest.saved")), may)),
       K.row(K.t("guest.newPw.every"), K.t("guest.newPw.everyHint"), seg(K.t("guest.newPw.everyLabel"), [[0, K.t("guest.newPw.never")], ...[1, 3, 7, 14, 30].map((n) => [n, K.t("guest.newPw.days", { n })])], set.days || 0, (v) => send({ settings: { days: v } }, K.t("guest.saved")), may)),
       K.row(K.t("guest.newPw.lastChanged"), G.changedAt ? (G.why ? K.t("guest.newPw.changedWhy", { when: when(G.changedAt), why: G.why }) : when(G.changedAt)) : K.t("guest.newPw.notYet"),
-        el("button.btn.sm", { type: "button", onclick: async () => {   // (v2.9.0: on a phone too — the server decides who may)
-          if (await K.ask({ title: K.t("guest.newPw.ask"), yes: K.t("guest.newPw.askYes"), text: K.t("guest.newPw.askText") })) send({ changeNow: true }, K.t("guest.newPw.changing"));
+        el("button.btn.sm", { type: "button", onclick: async (e) => {   // (v2.9.0: on a phone too — the server decides who may)
+          const b = e.currentTarget, before = G.changedAt;
+          if (!(await K.ask({ title: K.t("guest.newPw.ask"), yes: K.t("guest.newPw.askYes"), text: K.t("guest.newPw.askText") }))) return;
+          b.disabled = true; b.replaceChildren(ic("refresh", 14), K.t("guest.newPw.busy"));
+          if (await send({ changeNow: true }, null, true)) waitChanged(before);
+          else { b.disabled = false; b.replaceChildren(ic("refresh", 14), K.t("guest.newPw.changeNow")); }
         } }, ic("refresh", 14), K.t("guest.newPw.changeNow"))),
     ], G.nextChange ? (G.guestsHere ? K.t("guest.newPw.nextAfterGuests") : K.t("guest.newPw.nextAt", { when: when(G.nextChange) })) : null)];
   }

@@ -21,19 +21,22 @@ Example rule for a leak: *Trigger: Kitchen leak sensor wet → Skypane: critical
 
 The same steps as in [hubitat.md](hubitat.md#3-the-skypane-notifier--alerts-from-your-rules-recommended):
 
-1. Hubitat → **Drivers Code → + New Driver** → **Import** → paste this address, with your Skypane's address in it →
-   **Import** → **Save**:
+1. Hubitat → **Drivers Code → + New Driver** → **Import** → paste the address below → **Import** → **Save**.
 
-   `http://192.168.1.50/hubitat/SkypaneNotifier.groovy` (with Docker: `http://<address>:8088/hubitat/SkypaneNotifier.groovy`)
+   It's the same address you open the Manager with, without `/admin`, followed by `/hubitat/SkypaneNotifier.groovy` —
+   e.g. `http://192.168.1.50/hubitat/SkypaneNotifier.groovy` on Unraid, or
+   `http://192.168.1.20:8088/hubitat/SkypaneNotifier.groovy` with Docker.
 
-   Skypane serves the driver itself, so it always matches your version. If Import doesn't work, open that address in a
-   browser, select everything, copy it, and paste it into the new driver instead.
+   Skypane serves the driver itself, so it always matches your version. If Import says *Failed to fetch* (or doesn't
+   work), open that address in your browser, copy everything on the page and paste it into the **New Driver** box
+   instead.
 2. **Devices → Add Device → Virtual** → **Device Name:** `Skypane`, **Type:** *Skypane Notifier* (under the
    `skypane` namespace) → **Save Device**.
 3. **Apps → Maker API** → tick the new **Skypane** device → **Done**. Skypane needs it there so that a dismissal on a
    panel reaches Hubitat, and so it can ask for the alerts again after a restart.
 4. Test it: open the **Skypane** device in Hubitat, type `Test` in the box next to **Info** and press **Info**. Within a
-   few seconds every panel shows a short note "Test" (it goes away by itself after a minute).
+   few seconds every panel shows a short note "Test" (it goes away by itself after a minute). No panel set up yet?
+   The Manager's **Overview** lists alerts that are waiting, so you can check it there too.
 
 Nothing else: the bridge already listens to the hub's event socket. No secret goes onto the hub.
 

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="same-origin">
+<title>Skypane</title>
+<!-- (v3.0.2) "/": Skypane's status and, on a tablet that isn't a panel yet, "Connect this panel" (its pairing code for
+     the Manager — mockups/PAIRING-API.md). Absolute paths: the page is served at "/". No inline script or style: the
+     page's CSP allows only these files. -->
+<link rel="icon" type="image/svg+xml" href="/assets/skypane.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/icon-32.png">
+<link rel="apple-touch-icon" href="/assets/icon-180.png">
+<link rel="stylesheet" href="/vendor/fonts/fonts.css">
+<link rel="stylesheet" href="/connect/connect.css">
+</head>
+<body>
+<!-- the panel's night sky behind it (as the Manager's sign-in page): moon, stars, three ridges -->
+<div class="scene" aria-hidden="true">
+  <i class="moon"></i><i class="star"></i><i class="star"></i><i class="star"></i><i class="star"></i><i class="star"></i><i class="star"></i><i class="star"></i><i class="star"></i>
+  <svg viewBox="0 0 1280 370" preserveAspectRatio="none"><path d="M0 170 L180 60 L300 140 L460 30 L640 150 L780 90 L960 170 L1110 70 L1280 140 L1280 370 L0 370Z" fill="#6b46c9"/><path d="M0 250 L160 170 L360 240 L560 150 L760 250 L980 180 L1280 240 L1280 370 L0 370Z" fill="#3b2286"/><path d="M0 320 L240 260 L520 320 L820 270 L1280 320 L1280 370 L0 370Z" fill="#1d1050"/></svg>
+</div>
+<main class="wrap">
+  <div class="card">
+    <div class="brand">
+      <img src="/assets/skypane.svg" alt="">
+      <div class="wm" aria-label="Skypane"><span>Sky</span><i class="wm-bar"></i><span class="wm-b">pane</span></div>
+    </div>
+    <section id="status" class="status" hidden></section>
+    <section id="pair" class="pair" aria-live="polite"></section>
+  </div>
+</main>
+<noscript><p class="nojs">Skypane needs JavaScript.</p></noscript>
+<script src="/layouts/v4/shared/strings/en.js"></script><!-- the panel's words (the same table as the panels) -->
+<script src="/layouts/v4/shared/strings.js"></script><!-- T(key, vars) -->
+<script src="/connect/connect.js"></script>
+</body>
+</html>

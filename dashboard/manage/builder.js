@@ -233,23 +233,36 @@
     const k = Object.hasOwn(PRESETS, m.homeLayout) && m.homeLayout !== "empty" ? m.homeLayout : "classic";
     return { v: 1, cols: 12, rows: 8, gap: 14, cards: PRESETS[k][1](), ...(own && own.scr ? { scr: own.scr } : {}) };
   }
+  // a room page as it is now: its own grid, else every room's, else the built-in room layout
+  function roomStart(grids, key) {
+    const own = grids[key], every = grids["*"];
+    return structuredClone(own && Array.isArray(own.cards) ? own : every && Array.isArray(every.cards) ? every : { v: 1, cols: 12, rows: 8, gap: 14, cards: ROOM_PRESETS.rclassic[1]() });
+  }
   // ctx: {panel: {id, name}, managed, rooms, views, panels, save(set) → Promise<bool>, back()}
+  // (rooms: key — the page, "*" every room's; start — "empty": no cards)
   M.openBuilder = async (ctx) => {
     // rooms: grids = every room's own grid as saved ("*" = the one for every room), key = the one being edited,
     // view = the room shown while editing it; edited = the keys changed (only those are saved)
     const grids = ctx.room ? structuredClone(ctx.managed.roomGrids || {}) : null;
-    const fresh = (cards) => toFine({ v: 1, cols: 12, rows: 8, gap: 14, cards });
-    const g = toFine(ctx.room ? (grids["*"] && Array.isArray(grids["*"].cards) ? structuredClone(grids["*"]) : fresh(ROOM_PRESETS.rclassic[1]()))
-      : homeStart(ctx.managed));
+    // (v3.0.2: ctx.key — the room page asked for, "*" every room's; Panels asks first which one, it no longer opens
+    // every room's with the first room on it as if that room were picked)
+    const rooms = ctx.rooms || [], key = ctx.room && rooms.some((r) => r.id === ctx.key) ? ctx.key : "*";
+    const g = toFine(ctx.room ? roomStart(grids, key) : homeStart(ctx.managed));
     // (the room bar's style, names and auto-hide too: what the canvas draws is what the wall shows)
     const m = ctx.managed, dockStyle = (M.DOCK_STYLES || []).some(([k]) => k === m.dockStyle) ? m.dockStyle : "pill";
     const look = { theme: m["look.theme"] || "purple", background: m["look.background"] || "mountains", dockStyle,
       dockLabels: typeof m.dockLabels === "boolean" ? m.dockLabels : dockStyle !== "rail", dockAutoHide: m.dockAutoHide === true };
     st = { g, sel: null, ctx, gs: null, dirty: false, mode: "arrange", rect: null, sig: "", cams: [], pics: [], bgs: [], cards: [], look, look0: { ...look }, open: new Set(["shows"]),
-      grids, key: "*", view: ctx.room ? ((ctx.rooms || [])[0] || {}).id || "" : "home", edited: new Set(),
+      grids, key, view: ctx.room ? (key !== "*" ? key : (rooms[0] || {}).id || "") : "home", edited: new Set(),
       snap: (() => { try { return localStorage.getItem("bld.snap") !== "0"; } catch { return true; } })(),
       hist: new Map(), base: "", touched: false, orig: new Map(), saved: ctx.room ? structuredClone(ctx.managed.roomGrids || {}) : null };
-    st.base = snap();
+    st.base = snap(); remember();
+    // (v3.0.2: "An empty page": no cards, the grid as it was — a change (unsaved, Undo brings back what it was); the
+    // page it was is kept as the one to compare with)
+    if (ctx.room && ctx.start === "empty" && g.cards.length) {
+      st.g = { ...toFine({ v: 1, cols: 12, rows: 8, gap: 14, cards: [] }), ...(g.scr ? { scr: g.scr } : {}) };
+      st.touched = true; st.edited.add(key); record();
+    }
     M.cardList().then((l) => { if (!st) return; st.cards = l; palette(); side(); notes(); }).catch(() => {});
     loadTpls();
     // (camera and picture lists for the pickers; the editor works without them)
@@ -470,19 +483,22 @@
     if (st.touched && roomDiffers(st.key)) st.grids[st.key] = st.g;
     else if (st.touched) { if (st.saved[st.key] == null) delete st.grids[st.key]; else st.grids[st.key] = st.saved[st.key]; st.edited.delete(st.key); }
     st.key = key; st.touched = false;
-    const own = st.grids[key], every = st.grids["*"];
-    st.g = toFine(structuredClone(own && Array.isArray(own.cards) ? own : every && Array.isArray(every.cards) ? every : { v: 1, cols: 12, rows: 8, gap: 14, cards: ROOM_PRESETS.rclassic[1]() }));
+    st.g = toFine(roomStart(st.grids, key));
     if (key !== "*") st.view = key;
     st.sel = null; st.base = snap(); draw(); remember();
   }
+  // (v3.0.2) the line that says it in words: "Editing: Kitchen only" / "Editing: every room — showing Kitchen as an example"
+  const editWhat = () => (st.key === "*" ? (st.view ? Kit.t("builder.room.nowEvery", { room: roomName(st.view) }) : Kit.t("builder.room.nowEveryAlone")) :Kit.t("builder.room.nowOne", { room: roomName(st.key) }));
+  const syncWhat = () => { const w = $(".bld-editwhat"); if (w) { w.textContent = editWhat(); w.title = editWhat(); } };
   function roomPicker() {
     const rooms = (st.ctx.rooms || []).map((r) => [r.id, (st.grids[r.id] ? Kit.t("builder.room.itsOwn", { room: r.name }) : r.name)]);
     const pick = pickRoom;
     return el("div.bld-roompick", {},
-      el("label.bld-f", {}, Kit.t("builder.room.editing"), el("select", { onchange: (e) => pick(e.target.value) },
+      el("b.bld-editwhat", { role: "status", title: editWhat() }, editWhat()),
+      el("label.bld-f", {}, el("select", { "aria-label": Kit.t("builder.room.editing"), onchange: (e) => pick(e.target.value) },
         el("option", { value: "*", selected: st.key === "*" }, Kit.t("builder.room.every")),
         el("optgroup", { label: Kit.t("builder.room.aRoomsOwn") }, rooms.map(([id, n]) => el("option", { value: id, selected: st.key === id }, n))))),
-      st.key === "*" ? el("label.bld-f.bld-showwith", {}, Kit.t("builder.room.shownWith"), el("select", { onchange: (e) => { st.view = e.target.value; post(); } },
+      st.key === "*" ? el("label.bld-f.bld-showwith", {}, Kit.t("builder.room.shownWith"), el("select", { onchange: (e) => { st.view = e.target.value; syncWhat(); post(); } },
         rooms.map(([id, n]) => el("option", { value: id, selected: st.view === id }, n)))) : null,
       st.key !== "*" && (st.grids[st.key] || st.edited.has(st.key)) ? el("button.ghost.small", { type: "button", title: Kit.t("builder.room.useEveryTip"),
         onclick: async () => {   // (then the screen shows every room's layout, with this room — this room's own is gone)
@@ -581,7 +597,8 @@
       el("button.btn.bld-discard", { type: "button", title: Kit.t("builder.top.discardTip"), onclick: discard }, Kit.t("builder.top.discard")),
       el("button.btn.pri.bld-save", { type: "button", title: Kit.t("builder.top.saveTip"), onclick: saveIt }, Kit.t("builder.top.save")));
     // the panel's own page, live, in demo mode (design.js) — the handles (gridstack) sit on top of it
-    const id = st.ctx.panel.id, src = `${st.ctx.panel.address || (String(id).toLowerCase() === "main" ? "/" : `/${encodeURIComponent(id)}`)}?design=1`;
+    // (v3.0.2: no built-in "main" at / any more — / is the pairing page; every panel has its own address)
+    const id = st.ctx.panel.id, src = `${st.ctx.panel.address || `/${encodeURIComponent(id)}`}?design=1`;
     // (Arrange: the frame is no Tab stop — Tab goes from the cards to the settings, not through 60 panel buttons; Try it: it is)
     const frame = el("iframe.bld-frame", { src, title: Kit.t("builder.frame.title"), tabindex: st.mode === "try" ? null : "-1" });
     const over = el("div.bld-over");
@@ -609,7 +626,8 @@
   // the page's own settings (the right side while no card is selected): what it starts from, the grid, the panel's look
   function pagePanel() {
     const g = st.g;
-    const themes = Object.entries(window.THEMES || {}).map(([k, t]) => [k, t.name || k]);
+    const themes = [...Object.entries(window.THEMES || {}).map(([k, t]) => [k, t.name || k]),
+      ...(st.look0.theme === "custom" ? [["custom", Kit.t("panels.look.custom")]] : [])];   // (v3.0.2: the owner's own colour — picked on Look & layout)
     const bgSel = bgOptions(el("select.bld-bgsel", { "aria-label": Kit.t("builder.look.background"), onchange: (e) => setLook({ background: e.target.value }) }));
     const sec2 = (title, ...rows) => el("div.bld-psec", {}, el("h4", {}, title), ...rows.filter(Boolean));
     const line = (label, ctl, cls = "") => el(`label.bld-f.bld-pl${cls}`, {}, el("span", {}, label), ctl);
@@ -883,7 +901,7 @@
       if (st.view === id) return;
       st.view = id; st.dockKeep = null;
       const s = document.querySelector(".bld-showwith select"); if (s) s.value = id;
-      post();
+      syncWhat(); post();
       return;
     }
     if (id === st.key) { st.dockKeep = null; return; }
@@ -1862,7 +1880,8 @@
       (o.max ?? 100) <= (o.min ?? 0) ? el("small.bld-note", {}, Kit.t("builder.gauge.bad")) : null);
     if (c.t === "roomdevs") {
       what.push(row(Kit.t("builder.f.shows"), el("select", { onchange: (e) => set("show", e.target.value) }, optList([["lights", Kit.t("builder.dev.lights")], ["switches", Kit.t("builder.roomdevs.switches")], ["fans", Kit.t("builder.roomdevs.fans")], ["shades", Kit.t("builder.roomdevs.shades")], ["all", Kit.t("builder.roomdevs.all")]], o.show || "all"))));
-      what.push(row(Kit.t("builder.look.title"), seg([["list", Kit.t("builder.todo.list")], ["tiles", Kit.t("builder.roomdevs.tiles")]], o.look || "list", (v) => set("look", v))));
+      // (v3.0.2: "Orbs" — Room Layout G's light orbs: grid.js)
+      what.push(row(Kit.t("builder.look.title"), seg([["list", Kit.t("builder.todo.list")], ["tiles", Kit.t("builder.roomdevs.tiles")], ["orbs", Kit.t("builder.roomdevs.orbs")]], o.look || "list", (v) => set("look", v))));
       what.push(el("small.muted", {}, Kit.t("builder.roomdevs.note")));
     }
     if (c.t === "roomhead") what.push(row(Kit.t("builder.roomhead.allOnOff"), el("label.switch", {}, el("input", { type: "checkbox", checked: o.allOff !== false, onchange: (e) => set("allOff", e.target.checked ? null : false) }), el("span"))),

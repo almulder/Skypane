@@ -63,8 +63,8 @@
   let shownHtml = "";
   UI.refreshPopup = () => {
     if (!current) return;
-    const { title, body, wide } = current();
-    const html = `<div class="popup glass ${wide ? "wide" : ""}" role="dialog" aria-modal="true" aria-labelledby="popup-title" tabindex="-1"><div class="popup-head"><h2 id="popup-title">${esc(title)}</h2>
+    const { title, body, wide, cls } = current();   // (v3.0.2: cls — a pop-up's own class; .popup:has() needs Chrome 105, older FreeKiosk WebViews don't)
+    const html = `<div class="popup glass ${wide ? "wide" : ""}${cls ? ` ${cls}` : ""}" role="dialog" aria-modal="true" aria-labelledby="popup-title" tabindex="-1"><div class="popup-head"><h2 id="popup-title">${esc(title)}</h2>
       <button class="popup-x" aria-label="${esc(T("common.close"))}"${Acts.on("ui.close")}>${icon("x", 26)}</button></div><div class="popup-body">${body}</div></div>`;
     // (nothing in it changed: left alone — a rebuild every few seconds could swallow a press landing on it)
     if (html === shownHtml && host.firstElementChild) return;

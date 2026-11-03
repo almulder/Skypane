@@ -63,6 +63,10 @@ class Child:
         self.config_exit = config_exit   # exit code 2 = a setting is wrong / missing: not restarted (it would only repeat)
         self.env = dict(env) if env is not None else {k: v for k, v in os.environ.items() if k not in drop_env}
         self.env["PYTHONIOENCODING"] = "utf-8"
+        if len(argv) > 1 and argv[1] == "-I" and "utf8" not in argv[:4]:
+            # (v3.0.2: -I ignores PYTHONIOENCODING — on Windows a child printing "→" crashed with cp1252 and was
+            # restarted in a loop; -X utf8 is an option, not the environment, so it holds under -I too)
+            self.argv = [argv[0], "-I", "-X", "utf8", *argv[2:]]
         self.wait_for = wait_for  # a file that must exist before the child starts (go2rtc: its config)
         self.restarting = False   # set by restart(): the next exit is planned, no backoff
         self.started_with = None  # wait_for's state (mtime, size) when the child last started
@@ -278,7 +282,9 @@ def main():
                 # the bridge builds the house model from Hubitat (rooms, devices, locks…) into house/hubitat-data.js and
                 # allows every device the panels show, minus the main panel's "never switch" list (stage 3)
                 "--house-dir", str(DATA_DIR / "house"),
-                "--panel-file", str(DATA_DIR / "panels" / "main.json")]
+                "--panel-file", str(DATA_DIR / "panels" / "main.json"),
+                # (v3.0.2) the rule's own file since pairing removed the main panel (the panel file: until it exists)
+                "--rule-file", str(DATA_DIR / "house" / "switch-rule.json")]
         allow_file = DATA_DIR / "house" / "bridge-allow.txt"
         if allow_file.is_file():  # stage 2's copied list: not used any more (it would add devices back) - delete it
             say("run_all", f"{allow_file} is not used any more (the house model decides what may be switched) - you can delete it")

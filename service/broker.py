@@ -22,9 +22,17 @@ import pathlib
 import secrets
 import subprocess
 
-INTERNAL_PORT = 1884
-LAN_PORT = 1883
-WS_PORT = 9001
+
+def _port(var, default):
+    """(v3.0.2) A listener's port from the environment (testers running several copies side by side), else the default.
+    Only for test runs: the pages expect the WebSocket on 9001 and the devices are told 1883."""
+    v = (os.environ.get(var) or "").strip()
+    return int(v) if v.isascii() and v.isdecimal() and 1 <= int(v) <= 65535 else default
+
+
+INTERNAL_PORT = _port("SKYPANE_MQTT_INTERNAL_PORT", 1884)
+LAN_PORT = _port("SKYPANE_MQTT_LAN_PORT", 1883)
+WS_PORT = _port("SKYPANE_MQTT_WS_PORT", 9001)
 USERS = {"internal": "internal", "devices": "devices", "ws": "panel", "observer": "observer"}
 # which logins each listener takes (its password file / access list): the internal port also has the read-only
 # "observer" (the guest Wi-Fi child: it only watches which guest modes are on)
@@ -50,6 +58,7 @@ ACL = {
         "topic read dashboard/panel/+/changed",
         # (the service's other announcements: cards added / changed, a performance test, the shared lists)
         "topic read dashboard/cards/changed", "topic read dashboard/panel/+/perftest", "topic read dashboard/panel/+/bench", "topic read dashboard/lists/changed",
+        "topic read dashboard/calendars/changed",   # (the house's calendars changed / new events fetched: data.js loads them again)
     ],
 }
 

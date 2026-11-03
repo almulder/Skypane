@@ -245,6 +245,7 @@
     railBuilt = true;
     const item = (p) => el("button.rn", { type: "button", "data-page": p.key, "aria-label": p.title }, ic(p.icon, 19), el("span.fade", {}, p.title),
       p.key2 ? el("kbd.fade", {}, p.key2) : null);
+    setTimeout(paintBadges, 0);
     const grp = (g, cls, head) => {
       const its = [...PAGES.values()].filter((p) => gOf(p) === g && !p.hidden).map(item);
       return el("div.rgrp" + (cls || ""), { "data-group": g }, head, its);
@@ -254,6 +255,22 @@
       grp("admin", ".radm", el("div.rgh", {}, el("span.adm", { "aria-hidden": "true" }, K.t("shell.rail.adminBadge")), el("span.fade", {}, K.t("shell.group.admin")), el("span.tag-a.fade", {}, K.t("shell.rail.adminOnly")))),
       el("div.sp"), el("div.rfoot", {}, [...PAGES.values()].filter((p) => p.group === "foot").map(item)));
     showNav();
+  }
+  // (v3.0.2) a count on a rail item — Panels: the unread pairing notices and the tablets waiting (pairing.js). badge(key,
+  // n, words): 0 takes it away; the words are its name for a screen reader and its tooltip
+  const badges = new Map();
+  function badge(key, n, words) {
+    if (n > 0) badges.set(key, [n, words || ""]); else badges.delete(key);
+    paintBadges();
+  }
+  function paintBadges() {
+    for (const b of rail.querySelectorAll(".rn[data-page]")) {
+      const [n, words] = badges.get(b.dataset.page) || [0, ""], old = b.querySelector(".rbadge");
+      if (old) old.remove();
+      const page = PAGES.get(b.dataset.page);
+      b.setAttribute("aria-label", n && page ? `${page.title} · ${words}` : page ? page.title : b.getAttribute("aria-label"));   // i18n-ok (two page words)
+      if (n) b.append(el("span.rbadge", { "aria-hidden": "true", title: words }, n > 99 ? "99+" : String(n)));   // i18n-ok
+    }
   }
   // only the pages this login may open (the server refuses the rest anyway); a group with none left goes too
   function showNav() {
@@ -806,7 +823,7 @@
   M.refreshMenu = () => { showNav(); drawAvatar(); };
   window.Shell = { page, go, reload, sync, start, stop, permsChanged, allowed, firstPage, isPhone, setTheme, setPinned, view, setView, viewSwitch, appearance,
     openPop, closePops, healthSlot, topItem, fitTop, flushPrefs, route: () => ({ page: cur.page, rest: cur.rest.slice() }), prefs: () => ({ ...prefs, views: { ...prefs.views } }),
-    savePrefs, COLORS,
+    savePrefs, COLORS, badge,
     // (v2.8.0, phone.js) the route changes; the pages with their titles, groups and icons (the phone's More list)
     onRoute: (f) => routeFns.push(f),
     topItems: () => topItems.filter((t) => t.node.isConnected).map(({ label, icon, run, group, external }) => ({ label, icon, run, group, external })),   // (the phone's More lists them)

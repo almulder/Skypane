@@ -75,6 +75,8 @@ def _flags(key_rx, limit):
 COLOR = r"#[0-9a-fA-F]{6}"
 # the colour themes (dashboard/layouts/v4/shared/themes.js)
 THEMES = ("purple", "blue", "teal", "rose", "amber", "green", "midnight", "ocean", "sunset", "forest", "graphite", "crimson")
+# (v3.0.2) "custom": the owner's own colour — Purple turned to look.hue (0–359; themes.js themeFromHue, CUSTOM_HUE there too)
+CUSTOM_HUE = 200
 VIEW_ID = r"[A-Za-z0-9_.:-]{1,80}"
 
 
@@ -182,7 +184,10 @@ def _inside(v):
 
 
 def _url(v):
-
+    if isinstance(v, str):   # (v3.0.2: "192.168.1.20" was refused — a bare address gets its http://)
+        v = v.strip()
+        if v and not re.match(r"[A-Za-z][A-Za-z0-9+.-]*://", v) and re.fullmatch(r"[A-Za-z0-9.\[\]:-]{1,253}(/[^\s\"'<>\\`]*)?", v):
+            v = "http://" + v
     if not isinstance(v, str) or (v and not re.fullmatch(r"""https?://[^\s"'<>\\`]{1,300}""", v)):
         raise Invalid("an address like http://192.168.1.50/ (or empty)")
     return v
@@ -245,7 +250,8 @@ PATHS = {
     "roomOrder": _room_order,                     # the room buttons' order (room ids)
     "arrangeOnPanel": _bool,                      # also press-and-hold arranging on the panel itself
     "ledStrip": _bool,                            # the tablet has our LED strip (panel agent)
-    "look.theme": _one_of(*THEMES),
+    "look.theme": _one_of(*THEMES, "custom"),
+    "look.hue": _int(0, 359),                     # (v3.0.2) theme "custom"'s colour on the colour wheel
     "look.background": _pattern(r"mountains|lake|desert|forest|coast|city|hills|peaks|canyon|tropical|dunes|up:[0-9a-f]{16}", "a background"),
     "look.sky": _one_of("on", "still", "off"),
     "look.skyColors": _one_of("theme", "real"),
@@ -309,7 +315,7 @@ ADMIN_ONLY = ("alertMinLevel", "quietFrom", "quietTo", "quietModes", "quietLevel
 # (the room page hides devices too; the weather effects stay the panel's own too)
 # (the order of rooms / devices too: the panel can still arrange on the wall)
 PANEL_LOCKED = tuple(p for p in PATHS if p not in ("guest.show", "hiddenDevices", "effects.maxLoad", "deviceOrder", "roomOrder",
-                                                   "look.theme", "roomLayout", "look.background", "look.sky", "look.skyColors",
+                                                   "look.theme", "look.hue", "roomLayout", "look.background", "look.sky", "look.skyColors",
                                                    "effects.place", "homeAfter"))   # (the panel's own Settings set these too)
 
 
@@ -318,7 +324,7 @@ PANEL_LOCKED = tuple(p for p in PATHS if p not in ("guest.show", "hiddenDevices"
 # what each setting is called on the Manager's pages (refusals name it like this, never by its id)
 LABELS = {"panelName": "Name", "language": "Language", "kioskName": "FreeKiosk device name", "hiddenRooms": "Hidden rooms", "hiddenDevices": "Hidden devices",
           "extraDevices": "Devices from other rooms", "deviceOrder": "Device order", "roomOrder": "Room order",
-          "arrangeOnPanel": "Arrange on the panel", "ledStrip": "LED strip", "look.theme": "Theme", "look.background": "Background",
+          "arrangeOnPanel": "Arrange on the panel", "ledStrip": "LED strip", "look.theme": "Theme", "look.hue": "Custom colour", "look.background": "Background",
           "look.sky": "Animated sky", "look.skyColors": "Sky colours", "effects.place": "Weather effects", "homeLayout": "Home layout",
           "homeGrid": "Home layout", "roomLayout": "Room layout", "roomGrids": "Room layouts", "roomLayouts": "Room layouts",
           "dockAt": "Room bar", "dockOff": "Room bar hidden", "dockStyle": "Room bar style",
@@ -450,13 +456,14 @@ THUMB_CARDS = 60   # (a page holds at most 60 cards: layouts.py)
 
 def thumbnail(settings):
     """What the Manager draws a panel's small map from (v2.5.0, Panels → Status: the cards as blocks in the panel's
-    theme, the room bar on its edge — the decision 3, no screenshots): {theme, background, layout, dockAt,
+    theme, the room bar on its edge — the decision 3, no screenshots): {theme, hue (v3.0.2: theme "custom"'s), background, layout, dockAt,
     dockOff, dockStyle, grid: {cols, rows, scr: {w, h}?, cards: [[x, y, w, h, type, flags]…]} or None} — flags: "s" a
     camera as a still, "i" as an icon, "a" an animated drawing (the load estimate). Only shapes and names of kinds —
     nothing a card shows (no device, no text, no picture)."""
     m = managed(settings)
     pick = lambda v, ok, d: v if v in ok else d  # noqa: E731
-    out = {"theme": pick(m["look.theme"], THEMES, "purple"),
+    out = {"theme": pick(m["look.theme"], THEMES + ("custom",), "purple"),
+           "hue": m["look.hue"] if isinstance(m["look.hue"], int) and not isinstance(m["look.hue"], bool) and 0 <= m["look.hue"] <= 359 else CUSTOM_HUE,
            "background": m["look.background"] if isinstance(m["look.background"], str)
            and re.fullmatch(r"[a-z]{1,20}|up:[0-9a-f]{16}", m["look.background"]) else "mountains",
            "layout": pick(m["homeLayout"], ("classic", "agenda", "duo", "security", "minimal", "custom"), "classic"),

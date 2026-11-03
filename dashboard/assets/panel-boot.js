@@ -9,5 +9,5 @@
   let b = {};
   try { b = JSON.parse(n.textContent) || {}; } catch { return; }
   // (PANEL_LOCKDOWN, v2.7.2: guest lockdown for this panel — layouts/v4/shared/guestlock.js)
-  for (const k of ["PANEL", "PANEL_CONFIG", "PANEL_DESIGN", "PANEL_LIVE", "PANEL_LOCKDOWN"]) if (Object.prototype.hasOwnProperty.call(b, k)) window[k] = b[k];
+  for (const k of ["PANEL", "PANEL_CONFIG", "PANEL_DESIGN", "PANEL_LIVE", "PANEL_LOCKDOWN", "PANEL_DEVICE_KEY"]) if (Object.prototype.hasOwnProperty.call(b, k)) window[k] = b[k];
 })();

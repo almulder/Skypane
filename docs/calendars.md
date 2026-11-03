@@ -15,8 +15,9 @@ Until you add one, the panels show sample events (the Manager says so).
 5. Each panel shows every house calendar to begin with. To choose per panel: Manager → **Panels** → the panel →
    **People & calendars** — switch a calendar off there, or give it this panel's own colour or icon.
 
-The panels check for changes every few minutes; the server reads each link every 10 minutes. **Check now** reads it at
-once. **Replace** puts in a new link (for example after you reset it). **Remove** only takes it off the panels — your
+The panels check for changes every few minutes; the server reads each link every 10 minutes (**Check for changes every**
+5 / 10 / 15 / 30 min, under the list; Google's own feed can take a few hours to show a change either way). **Check now**
+reads one at once; **Check calendars now** reads them all (at most once a minute) and says what it found. **Replace** puts in a new link (for example after you reset it). **Remove** only takes it off the panels — your
 calendar itself isn't touched (adding it again later starts fresh: the panels' old choices for it don't come back).
 Everything on the Calendars card saves at once — no need for "Save and restart".
 
@@ -84,7 +85,7 @@ The Calendars card shows the last problem in plain words. The panels keep showin
 | *points into the local network* | Only calendars on the internet can be added (a safety rule). |
 | *must start with https:// or webcal://* | Plain `http://` links aren't accepted. Most providers give an https / webcal one. |
 | *too big (more than 2 MB)* | A very large calendar — split it, or use a smaller one. |
-| *took too long* / *couldn't connect* | Usually passes by itself; it's tried again every 10 minutes. |
+| *took too long* / *couldn't connect* | Usually passes by itself; it's tried again at the next check (every 10 minutes unless you picked otherwise). |
 
 ## Technical notes (for whoever maintains it)
 

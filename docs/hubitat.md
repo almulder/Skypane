@@ -27,8 +27,8 @@ and signed in ([install-unraid.md](install-unraid.md) or [install-docker.md](ins
 ## 2. Tell Skypane
 
 1. Skypane Manager on a computer → sidebar → **Admin → Integrations** → **Home hub**.
-2. Fill in **Hub address** (`192.168.1.10`) and **Maker API app number** (`123`). For **Maker API token** press
-   **Set…**, paste the token and press **Keep it for saving**.
+2. Fill in **Hub address** (`192.168.1.10` — just the IP is fine, `http://` is added for you) and **Maker API app
+   number** (`123`). For **Maker API token** press **Set…**, paste the token and press **Keep it for saving**.
 3. Set **General → Time zone** to yours (e.g. `America/New_York`).
 4. Press **Save and restart** (the bar at the bottom). The page shows **Restarting — back in a few seconds** and
    reloads by itself when Skypane is back (usually within a few seconds).
@@ -51,19 +51,22 @@ tried an earlier Skypane, remove the old Notifier first. ⚠ Any rule that sends
 until you point it at the new one, so first open the old device → **In use by** and note those rules. Then **Devices**
 → the old *Skypane Notifier* → **Remove Device**, and **Drivers Code** → the old driver → **Delete**.
 
-1. Hubitat → **Drivers Code → + New Driver** → **Import** → paste this address, with your Skypane's address in it →
-   **Import** → **Save**:
+1. Hubitat → **Drivers Code → + New Driver** → **Import** → paste the address below → **Import** → **Save**.
 
-   `http://192.168.1.50/hubitat/SkypaneNotifier.groovy` (with Docker: `http://<address>:8088/hubitat/SkypaneNotifier.groovy`)
+   It's the same address you open the Manager with, without `/admin`, followed by `/hubitat/SkypaneNotifier.groovy` —
+   e.g. `http://192.168.1.50/hubitat/SkypaneNotifier.groovy` on Unraid, or
+   `http://192.168.1.20:8088/hubitat/SkypaneNotifier.groovy` with Docker.
 
-   Skypane serves the driver itself, so it always matches your version. If Import doesn't work, open that address in a
-   browser, select everything, copy it, and paste it into the new driver instead.
+   Skypane serves the driver itself, so it always matches your version. If Import says *Failed to fetch* (or doesn't
+   work), open that address in your browser, copy everything on the page and paste it into the **New Driver** box
+   instead.
 2. **Devices → Add Device → Virtual** → **Device Name:** `Skypane`, **Type:** *Skypane Notifier* (under the
    `skypane` namespace) → **Save Device**.
 3. **Apps → Maker API** → tick the new **Skypane** device → **Done**. Skypane needs it there so that a dismissal on a
    panel reaches Hubitat, and so it can ask for the alerts again after a restart.
 4. Test it: open the **Skypane** device in Hubitat, type `Test` in the box next to **Info** and press **Info**. Within a
-   few seconds every panel shows a short note "Test" (it goes away by itself after a minute).
+   few seconds every panel shows a short note "Test" (it goes away by itself after a minute). No panel set up yet?
+   The Manager's **Overview** lists alerts that are waiting, so you can check it there too.
 
 (Screenshot: Hubitat's Add Device with Type *Skypane Notifier*; the "Test" note on a panel.)
 

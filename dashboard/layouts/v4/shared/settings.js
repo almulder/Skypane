@@ -9,7 +9,8 @@
     black: { name: "Black", rgb: "6,6,10" }, plum: { name: "Plum", rgb: "48,18,52" }, slate: { name: "Slate", rgb: "40,48,62" } };
   const LOOK_DEFAULTS = { theme: "purple", background: "mountains", cardAlpha: 0.72, cardTint: "theme",
     clockStyle: "thin", clockFont: "system", clockScale: 1.12, uiFont: "system", uiScale: 1,
-    sky: "on", skyColors: "theme" };   // the animated sky (off behind an own picture without a sky); theme / realistic colours
+    sky: "on", skyColors: "theme", hue: 200 };   // the animated sky (off behind an own picture without a sky); theme / realistic colours
+                                                 // (v3.0.2: hue — theme "custom"'s colour, 0–359: themes.js themeFromHue)
   const DEFAULTS = {
     look: LOOK_DEFAULTS,
     volume: { speech: 0.8, sounds: 0.5, alerts: 0.9 },
@@ -19,7 +20,7 @@
     effects: { mode: "live", cycle: false, offUntil: 0, disabled: {}, maxLoad: 0, place: "front" },   // place: in front of / behind the Home cards
     ledBrightness: 0.8, childLock: false, autoLock: { on: false, minutes: 15 },
     ledStrip: false,         // this tablet has our LED strip (panel agent); false = never send it anything (round 2: a new
-                             // panel starts without — the kitchen panel "main", saved before, keeps it: load() below)
+                             // panel starts without; v3.0.2: no "main" exception any more — it's set per panel)
     insideSensor: "panel",   // inside temperature / humidity: "panel" (this tablet's sensors), a Hubitat device id, "none"
 
     alertBeeps: true, allowUnlock: false,
@@ -69,12 +70,12 @@
     let v; try { v = merge(DEFAULTS, window.PanelStore ? PanelStore.get("settings") : null); } catch { v = structuredClone(DEFAULTS); }
     // (the panel's own alert rules are gone — Hubitat makes them: their old saved settings are dropped quietly)
     for (const k of OLD_KEYS) delete v[k];
-    // (the LED strip was "on" by default until round 2: the kitchen panel's saved settings without the word keep it)
-    try { const s = window.PanelStore && PanelStore.get("settings"); if (s && typeof s === "object" && !("ledStrip" in s) && PanelStore.id.toLowerCase() === "main") v.ledStrip = true; } catch {}
     // first run: show the house's presence people (a location app's device per person: "Phone - John" → "John") — not the
     // room-presence sensors that report "present" too (mmWave, motion / occupancy)
-    const NOT_PERSON = /presence sensor|mm-?wave|motion|occupan|radar|fp[12]/i;
-    if (!v.people.length) v.people = (window.HUBITAT?.presence || []).filter((p) => !NOT_PERSON.test(`${p.label} ${p.type}`)).slice(0, 8)
+    const NOT_PERSON = /presence sensor|mm-?wave|motion|occupan|radar|\bfp[12]\b/i;
+    // (v3.0.2: only when no list was ever saved — everyone switched off is a list too, and used to bring them all back)
+    let saved = null; try { saved = window.PanelStore && PanelStore.get("settings"); } catch {}
+    if (!(saved && typeof saved === "object" && Array.isArray(saved.people))) v.people = (window.HUBITAT?.presence || []).filter((p) => !NOT_PERSON.test(`${p.label} ${p.type}`)).slice(0, 8)
       .map((p, i) => ({ id: p.id, name: personName(p.label), color: ["#8b5cf6", "#ec4899", "#22d3ee", "#f59e0b"][i % 4], image: null }));
     return v;
   };
@@ -106,7 +107,9 @@
     else St.render();
   });
 
-  const theme = () => (window.THEMES || {})[St.v.look.theme] || { led: [139, 92, 246] };
+  // (v3.0.2: themes.js themeOf — one of the 12, or "custom": Purple turned to look.hue)
+  const lookTheme = (look) => (window.themeOf ? window.themeOf(look.theme, look.hue) : (window.THEMES || {})[look.theme]);
+  const theme = () => lookTheme(St.v.look) || { led: [139, 92, 246] };
   St.ledColor = () => theme().led;
   St.go2rtc = () => BUILTIN_GO2RTC || St.v.cameras.go2rtc || "";
 
@@ -115,7 +118,7 @@
   St.lightSky = false;
   St.skyLight = (on) => { if (St.lightSky === !!on) return; St.lightSky = !!on; St.applyLook(St.draft && St.open ? St.draft : St.v.look); };
   St.applyLook = (look = St.v.look) => {
-    const t = (window.THEMES || {})[look.theme];
+    const t = lookTheme(look);
     if (t && window.applyThemeVars) applyThemeVars(t);
     const root = document.documentElement.style;
     const rgb = look.cardTint === "theme" ? (t ? t.glass.join(",") : "30,20,64") : TINTS[look.cardTint].rgb;
@@ -203,7 +206,7 @@
   // the unlock window ran out (nobody touched the screen): Settings locks — it closes and asks again next time
   // ("after no input … it would then relock and return to home screen")
   PinPad.onLock(() => { if (St.open && St.unlocked) { St.hide(); if (window.App) App.go("home"); } });
-  // The panel PIN (one for the whole house, set on the main panel) guards Settings. It's checked by the dashboard
+  // The panel PIN (one for the whole house: set on any panel, or by an admin in the Manager — v3.0.2) guards Settings. It's checked by the dashboard
   // service (/api/pin), never here. No PIN set yet → Settings open as before, with a hint to set one.
   const pinApi = async (body) => {
     const r = await fetch("/api/pin", body ? { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : { cache: "no-store" });
@@ -284,7 +287,9 @@
     };
     const ask = async (p) => { try { return await pinApi({ action: "mqtt-login", pin: p }); } catch { return { ok: false, error: "down" }; } };
     const p0 = PinPad.unlocked();
-    let r = p0 ? await ask(p0) : null;
+    // (v3.0.2: ask even without a PIN in hand — with none set the server says "unset" before checking one, so the page
+    // says "set a PIN first" instead of a PIN pad for a PIN that doesn't exist)
+    let r = await ask(p0 || "");
     if (r && r.ok) return show(r);
     if (r && r.error === "unset") return PinPad.confirm({ title: T("set.mqttLogin"), text: T("set.mqttNeedPin"), yes: T("common.ok") });
     let got = null;
@@ -296,7 +301,7 @@
     } });
     if (got) show(got);
   };
-  // set / change the panel PIN (main panel): current PIN (if set), then the new one twice
+  // set / change the panel PIN (any panel, v3.0.2): current PIN (if set), then the new one twice
   St.changePin = async () => {
     const st = await pinApi().catch(() => null);
     if (!st || st.status !== 200) return PinPad.confirm({ title: T("set.pinTitle"), text: T("set.serviceDownShort"), yes: T("common.ok") });
@@ -343,15 +348,22 @@
     const b = (k) => `<b>${escH(T(k))}</b>`;
     return `<div class="set-grid one"><section><h3>${escH(T("set.mgr.title"))}</h3>
       <p>${T.html("set.mgr.text", { url: `<b>${escH(url)}</b>`, panels: b("set.mgr.panels"), devices: b("set.mgr.devices"), guest: b("set.mgr.guest"), integrations: b("set.mgr.integrations") })}</p>
-      <small class="muted">${escH(T("set.mgr.thisPanel", { id: window.PanelStore ? PanelStore.id : "main", kiosk: H.kiosk ? H.kiosk() : "" }))}</small>
+      <small class="muted">${escH(T("set.mgr.thisPanel", { id: window.PanelStore ? PanelStore.id : "", kiosk: H.kiosk ? H.kiosk() : "" }))}</small>
       </section></div>`;
   }
+
+  // (v3.0.2: the owner's own colour after the 12 — a rainbow button; picked, it shows its colour and a hue slider under
+  // the swatches: the button follows the drag, the draft takes it on release)
+  const hueGrad = (h) => { const g = window.themeFromHue ? themeFromHue(h).grad : ["#a78bfa", "#7c3aed"]; return `linear-gradient(135deg,${g[0]},${g[1]})`; };
+  const RAINBOW = "#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00";
+  const customSw = (d) => `<button class="sw sw-custom ${d.theme === "custom" ? "cur" : ""}" style="background:${d.theme === "custom" ? hueGrad(d.hue) : `conic-gradient(${RAINBOW})`}" ${Acts.on("set.draft", "theme", "custom")}>${escH(T("theme.custom"))}</button>`;
+  const hueRow = (d) => `<div class="set-row">${escH(T("set.look.hue"))} <input type="range" class="hue-range" min="0" max="359" step="1" value="${+d.hue || 0}" aria-label="${escH(T("set.look.hue"))}" style="--thumb:${window.hueColour ? hueColour(d.hue) : "#8b5cf6"}"${Acts.attr("input", "set.hueLive", "hue")}${Acts.attr("change", "set.draftNum", "hue")}></div>`;
 
   function lookTab() {
     const d = St.draft, themes = window.THEMES || {}, bgs = window.BACKGROUNDS || [{ id: "mountains", name: "Mountains" }];
     return `<div class="set-grid three">
       <section><h3>${escH(T("set.look.colours"))}</h3>
-        <div class="set-row col">${escH(T("set.look.theme"))} <div class="swatches">${Object.entries(themes).map(([k, t]) => `<button class="sw ${d.theme === k ? "cur" : ""}" style="background:linear-gradient(135deg,${t.grad[0]},${t.grad[1]})" ${Acts.on("set.draft", "theme", k)}>${escH(T.named("theme", k, t.name))}</button>`).join("")}</div></div>
+        <div class="set-row col">${escH(T("set.look.theme"))} <div class="swatches">${Object.entries(themes).map(([k, t]) => `<button class="sw ${d.theme === k ? "cur" : ""}" style="background:linear-gradient(135deg,${t.grad[0]},${t.grad[1]})" ${Acts.on("set.draft", "theme", k)}>${escH(T.named("theme", k, t.name))}</button>`).join("")}${customSw(d)}</div></div>${d.theme === "custom" ? hueRow(d) : ""}
         <div class="set-row col">${escH(T("set.look.background"))} <div class="bgs">${bgs.map((b) => `<button class="bg ${d.background === b.id ? "cur" : ""}" ${Acts.on("set.draft", "background", b.id)}>${escH(T.named("bg", b.id, b.name))}</button>`).join("")}</div></div>
         <div class="set-row">${escH(T("set.look.cardAlpha"))} ${slider("cardAlpha", d.cardAlpha, 0.3, 0.95, 0.05, true)}</div>
         <div class="set-row col">${escH(T("set.look.cardTint"))} ${seg("cardTint", d.cardTint, Object.entries(TINTS).map(([k, t]) => [k, T.named("tint", k, t.name)]), true)}</div>
@@ -409,26 +421,8 @@
   St.personName = (id, name) => { St.v.people.find((p) => p.id === id).name = name; St.set("people", St.v.people); };
   St.personColor = (id) => { const cs = ["#8b5cf6", "#ec4899", "#22d3ee", "#f59e0b", "#34d399", "#f43f5e"], p = St.v.people.find((x) => x.id === id); p.color = cs[(cs.indexOf(p.color) + 1) % cs.length]; St.set("people", St.v.people); };
 
-  // Devices no panel may switch (the Hubitat bridge refuses them). Saved in the MAIN panel's settings as neverSwitch
-  // {id: true}; the bridge reads it from there. Until it's first changed, devices named like the sprinklers, a freezer,
-  // the server… are on it (the same names as house_model.KEEP_ON).
-  const isMain = () => !window.PanelStore || PanelStore.id.toLowerCase() === "main";
-  const KEEP_ON = /rainbird|sprinkler|irrigation|freezer|fridge|server|router|modem|aquarium|sump|valve|water main|shut-?off|garage door|garage opener|gate opener/i;
-  const switchables = () => [
-    ...H.state.rooms.flatMap((r) => r.devices.map((d) => ({ id: d.id, name: d.full, group: r.name, kind: d.kind }))),
-    ...H.state.locks.map((l) => ({ id: l.id, name: T("set.never.lock", { name: l.name }), group: T("set.never.locks") })),
-    ...(H.state.thermostat && H.state.thermostat.id != null ? [{ id: H.state.thermostat.id, name: H.state.thermostat.name, group: T("set.never.thermo") }] : [])];
+  // (v3.0.2: "What the panels may switch" is set in one place now — Manager → Devices; its popup here is gone)
   const escH = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-  const neverList = () => St.v.neverSwitch ||
-    // (the name rule only for plain room devices — not locks, the thermostat, or a valve / garage opener set up on purpose)
-    Object.fromEntries(switchables().filter((d) => d.kind && !["valve", "garage"].includes(d.kind) && KEEP_ON.test(d.name) && !/light/i.test(d.name)).map((d) => [d.id, true]));
-  St.toggleNever = (id) => { const n = { ...neverList() }; if (n[id]) delete n[id]; else n[id] = true; St.set("neverSwitch", n); UI.refreshPopup(); };
-  St.neverPopup = () => UI.popup(() => {
-    const never = neverList(), groups = new Map();
-    for (const d of switchables()) { if (!groups.has(d.group)) groups.set(d.group, []); groups.get(d.group).push(d); }
-    return { title: T("set.never.title"), body: `<div class="sensor-list">${[...groups].map(([g, ds]) => `<div class="label" style="margin-top:8px">${escH(g)}</div>
-      ${ds.map((d) => `<div class="set-row small">${escH(d.name)}<button class="switch ${never[d.id] ? "" : "on"}" ${Acts.on("set.toggleNever", d.id)}></button></div>`).join("")}`).join("")}</div>` };
-  });
   // a room page's "Room options" (list style): which of the room's devices this panel shows — behind the panel PIN
   // like Settings (the general window); closes when that window relocks
   let roomOpts = false;
@@ -444,7 +438,7 @@
       <span class="pn">${escH(d.name)}<br><small class="muted">${escH(d.full)}</small></span><button class="switch ${St.v.hiddenDevices[d.id] ? "" : "on"}" ${Acts.on("set.toggleDevice", d.id)}></button></div>`).join("")}</div>` : "";
     // what each device IS (type, room, PIN rule, fan type, picture) is set for the whole house on the Manager page
     // (stage 4: /admin, from a laptop or phone); here only what this panel shows
-    const manage = isMain() ? `<small class="muted" style="display:block;margin-top:12px">${T.html("set.dev.manage", { url: `<b>http://${escH(location.host)}/admin</b>` })}</small>` : "";   // i18n-ok (the address)
+    const manage = `<small class="muted" style="display:block;margin-top:12px">${T.html("set.dev.manage", { url: `<b>http://${escH(location.host)}/admin</b>` })}</small>`;   // i18n-ok (the address)
     return { title: r ? T("set.dev.title", { room: name }) : T("set.dev.noRoom"), body: `${show}${manage}` };
   }, onClose);
   // only "which devices are shown" is saved — never the rest of this page's settings (a look being tried, an edit not
@@ -472,10 +466,10 @@
         <div class="set-row">${escH(T("set.pnl.autoLock"))} ${sw("autoLock.on", v.autoLock.on)}</div>
         <div class="set-row">${escH(T("set.pnl.after"))} ${seg("autoLock.minutes", v.autoLock.minutes, [5, 10, 15, 30, 60].map((n) => [n, T("set.pnl.min", { n })]))}</div>
         <small class="muted">${escH(T("set.pnl.childLockHint"))}</small></section>
-      ${isMain() ? `<section><h3>${escH(T("set.pnl.pin"))}</h3>
+      <section><h3>${escH(T("set.pnl.pin"))}</h3>
         <div class="set-row">${escH(T(St.pinState && St.pinState.set ? "set.pnl.pinSet" : "set.pnl.pinNotSet"))} <button class="chip"${Acts.on("set.changePin")}>${icon("lock", 16)} ${escH(T(St.pinState && St.pinState.set ? "set.pnl.changePin" : "set.pnl.setPin"))}</button></div>
-        <small class="muted">${escH(T("set.pnl.pinHint"))}</small></section>` : ""}
-      ${isMain() && PC.mqttBuiltin ? `<section><h3>${escH(T("set.pnl.mqtt"))}</h3>
+        <small class="muted">${escH(T("set.pnl.pinHint"))}</small></section>
+      ${PC.mqttBuiltin ? `<section><h3>${escH(T("set.pnl.mqtt"))}</h3>
         <div class="set-row">${escH(T("set.pnl.mqttBuiltin"))} <button class="chip"${Acts.on("set.mqttLogin")}>${icon("lock", 16)} ${escH(T("set.pnl.showLogin"))}</button></div>
         <small class="muted">${escH(T("set.pnl.mqttHint"))}</small></section>` : ""}
       <section><h3>${escH(T("set.pnl.screen"))}</h3>
@@ -610,14 +604,18 @@
       St.v.volume[k] = +el.value; Sound.applyVolumes();
       if (k === "speech" && window.PanelSpeech) PanelSpeech.setVolume(+el.value * 100);
     },
+    "set.hueLive": (path, el) => {   // (v3.0.2: the custom button and the thumb follow the drag; saved to the draft on release)
+      const h = +el.value, sw = layer.querySelector(".sw-custom");
+      if (window.hueColour) el.style.setProperty("--thumb", hueColour(h));
+      if (sw) sw.style.background = hueGrad(h);
+    },
     "set.selectAll": (el) => el.select(), "set.copyMqtt": (key, el) => St.copyMqtt(key, el),
     "set.soundTest": (k) => Sound.test(k), "set.chimePlay": (k) => Chime.play(k), "set.chimeStop": () => Chime.stop(),
     "set.resetLook": () => St.resetLook(), "set.applyDraft": () => St.applyDraft(),
     "set.togglePerson": (id) => St.togglePerson(id), "set.personName": (id, el) => St.personName(id, el.value), "set.personColor": (id) => St.personColor(id),
     "set.calToggle": (i) => { St.v.calendars[i].on = !St.v.calendars[i].on; St.set("calendars", St.v.calendars); },
     "set.roomToggle": (rid) => { St.v.hiddenRooms[rid] = !St.v.hiddenRooms[rid]; St.set("hiddenRooms", St.v.hiddenRooms); },
-    "set.devicesPopup": (rid) => St.devicesPopup(rid), "set.neverPopup": () => St.neverPopup(),
-    "set.toggleNever": (id) => St.toggleNever(id), "set.toggleDevice": (id) => St.toggleDevice(id),
+    "set.devicesPopup": (rid) => St.devicesPopup(rid), "set.toggleDevice": (id) => St.toggleDevice(id),
     "set.changePin": () => St.changePin(), "set.mqttLogin": () => St.mqttLogin(),
     "set.homeAfter": (el) => St.set("homeAfter", Math.max(0, Math.min(3600, Math.round(+el.value) || 0))),
     "set.previewEffect": (id) => { App.previewEffect(id); St.render(); }, "set.fxSwitch": (id, on) => St.fxSwitch(id, on),

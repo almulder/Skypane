@@ -310,6 +310,7 @@ body.child-locked .lock-badge { display: inline-flex; }
 .swatches, .bgs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .sw { height: 52px; border-radius: 14px; font-weight: 600; font-size: 15px; border: 3px solid transparent; }
 .sw.cur { border-color: #fff; }
+.sw-custom { color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, .6); }   /* (v3.0.2: the owner's own colour) */
 .bg { padding: 12px 6px; border-radius: 12px; background: rgba(255,255,255,.07); font-size: 14px; }
 .bg.cur { background: var(--accent-grad); } .bg:disabled { opacity: .45; }
 .ledpip { width: 14px; height: 14px; border-radius: 50%; display: inline-block; box-shadow: 0 0 8px currentColor; }
@@ -321,6 +322,12 @@ body.child-locked .lock-badge { display: inline-flex; }
 input[type=range] { -webkit-appearance: none; appearance: none; height: 34px; background: transparent; }
 input[type=range]::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: rgba(255,255,255,.15); }
 input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 28px; height: 28px; margin-top: -10px; border-radius: 50%; background: #fff; }
+/* (v3.0.2) the custom colour's hue slider: a rainbow track, the thumb in the chosen colour (--thumb) */
+.set-row input.hue-range { max-width: none; }
+input.hue-range::-webkit-slider-runnable-track { height: 14px; border-radius: 7px; background: linear-gradient(90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+input.hue-range::-webkit-slider-thumb { width: 30px; height: 30px; margin-top: -8px; background: var(--thumb, #8b5cf6); border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .5); }
+input.hue-range::-moz-range-track { height: 14px; border-radius: 7px; background: linear-gradient(90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+input.hue-range::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: var(--thumb, #8b5cf6); border: 3px solid #fff; }
 
 /* ---------- round 3 home layout (shared by the three versions) ---------- */
 main.home, main.roomview { position: absolute; inset: var(--dock-t, 0) var(--dock-r, 0) var(--dock-b, 112px) var(--dock-l, 0); padding: 24px 32px 12px; }
@@ -425,6 +432,11 @@ main.home { display: grid; grid-template-columns: 1.08fr 1fr 0.95fr; gap: 22px; 
 
 /* room view */
 main.roomview .room { height: 100%; display: flex; flex-direction: column; gap: 20px; }
+/* (v3.0.2: a short screen — 1280 × 420 — squeezed the lights (.tiles scrolls, so a flex item may shrink to 0 px) while
+   the other rows kept their size: at least one row of them stays, and the page scrolls for the rest) */
+main.roomview:not(.lay-custom) { overflow-y: auto; overscroll-behavior: contain; }
+main.roomview .room > .tiles { flex-shrink: 1; min-height: min(180px, 100%); }
+main.room-list .room > .tiles { min-height: 74px; }
 .room-head { display: flex; align-items: center; gap: 14px; }
 .room-head h1 { margin: 0 8px 0 0; font-size: 54px; font-weight: 400; text-shadow: 0 2px 14px rgba(0,0,0,.4); }
 .room-clock { margin-left: auto; font-size: 56px; font-weight: 200; text-shadow: 0 2px 14px rgba(0,0,0,.4); }
@@ -729,6 +741,22 @@ main.lay-custom.fine > .gc.j-l { margin-left: calc(var(--g-cw, 0px) * var(--jl, 
 .gc-devs.tiles .gc-gi { flex-direction: column; justify-content: center; text-align: center; gap: 4px; min-height: auto; min-width: 0; }
 .gc-devs.tiles .gc-n { font-size: 15px; white-space: normal; flex: none; max-width: 100%; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .gc-devs.tiles .gc-s { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* (v3.0.2) a room's devices keep their own size (Grid.fit draws them at 1 until they no longer fit): tiles of one
+   comfortable size, not stretched to fill a big card — what's left over stays free */
+.gc-roomdevs .gc-devs.tiles { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); grid-auto-rows: minmax(104px, auto); align-content: start; }
+.gc-roomdevs .gc-devs.tiles .gc-gi { max-width: 190px; width: 100%; justify-self: center; }
+/* (and list rows never squeeze below their own height — they overflow, so the card's fit sees it) */
+.gc-roomdevs .gc-devs.list .gc-gi { flex: none; }
+/* "Orbs": Room Layout G's light orbs (roomlayoutG.js), in rows that wrap; room above each for its % bubble */
+.gc-devs.orbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); align-content: start; justify-items: center; gap: 30px 4px; padding-top: 30px; }
+.gc-orbi { width: 100%; max-width: 170px; display: flex; justify-content: center; position: relative; border-radius: 16px; cursor: pointer; }
+.gc-orbi .rlG-orb { width: 100%; }
+.gc-orbi .rlG-ow { touch-action: none; }
+.gc[data-lscroll] .gc-orbi .rlG-ow { touch-action: pan-y; }   /* (v3.0.2: a scrolling card scrolls — no slide-to-dim there, grid.js) */
+.gc-orbi .rlG-lab b::after { display: none; }
+.gc-orbi.pressed .rlG-ow { transform: scale(.96); }
+.gc-orbi.holding::after { content: ""; position: absolute; top: -6px; left: 0; right: 0; width: 96px; height: 96px; margin: 0 auto; border-radius: 50%; border: 3px solid var(--accent-2);
+  pointer-events: none; animation: gholding .55s linear forwards; }
 .gc-empty { margin: auto; color: var(--muted); font-size: 15px; }
 .gc-art { display: inline-grid; place-items: center; flex: none; position: relative; }
 /* (a room page's drawing: its own fixed size there — here it fills the space the card gives it) */
@@ -756,7 +784,8 @@ main.lay-custom.fine > .gc.j-l { margin-left: calc(var(--g-cw, 0px) * var(--jl, 
 .gc.fit.scroll .card-head, .gc.fit.scroll .gc-t { position: sticky; top: 0; z-index: 2; background: var(--glass-strong); margin-top: -1px; }
 /* a long list that would get too small to read (Grid.fit: data-lscroll): readable, and it scrolls under its title */
 .gc[data-lscroll] .gc-in { overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
-.gc[data-lscroll] .gc-devs { flex: none; overflow: visible; min-height: auto; }
+/* (v3.0.2: .gc.fit[…] — ".gc.fit:not(.scroll) .gc-devs { overflow: hidden }" above outweighed it: the list didn't scroll) */
+.gc[data-lscroll] .gc-devs, .gc.fit[data-lscroll] .gc-devs { flex: none; overflow: visible; min-height: auto; }
 .gc[data-lscroll] .gc-t { position: sticky; top: 0; z-index: 2; background: var(--glass-strong); margin-top: -1px; }
 /* the Energy flow's title: in from the rounded corner like the other cards' titles */
 .gc-energy .gc-in > .gc-t { padding: 12px 16px 0; margin-bottom: 0; }
@@ -1109,6 +1138,34 @@ body.benching #main, body.benching .dock { display: none; }
 .gc.holding::after, .gc-gi.holding::after { content: ""; position: absolute; inset: 4px; border-radius: inherit; border: 3px solid var(--accent-2);
   pointer-events: none; animation: gholding .55s linear forwards; }
 .gc-gi { position: relative; }
+/* (v3.0.2) a room tile / list row held: the same ring; no iPad callout or selection on what a hold opens */
+main.roomview .tile.holding { position: relative; }
+main.roomview .tile.holding::after { content: ""; position: absolute; inset: 4px; border-radius: inherit; border: 3px solid var(--accent-2);
+  pointer-events: none; animation: gholding .5s linear forwards; }
+#main.lay-custom .gc, main.roomview .tile, main.roomlayout [data-light] { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+/* (v3.0.2) a light's pop-up (grid.js lightPop): on / off, then big sliders — brightness, warm ↔ cool, colour, saturation */
+.popup.pop-lp { width: min(600px, calc(100vw - 24px)); }
+.lp { display: flex; flex-direction: column; gap: 14px; padding-top: 4px; }
+.lp-pw { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 18px; background: rgba(255,255,255,.06); font-size: 20px; font-weight: 600; text-align: left; }
+.lp-st { flex: 1; }
+.lp-dot { width: 34px; height: 34px; border-radius: 50%; flex: none; background: rgba(255,255,255,.14); border: 2px solid rgba(255,255,255,.25); }
+.lp.on .lp-dot { background: var(--lp-c); box-shadow: 0 0 18px var(--lp-c); border-color: rgba(255,255,255,.7); }
+.lp-row { display: flex; flex-direction: column; gap: 2px; padding: 6px 4px 0; }
+.lp-l { display: flex; justify-content: space-between; align-items: baseline; font-size: 16px; color: var(--muted); }
+.lp-l b { color: var(--text); font-weight: 600; }
+.lp input.lp-r { width: 100%; height: 48px; margin: 0; touch-action: none; }
+.lp input.lp-r::-webkit-slider-runnable-track { height: 16px; border-radius: 8px; }
+.lp input.lp-r::-webkit-slider-thumb { width: 38px; height: 38px; margin-top: -11px; border: 3px solid #fff; box-shadow: 0 1px 6px rgba(0, 0, 0, .55); }
+.lp input.lp-r::-moz-range-track { height: 16px; border-radius: 8px; }
+.lp input.lp-r::-moz-range-thumb { width: 32px; height: 32px; border-radius: 50%; border: 3px solid #fff; }
+.lp input.lp-lvl::-webkit-slider-runnable-track { background: linear-gradient(90deg, rgba(255,255,255,.12), var(--lp-c)); }
+.lp input.lp-lvl::-moz-range-track { background: linear-gradient(90deg, rgba(255,255,255,.12), var(--lp-c)); }
+.lp input.lp-ct::-webkit-slider-runnable-track { background: linear-gradient(90deg, #ff8a1f, #ffb86b 16%, #ffe4c4 44%, #fff6ea 67%, #d6e3ff); }
+.lp input.lp-ct::-moz-range-track { background: linear-gradient(90deg, #ff8a1f, #ffb86b 16%, #ffe4c4 44%, #fff6ea 67%, #d6e3ff); }
+.lp input.lp-sat::-webkit-slider-runnable-track { background: linear-gradient(90deg, #fff, hsl(calc(var(--lp-h) * 1deg) 100% 50%)); }
+.lp input.lp-sat::-moz-range-track { background: linear-gradient(90deg, #fff, hsl(calc(var(--lp-h) * 1deg) 100% 50%)); }
+.lp input.lp-hue::-webkit-slider-thumb { background: hsl(calc(var(--lp-h) * 1deg) 100% 50%); }
+.lp input.lp-hue::-moz-range-thumb { background: hsl(calc(var(--lp-h) * 1deg) 100% 50%); }
 @keyframes gholding { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: scale(1); } }
 .gwheel { position: fixed; inset: 0; z-index: 60; background: rgba(5, 3, 15, .45); opacity: 0; transition: opacity .15s; touch-action: none; }
 .gwheel.open { opacity: 1; }

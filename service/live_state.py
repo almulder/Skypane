@@ -137,6 +137,7 @@ class LiveState:
         self.ring = {}        # id → deque of its last EVENTS_KEPT events (v2.4.0)
         self._alerts = []     # the bridge's last list (cleaned)
         self.gone = {}        # alert id → when the Manager acknowledged it (hidden until the bridge's next list)
+        self.newest = None    # (v3.0.2) the newest alert heard since the server started — Integrations → Hubitat shows it
         self.heard = {"state": None, "event": None, "alerts": None}   # when each topic was last heard (epoch s)
 
     # --- what arrives ---
@@ -213,7 +214,16 @@ class LiveState:
             # (acknowledged here a moment ago: still hidden if the bridge's list is from before it heard the ack)
             self.gone = {i: t for i, t in self.gone.items() if now - t < HIDE_SECONDS and any(a["id"] == i for a in out)}
             self.heard["alerts"] = now
+            top = max(out, key=lambda x: x["at"], default=None)
+            if top and (not self.newest or top["at"] >= self.newest["at"]):
+                self.newest = {k: top[k] for k in ("title", "text", "lvl", "at")}
         return True
+
+    def last_alert(self):
+        """(v3.0.2) {"title", "text", "lvl", "at"} of the newest alert since the server started (expired or not) — so the
+        Notifier's "Test" can be checked on the Manager before any panel is set up. None = none yet."""
+        with self.lock:
+            return dict(self.newest) if self.newest else None
 
     # --- what the Manager reads ---
     def device(self, did):

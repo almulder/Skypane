@@ -54,7 +54,8 @@ docker compose logs -f        # Ctrl+C to stop watching
 The log should show `[run_all] server started (pid …)` and `… dashboard service … on 0.0.0.0:8088`.
 `Hubitat not set up … bridge not started` is normal for now.
 
-Skypane is now at **`http://192.168.1.20:8088/`**; the Manager is **`http://192.168.1.20:8088/admin/`**.
+Skypane is now at **`http://192.168.1.20:8088/`** (that page shows Skypane's status, and on a new tablet the code to
+pair it — [panel-pairing.md](panel-pairing.md)); the Manager is **`http://192.168.1.20:8088/admin/`**.
 With Docker, every Skypane address has `:8088` after the IP — the panels' addresses too (e.g.
 `http://192.168.1.20:8088/kitchen`), wherever the other guides write `http://192.168.1.50/…`.
 
@@ -169,7 +170,7 @@ tablets).
   (`docker restart skypane`, or `docker compose restart`). The restart matters: the built-in MQTT broker only starts
   again with it.
 - **Opening Skypane by a name** (e.g. `http://skypane.local:8088`) instead of the IP: add that name in **Manager →
-  Integrations → General → Other names for this server** and press **Save and restart**. Otherwise Skypane shows a
+  Integrations → General → Extra names for this server (optional)** and press **Save and restart**. Otherwise Skypane shows a
   page *Skypane doesn't know this address* — that protects it from other web pages.
 - **Keep it on your home network.** Don't port-forward Skypane to the internet.
 - **Secrets** (the Hubitat token, camera keys) are kept in the data folder's `private/`, never shown again and never

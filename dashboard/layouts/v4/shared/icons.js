@@ -207,6 +207,17 @@
     vacation: '<path d="M13 8c-1 4-1 9 0 13"/><path d="M13 8C11 5 7 5 4 7M13 8c2-3 6-3 8-1M13 8c-3 0-6 2-7 5M13 8c3 0 5.5 2 6 5"/><path d="M8 21h10"/>',
     luggage: '<rect x="4" y="7" width="16" height="13" rx="2"/><path d="M9 7V4h6v3M8 20v1.5M16 20v1.5M9 7v13M15 7v13"/>',
     party: '<path d="M4 20l4.5-12 7.5 7.5z"/><path d="M13 3.5v.01M20.5 11v.01M18.5 3.5v.01M12.5 9c.6-1.5 2-2 3-1.5s2.4 0 3-1.5"/>',
+    // (v3.0.2: for the calendar's event icons — service/event_icons.py)
+    gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v9h14v-9M12 8v13"/><path d="M12 8C10.5 5 7 4.5 7 6.5S9.5 8 12 8zM12 8c1.5-3 5-3.5 5-1.5S14.5 8 12 8z"/>',
+    receipt: '<path d="M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z"/><path d="M9 8h6M9 12h6M9 16h3"/>',
+    wallet: '<path d="M4 7v11a2 2 0 0 0 2 2h14V8H6a2 2 0 0 1-2-2 2 2 0 0 1 2-2h11v4"/><path d="M20 12h-3.5a1.5 1.5 0 0 0 0 3H20"/>',
+    flag: '<path d="M5 21V4"/><path d="M5 4h12l-2.5 4.5L17 13H5"/>',
+    school: '<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/><path d="M22 9v6"/>',
+    book: '<path d="M4 19V5a2 2 0 0 1 2-2h13v14H6a2 2 0 0 0-2 2 2 2 0 0 0 2 2h13v-4"/><path d="M8 7h7"/>',
+    trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4"/><path d="M12 13v4M8 21h8M10 17h4l1 4H9z"/>',
+    ticket: '<path d="M3 6h18v4a2 2 0 0 0 0 4v4H3v-4a2 2 0 0 0 0-4z"/><path d="M14 6v2M14 11v2M14 16v2"/>',
+    palette: '<path d="M12 3a9 9 0 0 0 0 18c1.4 0 2-.9 2-2 0-1-.8-1.4-.8-2.4 0-.9.8-1.6 1.8-1.6h2a4 4 0 0 0 4-4c0-4.4-4-8-9-8z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/>',
+    broom: '<path d="M20 3l-7.5 7.5"/><path d="M10 9l5 5"/><path d="M9.5 9.5L4 15c1 3 3 5 6 6l4.5-5.5"/><path d="M7 18l2.5-2.5M10 20l2-2"/>',
     sleep: '<path d="M4 11h5l-5 6h5M13 4h7l-7 8h7"/>',
     // status / energy / network
     bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',

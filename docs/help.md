@@ -37,7 +37,7 @@ This page — the **Manager** — is where you set it all up from a laptop or a 
 **What it works with**
 
 - **Hubitat** — every device, room and mode comes from your hub (through Maker API). Alerts come from Hubitat rules too ([Alerts come from Hubitat](#alerts-hubitat)).
-- **Cameras** — UniFi Protect cameras show up by themselves. Any other camera with an RTSP stream works too; the video is played through the built-in go2rtc ([Cameras: Setup, your own cameras and views](#cameras)).
+- **Cameras** — UniFi Protect cameras show up by themselves. Other cameras work too (an RTSP, RTMP or MJPEG address); the video is played through the built-in go2rtc ([Cameras: Setup, your own cameras and views](#cameras)).
 - **Switchboard** — another project by the same author: a Hubitat app for announcements, notifications and sirens. It is also still in development.
 - **Sonos Panel** — a page by the same author for people with a Sonos system. A panel's **Music page** setting can open it from the panel's Music button ([A panel's General settings](#panel-general)).
 
@@ -185,21 +185,52 @@ See also: [Health and the health pill](#health) · [Alerts come from Hubitat](#a
 
 *Where: Panels → Add a panel*
 
-Each tablet is a panel. Panels are made only in the Manager, and only by the admin. A tablet opened at an address that isn't added shows “This panel isn't set up yet”.
+Each tablet is a panel, and only a tablet the admin approved can open it ([Connect a tablet: pairing with a code](#panel-pairing)). The quickest way: open Skypane on the new tablet and approve the code it shows with a new name — the panel is made then. To prepare a panel first:
 
 1. Open **Panels** and press **Add panel** (top right; on the Status view also the dashed **Add a panel** tile).
 2. Type the panel's name (for example Office panel). Skypane makes its web address from it and shows it as you type: “This panel will open at http://<your server>/office”. Don't type the tablet's IP address — Skypane doesn't need it. Want another web address? Press **Change the web address**.
-3. Press **Add panel**. The web address is saved in small letters.
-4. The new panel opens. It starts **blank**: an empty Home page with only the settings gear, no room bar, LED strip off.
-5. Give it a layout: **Look & layout** ([Look & layout: theme, Home page, room pages](#look-layout)). Then set up the tablet ([Set up a tablet (FreeKiosk)](#tablet-setup)).
+3. Press **Add panel**. It is **unclaimed**: no tablet yet. It starts **blank**: an empty Home page with only the settings gear, no room bar, LED strip off.
+4. Give it a layout: **Look & layout** ([Look & layout: theme, Home page, room pages](#look-layout)).
+5. On the tablet open the Skypane address (http://<your server>/). It shows a 6-character code. Approve it under **New panel requests** with this panel's name ([Connect a tablet: pairing with a code](#panel-pairing)).
 
 A web address starts with a letter and may have letters, digits, _ and - (at most 32).
 
 **Remove a panel**
 
-**Panels** → **Setup** → the panel → **General** → **Remove…** (the admin; not the main panel). It asks first. Its settings and layouts go. A tablet still showing it says “This panel isn't set up yet”.
+**Panels** → **Setup** → the panel → **General** → **Remove…** (the admin; any panel — there is no built-in main panel). It asks first. Its settings and layouts go. Its tablet goes back to the pairing screen.
 
-See also: [Panels: the Status and Setup views](#panels-status) · [A panel's General settings](#panel-general) · [Set up a tablet (FreeKiosk)](#tablet-setup) · [“This panel isn't set up yet”](#not-set-up)
+See also: [Connect a tablet: pairing with a code](#panel-pairing) · [Panels: the Status and Setup views](#panels-status) · [A panel's General settings](#panel-general) · [Set up a tablet (FreeKiosk)](#tablet-setup)
+
+<a id="panel-pairing"></a>
+### Connect a tablet: pairing with a code
+
+*Where: Panels → New panel requests (the admin)*
+
+A panel works only on the tablet the admin approved. Its key stays in that tablet's browser, so a new IP address doesn't matter, and another device that opens the panel's address sees “Unable to connect”.
+
+1. On the new tablet open the Skypane address: http://<your server>/. It shows **Connect this panel** with a 6-character code and what it is (for example Chrome on Android, SM-T500). The code changes every 10 minutes; the request lasts while that screen is open.
+2. In the Manager open **Panels**. The tablet is under **New panel requests** (a count shows on Panels in the sidebar). Press **Approve**.
+3. Type the code (capitals or not, spaces don't matter) and a name. The line under the name says what happens: it **takes over an unclaimed panel** with that name (its settings kept), or **creates a new panel** at its own address. A panel that already has a tablet is refused — unlink it first.
+4. The tablet says “Connected as …” and opens its panel by itself, from then on too.
+
+Five wrong codes cancel the request. **Reject** turns a request down. **Accept new panels** off: new tablets are told pairing is closed.
+
+**A panel's tablet**
+
+Panels → Setup → the panel: the **Its tablet** card shows the device, its last IP, when it was last seen and when it was paired.
+
+- **Unlink device** — the tablet loses its key; the panel keeps its name and settings and is **unclaimed** until a tablet is approved with its name.
+- **Move this device to…** — the tablet takes over an unclaimed panel (its name and settings); the panel left behind can be removed.
+- **Rename** — only the name; its address and FreeKiosk name stay.
+- **Re-trust this device** — after a copy alert: an old copy of the panel's key was used by another device. With **Lock a panel when its key is copied** on, that panel stops until you re-trust or unlink it.
+
+**Notices**
+
+Blocked attempts, a copied key, a tablet that suddenly looks like another device, 5 wrong codes and tablets connected automatically after the upgrade are listed under **Notices** until you mark them read. Nothing is pushed.
+
+> **Tip:** After an upgrade, tablets already in use are connected automatically for 24 hours (the banner says until when). **Lock all panels now** ends that early.
+
+See also: [Add a panel (a new tablet)](#add-panel) · [Set up a tablet (FreeKiosk)](#tablet-setup) · [Safety: PIN windows and unlocking on a panel](#panel-safety)
 
 <a id="panels-status"></a>
 ### Panels: the Status and Setup views
@@ -220,7 +251,7 @@ The **Panels** page has two views. The switch at the top right (or the V key) ch
 
 **Setup: one panel at a time**
 
-The list of panels on the left, the panel's settings in tabs in the middle — **General**, **Look & layout**, **Rooms & devices**, **Cameras**, **People & calendars**, **Alerts**, **Safety**, **Guest Wi-Fi card**, **Weather effects** — and beside them a **Preview** (the same drawing, as saved: it follows every change you make) and its **Status**. Each change saves at once; the panel takes it within seconds. A link straight to a tab: /admin/#panels/setup/<panel>/<tab>.
+The list of panels on the left, the panel's settings in tabs in the middle — **General**, **Look & layout**, **Rooms & devices**, **Cameras**, **People & calendars**, **Alerts**, **Safety**, **Guest Wi-Fi card**, **Weather effects** — and beside them a **Preview** (the same drawing, as saved: it follows every change you make) and its **Status**. Your changes wait in a bar at the bottom — “3 changes waiting” — until you press **Save** (or **Discard**); Save sends them to the panel at once and it takes them within seconds. Leaving with changes waiting asks first. A link straight to a tab: /admin/#panels/setup/<panel>/<tab>.
 
 > **Tip:** Alerts and Safety are the admin's. Another login that may change a panel sees those two tabs read only.
 
@@ -238,7 +269,7 @@ See also: [Open live: the real panel in the Manager](#open-live) · [Add a panel
 - It is not the panel itself: it doesn't check in, drive the LED strip, speak, measure or run a benchmark. It is silent unless you switch **Sound on** in its bar — then this window plays the panel's chimes and alert beeps too (remembered until you close the browser).
 - **New tab** opens the same page in its own browser tab (full screen there with F11). **Reload** loads it again. Esc or ✕ closes it.
 
-> **Note:** Only someone signed in to the Manager can open a panel live; the address with ?live=1 shows a note for anyone else. The panels' own addresses work on your home network as before (until panel pairing comes), so “view only” is a limit of this window: someone on your home network who opens a panel's own address can use that panel.
+> **Note:** Only someone signed in to the Manager can open a panel live; the address with ?live=1 shows a note for anyone else. A panel's own address works only on the tablet approved for it ([Connect a tablet: pairing with a code](#panel-pairing)); any other device that opens it sees “Unable to connect”.
 
 See also: [Panels: the Status and Setup views](#panels-status) · [Safety: PIN windows and unlocking on a panel](#panel-safety)
 
@@ -379,7 +410,7 @@ Alerts are made in Hubitat ([Alerts come from Hubitat](#alerts-hubitat)). Here t
 4. **Lowest level shown here** — for example 3 to skip reminders and finished notes. A level 5 always shows.
 5. **Quiet hours** — from / to: no sound below level 4. Or **… or while Hubitat's mode is** — for example Night.
 6. **Level 4 sounds in quiet hours** — on by default (a leak at night). Off: only a level 5 sounds then; a level 4 still shows full screen.
-7. **Notification light** — a Hubitat light near the tablet that pulses during an alert.
+7. **Notification light** — **This tablet's own light** (its LED strip, with the Skypane panel agent: it flashes red), or a Hubitat light near the tablet that pulses during an alert. None also switches the LED strip off.
 
 > **Tip:** Try it on the tablet: Settings → Test → a test alert.
 
@@ -389,6 +420,10 @@ See also: [Alerts come from Hubitat](#alerts-hubitat)
 ### Safety: PIN windows and unlocking on a panel
 
 *Where: Panels → Setup → (a panel) → Safety (the admin)*
+
+**The panel PIN**
+
+**Panels** → **Setup** → a panel → **Safety** → **Panel PIN** (the admin): **Set PIN…** / **Change PIN…** (4 to 8 digits, twice) or **Clear…**. Each asks your own Manager password — the old PIN isn't needed. One PIN for every panel; it is never shown or logged.
 
 **Panel PIN stays unlocked**
 
@@ -679,7 +714,7 @@ The Overview has a **Mode & alarm** card for admins and logins with **Switch dev
 - Nothing shows as changed until the hub has it; the card reads the house again right after.
 - The Hubitat bridge checks it all again and keeps the same limits as the panels (a few changes a minute). Each change is in Health → Timeline (never the PIN).
 
-> **Tip:** No panel PIN set yet? Set one on the main panel: the settings gear → **Panel** → **Panel PIN**.
+> **Tip:** No panel PIN set yet? The admin sets one in **Panels** → **Setup** → a panel → **Safety** → **Panel PIN** ([The panel PIN](#panel-pin)).
 
 See also: [Switching devices from the Manager](#switch-devices) · [Safety: PIN windows and unlocking on a panel](#panel-safety)
 
@@ -779,7 +814,7 @@ See also: [Cameras: Setup, your own cameras and views](#cameras) · [Cameras on 
 
 *Where: Sidebar → Manage → Cameras → Setup*
 
-UniFi Protect cameras show up by themselves. Other cameras with an RTSP stream can be added here. The video is played through the built-in camera video (go2rtc). **Setup** lists every camera; pick one for its card on the right.
+UniFi Protect cameras show up by themselves. Other cameras (an RTSP, RTMP or MJPEG address) can be added here. The video is played through the built-in camera video (go2rtc). **Setup** lists every camera; pick one for its card on the right.
 
 - **Show on panels** — a panel's camera page shows the cameras of its views, one tab per view. For each panel, a switch per view the camera is in: off hides that view on that panel. Only the panels your account may change are listed; the others are the admin's.
 - **Pop up on the panels** — what shows a camera today: a doorbell ring, or a Hubitat rule (the Skypane Notifier). Rules per camera come later.
@@ -788,7 +823,7 @@ UniFi Protect cameras show up by themselves. Other cameras with an RTSP stream c
 **Add a camera**
 
 1. **Cameras** → **Add camera** (top right; the admin).
-2. Type a name and paste the **Main stream** link (rtsp://user:password@address:554/…). Optional: a **Sub stream** (small, for grids).
+2. Type a name and paste the **Main stream** link (rtsp://user:password@address:554/…). Optional: a **Sub stream** (small, for grids). Examples: a Reolink, Hikvision or Amcrest camera's RTSP address (its manual calls it an RTSP or stream URL), or tinyCam PRO's re-stream rtsp://<phone>:8083/…. RTMP and MJPEG addresses work too.
 3. Press **Add camera**. It plays on the panels in a few seconds. The links stay on the server and are never shown again — to change one, type it again.
 
 **Add a view**
@@ -877,7 +912,7 @@ See also: [Card types (a short list)](#card-types)
 
 1. **Sidebar** → **Admin** → **Guest Wi-Fi**.
 2. Without a UniFi console: type the **Network name** and **Password** (or switch on **Open network**) and press **Show it on the panels**. The panels show the new code within a minute.
-3. With your UniFi console connected (**Integrations → Guest Wi-Fi console**): pick the **Guest network**; **Show** or **Copy** its password; choose when it changes (**After guests leave**, **And every** …) or press **Change password now**.
+3. With your UniFi console connected (**Integrations → Guest Wi-Fi console**): pick the **Guest network**; **Show** or **Copy** its password; choose when it changes (**After guests leave**, **And every** …) or press **Change password now**. Skypane then changes the guest password by itself, and the panels' QR code follows. Without a console you change the password by hand.
 4. **On the panels**: **Show**, **Hide** or **In guest mode** for each panel's card (the same switch as Panels → Setup → Guest Wi-Fi card).
 
 The side card shows the card as the panels show it, and who may change this page (the admins and the logins allowed **Guest Wi-Fi settings**).
@@ -919,7 +954,7 @@ While it's on, nothing else wakes or opens the panel: the tablet's own motion or
 
 **Open live** from the Manager shows the lock too, with a line saying the panel is in guest lockdown. The layout builder's canvas is never locked.
 
-> **Tip:** No panel PIN set? Then the panel can't be unlocked on the wall — set one on the main panel (the settings gear → **Panel** → **Panel PIN**), or switch guest mode off.
+> **Tip:** No panel PIN set? Then the panel can't be unlocked on the wall — the admin sets one in **Panels** → **Setup** → a panel → **Safety** → **Panel PIN** ([The panel PIN](#panel-pin)), or switch guest mode off.
 
 > **Note:** The layout builder's canvas address (the panel's address with **?design=1**) shows the panel without the lock. On a wall tablet keep the kiosk app's address bar hidden (FreeKiosk: kiosk mode on), so a guest can't type it.
 
@@ -941,6 +976,10 @@ How Skypane reaches your hub (**Home hub**), the **Message broker**, **Cameras**
 The side card **Connections** shows each part's state; **Check now** runs every check at once. There is no test button per field on purpose: save, and the checks tell you.
 
 The **Login for devices** (the built-in broker) is for FreeKiosk and other MQTT devices: use **Copy user** and **Copy password** — never type it by hand.
+
+Address fields take a bare IP too (192.168.1.10): http:// is added for you.
+
+Two **General** fields are usually left empty: **Extra names for this server (optional)** — only if you open Skypane by a name like skypane.local (not by its IP); **Extra devices the panels may control (optional)** — only for a device that shows on a panel but won't switch: type its Hubitat device number.
 
 **Camera video server** with a login (http://user:password@host:1984): the Manager's pictures use the login, but the panels get the address without it — they can't keep a password secret. Let the panels in without one on that go2rtc (for example its allow-list of addresses), or leave this empty and use the built-in camera video.
 
@@ -980,7 +1019,7 @@ See also: [The Skypane Notifier driver (Hubitat)](#notifier-driver) · [Alerts o
 
 **Install it (on the hub)**
 
-1. Hubitat → **Drivers Code** → **+ New Driver** → **Import** → the address http://<your server>/hubitat/SkypaneNotifier.groovy (Skypane serves the driver itself) → **Import** → **Save**.
+1. Hubitat → **Drivers Code** → **+ New Driver** → **Import** → the same address you open the Manager with, without /admin, followed by /hubitat/SkypaneNotifier.groovy — e.g. http://192.168.1.50/hubitat/SkypaneNotifier.groovy on Unraid, or http://192.168.1.20:8088/hubitat/SkypaneNotifier.groovy with Docker (Skypane serves the driver itself) → **Import** → **Save**. Import says “Failed to fetch”? Open that address in your browser, copy everything and paste it into the **New Driver** box instead.
 2. **Devices** → **Add Device** → **Virtual** → **Device Name:** Skypane, **Type:** *Skypane Notifier* (namespace skypane) → **Save Device**.
 3. **Apps** → **Maker API** → tick the new device. (Needed so a dismiss on a panel reaches Hubitat.)
 
@@ -1150,18 +1189,18 @@ See also: [Health and the health pill](#health) · [Admins, the owner and sign-i
 
 *Where: Panels → Setup → (a panel) → General → Set up the tablet*
 
-Always the Manager first, then the tablet.
+Pair the tablet in the browser it will keep using — for FreeKiosk, inside FreeKiosk. The panel's key stays in that browser.
 
-1. Add the panel in the Manager ([Add a panel (a new tablet)](#add-panel)). Note its **FreeKiosk device name** (General).
-2. Connect the tablet to your home Wi-Fi. Give it a fixed address in your router (UniFi: the client → Fixed IP address).
-3. Install FreeKiosk. Allow what it asks for, so it can stay on screen.
-4. FreeKiosk → start page: the address shown under **Set up the tablet** (http://<your server>/<address>). Start on boot: on. Kiosk mode: on. Keep the screen on: on. Zoom: 100 %.
-5. FreeKiosk → MQTT: broker <your server> port 1883, the user and password from **Integrations → Message broker → Login for devices** (use **Copy user** and **Copy password**), and the device name from step 1.
-6. Restart FreeKiosk. The panel loads with the sky. Check that the version tag in its lower-left corner matches the Manager's.
+1. Connect the tablet to your home Wi-Fi. (A fixed address isn't needed: the panel follows the tablet, not its IP.)
+2. Install FreeKiosk. Allow what it asks for, so it can stay on screen.
+3. FreeKiosk → start page: the Skypane address, http://<your server>/. Start on boot: on. Kiosk mode: on. Keep the screen on: on. Zoom: 100 %.
+4. Restart FreeKiosk. It shows **Connect this panel** with a 6-character code. Approve it in the Manager under **New panel requests** ([Connect a tablet: pairing with a code](#panel-pairing)). The tablet then opens its panel by itself — the start page can stay as it is, it forwards.
+5. FreeKiosk → MQTT: broker <your server> port 1883, the user and password from **Integrations → Message broker → Login for devices** (use **Copy user** and **Copy password**), and the panel's **FreeKiosk device name** (**Panels** → **Setup** → the panel → **General** → **Set up the tablet**).
+6. Check that the version tag in the panel's lower-left corner matches the Manager's.
 
-An iPad, another kiosk app or a computer browser works too: skip the MQTT step (on an iPad, add ?panel to the address).
+An iPad or any browser works too. If you skip the MQTT part, you go without screen wake, volume control and spoken alerts. On an iPad, open Skypane's address in Safari, Share → **Add to Home Screen** first, then open it from the Home Screen icon and connect it there (a Home Screen app keeps its own storage, apart from Safari) (sorry iPad users — blame Apple).
 
-See also: [Add a panel (a new tablet)](#add-panel) · [The tablet's own Settings (the gear)](#tablet-settings) · [“This panel isn't set up yet”](#not-set-up)
+See also: [Connect a tablet: pairing with a code](#panel-pairing) · [Add a panel (a new tablet)](#add-panel) · [The tablet's own Settings (the gear)](#tablet-settings) · [“Unable to connect” and other pairing problems](#not-set-up)
 
 <a id="tablet-settings"></a>
 ### The tablet's own Settings (the gear)
@@ -1172,7 +1211,7 @@ Every panel has a small settings gear. It asks for the panel PIN (once a PIN is 
 
 - **Look** — colours, clock, text size.
 - **Sound** — volumes and the clock chime.
-- **Panel** — LED strip, **Child lock**, **Panel PIN** (on the main panel), screen.
+- **Panel** — LED strip, **Child lock**, **Panel PIN** (change it with the old PIN), screen.
 - **Guest mode**, **Weather effects**, **Test** (test alerts and events).
 - **More (Manager)** — the Manager's address, for everything else.
 
@@ -1183,12 +1222,18 @@ See also: [The panel PIN](#panel-pin) · [Child lock](#child-lock)
 <a id="panel-pin"></a>
 ### The panel PIN
 
-*Where: On the main panel: Settings → Panel → Panel PIN*
+*Where: Panels → Setup → (a panel) → Safety → Panel PIN (the admin), or on a panel: Settings → Panel → Panel PIN*
 
 One PIN for every panel. It's asked for when opening the tablet's Settings, unlocking, opening a garage or valve, a device marked to ask, and dismissing a level 4–5 alert.
 
-1. On the main panel: the gear → **Panel** → **Panel PIN** → **Set PIN** (or **Change PIN**).
-2. Type 4 to 8 digits.
+**In the Manager (the admin)**
+
+1. **Panels** → **Setup** → any panel → **Safety** → **Panel PIN**.
+2. **Set PIN…** (or **Change PIN…**): the new PIN twice (4 to 8 digits), then your own Manager password. The old PIN isn't needed. **Clear…** removes the PIN.
+
+**On a panel**
+
+The gear → **Panel** → **Panel PIN** → **Change PIN**: the old PIN first, then the new one twice.
 
 After a correct PIN the panel stays unlocked for a short while: 30 seconds for the alarm and level 4–5 alerts, a minute after the last touch for everything else (the admin sets both: [Safety: PIN windows and unlocking on a panel](#panel-safety)).
 
@@ -1196,9 +1241,9 @@ Too many wrong PINs lock the PIN pad for a while; it counts down (“Try again i
 
 The alarm (HSM) codes stay in Hubitat.
 
-> **Note:** Forgot the PIN? On the server running Skypane, delete house/panel-pin.json and house/panel-pin-attempts.json in the Skypane data folder (with a Docker named volume: docker exec skypane rm /data/house/panel-pin.json /data/house/panel-pin-attempts.json), then set a new one on the main panel.
+> **Tip:** Forgot the PIN? The admin sets a new one in the Manager (above) — it needs only the admin's own Manager password, and it ends any PIN lock-out too.
 
-See also: [The tablet's own Settings (the gear)](#tablet-settings) · [Child lock](#child-lock)
+See also: [Safety: PIN windows and unlocking on a panel](#panel-safety) · [The tablet's own Settings (the gear)](#tablet-settings) · [Child lock](#child-lock)
 
 <a id="child-lock"></a>
 ### Child lock
@@ -1218,19 +1263,29 @@ See also: [The panel PIN](#panel-pin)
 ## Troubleshooting
 
 <a id="not-set-up"></a>
-### “This panel isn't set up yet”
+### “Unable to connect” and other pairing problems
 
-The tablet's address isn't a panel in the Manager (yet), or the panel was removed.
+**“Unable to connect”**
 
-1. In the Manager: **Panels** → **Add a panel** with exactly that address ([Add a panel (a new tablet)](#add-panel)).
-2. Reload the tablet (or restart FreeKiosk).
-3. Still there? Check that the address in FreeKiosk matches the panel's address, with no extra / at the end.
+- **“This panel is connected to another device”** — the panel belongs to another tablet. On the right tablet it works; on this one, press **Connect this device** and approve it with another name — or **Unlink device** on the panel first to give it to this tablet ([Connect a tablet: pairing with a code](#panel-pairing)).
+- **“This panel isn't connected yet”** — no tablet was approved for this panel, or there is no panel at that address. Press **Connect this device** and approve the code with the panel's name.
+
+**On the pairing screen**
+
+- **“Pairing is closed”** — switch **Accept new panels** on (**Panels**, the New panel requests box).
+- **The code changed** — it renews every 10 minutes: type the one the tablet shows now.
+- **The request is gone from the Manager** — the tablet left the pairing screen (or went to sleep). Open the Skypane address on it again for a new request.
+- **“That isn't the code on the tablet”** — 5 wrong codes cancel the request; the tablet then asks again with a new code.
+
+**The tablet lost its key**
+
+The tablet keeps two copies of its key; when only one was lost it says “Reconnecting this panel…” and goes on by itself. When both are gone (cleared browser data, a reinstalled browser or FreeKiosk, a new tablet) it shows the pairing screen. On the old panel press **Unlink device**, then approve the tablet with the same name — the panel's settings are kept.
 
 **An empty Home with only the gear**
 
 That's a new panel: it starts blank. Give it a layout in **Look & layout** and switch on the room bar ([Look & layout: theme, Home page, room pages](#look-layout), [The room bar](#room-bar)).
 
-See also: [Add a panel (a new tablet)](#add-panel)
+See also: [Connect a tablet: pairing with a code](#panel-pairing) · [Add a panel (a new tablet)](#add-panel)
 
 <a id="not-connected"></a>
 ### “Not connected to the hub” or “Lost connection”

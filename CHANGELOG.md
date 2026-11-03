@@ -1,5 +1,55 @@
 # Changelog
 
+## 3.0.2
+
+### Panels connect with a code now ([panel-pairing.md](docs/panel-pairing.md))
+- **Connecting a tablet:**
+  - Open Skypane's address on the tablet; it shows a 6-character code.
+  - In the Manager, go to **Panels → New panel requests → Approve**, then type the code and a name.
+  - The tablet goes to its own panel and opens it by itself from then on.
+- **A panel works only on the tablet you approved,** even when that tablet's IP address changes. Each panel has Unlink,
+  Move to another panel, Rename, Re-trust, an "Accept new panels" switch, and notices when another device tries a
+  panel.
+- **The bare address shows a Skypane status page,** with the code for a new tablet. There's no built-in "main" panel any
+  more.
+- **Upgrading:**
+  - The old main panel's look is removed. Your "which devices the panels may switch" rule is kept.
+  - For 24 hours your existing tablets are connected automatically on their next visit. "Lock all panels now" ends
+    that early. See [upgrade.md](docs/upgrade.md).
+- **The panel PIN is set, changed or cleared in the Manager** (Panels → Safety). It asks for your Manager password; no
+  old PIN is needed.
+
+### Integrations tell the truth
+- **"Working" means the hub, UniFi Protect or the UniFi console really answered with your token or key.** Until then
+  the page shows **Checking…**, and it says so when a key is missing.
+- **A Connect button for each section** saves and connects that section straight away. Saving a token says "Saved".
+- **Addresses:** a bare IP is fine (`http://` is added for you), and a broken one like `192.168.1` is refused.
+- Music shows its status too.
+- Integrations → Hubitat shows the **last alert from the hub**, so the Notifier's "Test" can be checked before any
+  panel is set up.
+- The Hubitat driver now imports straight from Skypane. Import's "Failed to fetch" is fixed.
+
+### Panels and the Manager
+- **The panel editor has a Save bar:** changes wait until you press Save, then go to the panel at once.
+- **Press and hold a light anywhere** (lists, tiles, cards, orbs) for brightness, warm↔cool, **hue** and saturation.
+  The room card gets an **Orbs** look, and its tiles no longer shrink long before they need to.
+- **A custom theme colour:** a hue slider after the 12 themes.
+- **Calendars:**
+  - Panels pick up calendar changes within seconds of a check.
+  - Choose how often Skypane checks (5–30 min), or press **Check calendars now**.
+- **Calendar event icons:**
+  - 41 icons, matched on whole words.
+  - Edit the words for each icon and drag them into order (Integrations → Calendars → Event icons).
+  - See [calendar-icons.md](docs/calendar-icons.md).
+- **The cameras page** waits for UniFi Protect's cameras with a message, instead of staying blank until a refresh.
+- Rooms: "Build one" asks whether the room page is for every room or one room, and whether to start from an empty page.
+- **Smaller fixes:**
+  - Guest Wi-Fi's "Change password now" confirms when it's done.
+  - Who's home starts with the right people.
+  - The notification light can be the tablet's own light.
+  - The camera screen drops its "views come from UniFi Protect" line.
+  - Feedback reports hide IP addresses again.
+
 ## 3.0.1
 
 - **The Manager moved to `/admin`** (e.g. `http://192.168.1.50/admin/`). The old address `/manage` now shows a short

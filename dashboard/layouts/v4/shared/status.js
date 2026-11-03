@@ -22,8 +22,8 @@
 (function () {
   const H = window.Home, DESIGN = window.PANEL_DESIGN === true;
   if (!H || DESIGN) return;
-  const PID = () => ((window.PanelStore && PanelStore.id) || "main").toLowerCase();
-  const me = () => [PID(), H.kiosk()];
+  const PID = () => String((window.PanelStore && PanelStore.id) || "").toLowerCase();   // (v3.0.2: no "main")
+  const me = () => [PID(), H.kiosk()].filter(Boolean);
   const forMe = (to) => Array.isArray(to) && to.some((t) => typeof t === "string" && (t.toLowerCase() === "all" || me().includes(t.toLowerCase())));
 
   // ---------- status bars ----------
@@ -63,9 +63,19 @@
   async function poll() {
     clearTimeout(st.timer);
     let q = "";
-    if (H.isPanel) {   // (its check-in: the version it runs and the page it shows — short words only)
+    // (v3.0.2: any page holding this panel's device key checks in — an iPad too; Home.isPanel's other uses stay as they are)
+    const keyed = !window.PANEL_DESIGN && !window.PANEL_LIVE && (!!window.PANEL_DEVICE_KEY
+      || (() => { try { return String(localStorage.getItem("skypane.dk") || "").toLowerCase().indexOf(`${PID()}.`) === 0; } catch { return false; } })());
+    if (H.isPanel || keyed) {   // (its check-in: the version it runs and the page it shows — short words only)
       const v = String((window.PANEL_CONFIG && PANEL_CONFIG.version) || "").slice(0, 40), page = String((window.App && App.view) || "").slice(0, 40);
       q = `?checkin=1${v ? `&version=${encodeURIComponent(v)}` : ""}${page ? `&page=${encodeURIComponent(page)}` : ""}`;
+      // (v3.0.2: the screen and time zone for the soft "same device?" check — the server compares stable fields only)
+      let tz = ""; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch {}
+      if (window.screen && screen.width) q += `&scr=${screen.width}x${screen.height}`;
+      if (tz) q += `&tz=${encodeURIComponent(tz.slice(0, 64))}`;
+      // (v3.0.2: the LED agent on this tablet — agentlink.js; not known yet = left out, the server keeps its last word)
+      const ag = window.AgentLink && AgentLink.state;
+      if (ag === "ok" || ag === "off" || ag === "none") q += `&agent=${ag}`;
     }
     const ctl = window.AbortController ? new AbortController() : null, cut = ctl && setTimeout(() => ctl.abort(), 8000);
     try {

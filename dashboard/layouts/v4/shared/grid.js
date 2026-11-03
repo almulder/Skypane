@@ -113,6 +113,13 @@
   function rows(c, items, empty) {
     const o = c.o;
     if (!items.length) return { html: `${head(o.title)}<div class="gc-empty">${esc(empty)}</div>` };
+    // (v3.0.2) "Orbs": the room's devices as Room Layout G draws its lights (roomlayoutG.js: one orb, painted) — tap
+    // switches, slide up / down dims, hold: the light's pop-up (the press below); a switch / fan: an orb with its icon
+    const G = o.look === "orbs" && window.RoomLayouts && RoomLayouts.G && RoomLayouts.G.orb;
+    if (G) return { html: `${head(o.title)}<div class="gc-devs orbs">${items.map((it, n) => {
+      const d = H.device(it.id), [st, , i] = devState(it.id), lt = d && d.kind === "light";
+      return d ? `<div class="gc-orbi" data-gitem="${n}">${RoomLayouts.G.orb(d, Grid.room && Grid.room.name, lt ? null : ic(it.icon || i, 24, d.on, it.id), lt ? null : st)}</div>` : "";
+    }).join("")}</div>` };
     const html = items.map((it, n) => {
       const [st, on, i] = devState(it.id);
       return `<div class="gc-gi${on ? " on" : ""}" data-gitem="${n}">${ic(it.icon || i, 26, on, it.id)}<span class="gc-n">${esc(it.title || H.devName(it.id) || T("g.device"))}</span><span class="gc-s">${esc(st)}</span></div>`;
@@ -887,6 +894,10 @@
         // screen's width a card was 2.2 × — "DOOR / LOCKS", "Lock / all" on two lines each)
         const stacked = cs.display === "flex";
         s = Math.max(0.4, cell.classList.contains("scroll") ? Math.min(1, kw) : Math.min(stacked ? 1 : 2.2, k));
+        // (v3.0.2: a room's devices keep their own size — tiles / rows / orbs reflow into the card, leaving free space; only
+        // once they no longer fit do they get smaller (the rounds below), then scroll. Drawn at the card's scale, a big card
+        // had huge tiles and shrinking it shrank them long before its edges came near)
+        if (c && c.t === "roomdevs") s = 1;
       }
       if (cell.dataset.lscroll) delete cell.dataset.lscroll;
       cell.style.setProperty("--gfit", s.toFixed(3));
@@ -909,8 +920,10 @@
         cell.style.setProperty("--gfit", s.toFixed(3));
       }
       // a long list (a room's 58 lights): rather readable and scrolling than squeezed into 3 px text
-      if (s < 0.6 && inn.querySelector(".gc-devs")) {
-        s = Math.max(0.6, Math.min(1, s0));
+      // (a room's devices: down to 0.7 of their size at most, then scroll at that size)
+      const own = cell.classList.contains("gc-roomdevs"), lo = own ? 0.7 : 0.6;
+      if (s < lo && inn.querySelector(".gc-devs")) {
+        s = own ? lo : Math.max(0.6, Math.min(1, s0));
         cell.dataset.lscroll = "1";
         cell.style.setProperty("--gfit", s.toFixed(3));
       }
@@ -999,6 +1012,8 @@
   let press = null, lastTap = null;
   const inner = (t) => t.closest("button, a, input, select, textarea, [data-click], [data-change], [data-nest], [data-tdrag], .cal, .gw-card");
   document.addEventListener("pointerdown", (e) => {
+    // (v3.0.2: a press whose release never came — its card redrawn under the finger — must not block every card after it)
+    if (press && !press.unlock && !press.sliding && Date.now() - press.at > 5000) { clearTimeout(press.timer); press = null; }
     const el = e.target.closest("#main.lay-custom .gc[data-gi]");
     if (!el || press || (inner(e.target) && !el.matches(".gc-device, .gc-button, .gc-room, .gc-camera, .gc-value, .gc-text, .gc-picture, .gc-group, .gc-roomdevs, .gc-roomopen, .gc-scenes, .gc-lock, .gc-garage, .gc-spot, .gc-blank"))) return;
     if (el.matches(".gc-player") && e.target.closest("button")) return;   // (its own buttons)
@@ -1022,22 +1037,40 @@
     if (press.door != null) { press.el.classList.add("pressed"); return; }
     // a slider tile on a light that dims: dragging across it sets the level
     if (!item && c.t === "device" && ["slider", "bar"].includes((c.o || {}).style)) { const d = H.device(c.o.id); if (d && d.dim !== false && d.kind === "light") { press.slider = d; press.vert = c.o.style === "bar"; } }
+    // (v3.0.2) an orb that dims: press and slide up / down = brightness from where it is (Room Layout G's orb), off at the bottom
+    // (v3.0.2: not in a card whose list scrolls — data-lscroll: there an up / down swipe scrolls; hold for the pop-up)
+    if (item && gi.matches(".gc-orbi") && !el.dataset.lscroll && e.target.closest(".rlG-ow")) { const d = H.device(item.id); if (d && d.dim && d.kind === "light") { press.slider = d; press.orb = gi.querySelector("[data-light]"); press.lv0 = d.on ? d.level || 0 : 0; } }
     press.el.classList.add("pressed");
     // press and hold: the card's wheel of actions when it has one (else its hold action); a device that switches with
     // neither (an item of a Devices card, a Device card with no wheel set): the automatic wheel from what it is
-    const it2 = press.item, auto = (x) => (x && x.id && !H.state.locks.some((l) => l.id === x.id) && (H.device(x.id) || {}).kind !== "garage" ? Grid.autoWheel(x.id) : null);
+    // (v3.0.2: a light that dims / changes colour: its pop-up — brightness, white, colour — not the wheel's two colours)
+    const it2 = press.item, auto = (x) => (x && x.id && !H.state.locks.some((l) => l.id === x.id) && (H.device(x.id) || {}).kind !== "garage" ? (lightPopOk(x.id) ? [{ pop: x.id }] : Grid.autoWheel(x.id)) : null);
     const wh = it2 ? it2.wheel || (c.t === "roomdevs" || c.t === "group" || (spot && it2.as === "switch") ? auto(it2) : null)
       : (c.o || {}).wheel || (c.t === "device" && !c.hold ? auto(c.o) : null);
     if (wh && wh.length) {
       const at = press.el;
       at.classList.add("holding");   // (a ring fills while the finger stays: the wheel is coming)
-      press.timer = setTimeout(() => { if (!press) return; press.held = true; at.classList.remove("pressed", "holding"); Grid.openWheel(at, wh, c, it2 ? it2.icon : (c.o || {}).icon); }, 550);
+      press.fire = () => {
+        if (!press) return; press.held = true; at.classList.remove("pressed", "holding");
+        if (wh[0].pop != null) { eatAfter(press.id); Grid.lightPop(wh[0].pop); } else Grid.openWheel(at, wh, c, it2 ? it2.icon : (c.o || {}).icon);   // (the lift's click: not on the pop-up's backdrop)
+      };
+      press.timer = setTimeout(press.fire, 550);
       return;
     }
     if (it2) return;
     const hold = act(c, "hold");
-    if (hold) press.timer = setTimeout(() => { if (!press) return; press.held = true; el.classList.remove("pressed"); run(hold, c); }, 550);
+    if (hold) { press.fire = () => { if (!press) return; press.held = true; el.classList.remove("pressed"); run(hold, c); }; press.timer = setTimeout(press.fire, 550); }
   });
+  // (v3.0.2) a tablet's own long-press (Android / FreeKiosk WebView, iPad Safari) shows no menu on a card, a room tile or
+  // an orb — and when its contextmenu comes before our 0.55 s (Android's long-press is ~0.4–0.5 s, and a menu it starts
+  // cancels the touch: no pointerup, the hold never fired), that IS the hold
+  const NO_MENU = "#main.lay-custom .gc, main.roomview .tile[data-dev], main.roomlayout [data-light], .gwheel, .popup-host";
+  document.addEventListener("contextmenu", (e) => {
+    const t = e.target.closest ? e.target : null; if (!t) return;
+    if (press && press.fire && !press.held && press.timer && t.closest("#main.lay-custom .gc[data-gi]")) { e.preventDefault(); clearTimeout(press.timer); press.fire(); return; }
+    if (lp) { e.preventDefault(); lpFire(); return; }
+    if (t.closest(NO_MENU) && !t.closest("input, textarea, [contenteditable]:not([contenteditable=false])")) e.preventDefault();   // (v3.0.2: a pop-up's text field keeps its paste / select menu)
+  }, true);
   const end = (e, cancel) => {
     if (!press || e.pointerId !== press.id) return;
     const p = press; press = null; clearTimeout(p.timer); p.el.classList.remove("pressed", "holding");
@@ -1050,7 +1083,8 @@
     }
     if (p.sliding) {   // (the level where the finger let go; 0 = off)
       App.dragging = false;
-      if (!cancel && p.pct != null) { if (p.pct === 0) run({ do: "off", id: p.slider.id }, p.c); else H.setLevel(p.slider.id, p.pct); }
+      // (an orb dragged down while off stays off: no command)
+      if (!cancel && p.pct != null) { if (p.pct === 0) { if (!p.orb || p.slider.on) run({ do: "off", id: p.slider.id }, p.c); } else H.setLevel(p.slider.id, p.pct); }
       App.render();
       return;
     }
@@ -1077,7 +1111,14 @@
       u.thumb.style.transform = `translateX(${Math.round(u.frac * room)}px)`;
       return;
     }
-    if (press && press.slider && e.pointerId === press.id && (press.sliding || Math.abs(press.vert ? e.clientY - press.y : e.clientX - press.x) > 10)) {
+    const ody = press && press.orb ? e.clientY - press.y : 0;
+    if (press && press.orb && e.pointerId === press.id && (press.sliding || (Math.abs(ody) > 20 && Math.abs(ody) > Math.abs(e.clientX - press.x) * 1.2))) {
+      if (!press.sliding) { press.sliding = true; clearTimeout(press.timer); press.el.classList.remove("pressed", "holding"); App.dragging = true; }
+      const v = Math.round(press.lv0 - (ody / 160) * 100); press.pct = v < 1 ? 0 : Math.min(100, v);
+      RoomLayouts.G.orbPaint(press.orb, press.slider, { on: press.pct > 0, level: Math.max(1, press.pct) });
+      return;
+    }
+    if (press && press.slider && !press.orb && e.pointerId === press.id && (press.sliding || Math.abs(press.vert ? e.clientY - press.y : e.clientX - press.x) > 10)) {
       if (!press.sliding) { press.sliding = true; clearTimeout(press.timer); press.el.classList.remove("pressed", "holding"); App.dragging = true; }
       const r = press.el.getBoundingClientRect();
       const pct = Math.max(0, Math.min(100, Math.round(press.vert ? ((r.bottom - e.clientY) / r.height) * 100 : ((e.clientX - r.left) / r.width) * 100)));
@@ -1105,6 +1146,75 @@
     return w.length > 2 ? w.slice(0, 8) : null;
   };
 
+  // ---------- a light's pop-up (v3.0.2: press and hold a light anywhere — room tiles / list rows, cards, orbs) ----------
+  // On / off, brightness (dims), warm ↔ cool (tunable white, 2000–6500 K as data.js sends it) and colour: a rainbow hue
+  // slider + saturation (Hubitat's 0–100 scales; H.setColor sends setHue + setSaturation, or one setColor — the device's
+  // own colour command, which the bridge's rules allow). Live while dragging, sent on release (one command, not fifty).
+  // (v3.0.2: every light — a plain on / off one too: its pop-up is just the switch. Held, a light opens it on every look —
+  // cards, orbs, tiles, list rows — and the release never also switches it)
+  const lightPopOk = (id) => { const d = H.device(+id); return !!(d && d.kind === "light"); };
+  const CT_STOPS = [[2000, "#ff8a1f"], [2700, "#ffb86b"], [4000, "#ffe4c4"], [5000, "#fff6ea"], [6500, "#d6e3ff"]];
+  const ctCol = (k) => { const s = CT_STOPS.find(([v]) => v >= k) || CT_STOPS[CT_STOPS.length - 1]; return s[1]; };
+  const hueCol = (h, s) => `hsl(${Math.round(h * 3.6)} 100% ${Math.round(100 - s / 2)}%)`;
+  const lpLook = (d) => (d.rgb && (String(d.mode).toUpperCase() === "RGB" || !d.white) ? hueCol(d.hue ?? 0, d.sat ?? 100) : d.white ? ctCol(d.ct || 2700) : "#ffd27a");
+  const lpRange = (id, k, min, max, step, v, label, out, cls = "") => `<div class="lp-row"><div class="lp-l"><span>${esc(label)}</span><b class="num" data-lpo="${k}">${esc(out)}</b></div>
+    <input type="range" class="lp-r lp-${k} ${cls}" min="${min}" max="${max}" step="${step}" value="${v}" aria-label="${esc(label)}"${Acts.attr("input", "gr.lpLive", id, k)} data-change="gr.lpSet"></div>`;
+  Grid.lightPop = (id) => {
+    id = +id; Grid.closeWheel();
+    UI.popup(() => {
+      const d = H.device(id); if (!d) return { title: "", body: "" };
+      const lv = Math.max(1, Math.min(100, Math.round(d.level || 100))), ct = Math.max(2000, Math.min(6500, Math.round(d.ct || 2700)));
+      const hue = Math.max(0, Math.min(100, Math.round(d.hue ?? 0))), sat = Math.max(0, Math.min(100, Math.round(d.sat ?? 100)));
+      const body = `<div class="lp${d.on ? " on" : ""}" style="--lp-c:${lpLook(d)};--lp-h:${Math.round(hue * 3.6)}">
+        <button class="lp-pw" role="switch" aria-checked="${!!d.on}"${Acts.on("gr.lpToggle", id)}><span class="lp-dot"></span><span class="lp-st">${esc(T(d.on ? "val.on" : "val.off"))}</span><span class="switch ${d.on ? "on" : ""}"></span></button>
+        ${d.dim ? lpRange(id, "lvl", 1, 100, 1, lv, T("lp.brightness"), `${lv} %`) : ""}
+        ${d.white ? lpRange(id, "ct", 2000, 6500, 50, ct, T("lp.white"), `${ct} K`) : ""}
+        ${d.rgb ? lpRange(id, "hue", 0, 100, 1, hue, T("lp.colour"), "", "hue-range") + lpRange(id, "sat", 0, 100, 1, sat, T("lp.saturation"), `${sat} %`) : ""}</div>`;
+      return { title: d.name, body, cls: "pop-lp" };
+    });
+  };
+  let lpPtr = false;   // (a slider moved by a finger / mouse lets go of the focus after it's sent: the pop-up updates live again)
+  document.addEventListener("pointerdown", (e) => { const r = e.target.closest && e.target.closest(".lp-r"); lpPtr = !!r; if (r) r.focus({ preventScroll: true }); }, true);
+  const lpBox = (el) => el.closest(".lp"), lpVal = (box, k) => { const r = box.querySelector(`.lp-${k}`); return r ? +r.value : null; };
+  Acts.add({
+    "gr.lpToggle": (id) => H.toggle(id),
+    "gr.lpLive": (id, k, el) => {   // (only the pop-up's own look while the finger moves — nothing is sent)
+      const box = lpBox(el), v = +el.value, o = box.querySelector(`[data-lpo="${k}"]`);
+      if (o && k !== "hue") o.textContent = k === "ct" ? `${v} K` : `${v} %`;
+      if (k === "hue" || k === "sat") { box.style.setProperty("--lp-h", Math.round(lpVal(box, "hue") * 3.6)); box.style.setProperty("--lp-c", hueCol(lpVal(box, "hue"), lpVal(box, "sat"))); }
+      if (k === "ct") box.style.setProperty("--lp-c", ctCol(v));
+    },
+    "gr.lpSet": (id, k, el) => {   // (the input's data-args, shared with gr.lpLive)
+      const box = lpBox(el); if (!box) return;
+      if (k === "lvl") H.setLevel(id, +el.value);
+      else if (k === "ct") H.setColorTemp(id, +el.value);
+      else H.setColor(id, lpVal(box, "hue"), lpVal(box, "sat") ?? 100);
+      if (lpPtr) { lpPtr = false; el.blur(); UI.refreshPopup(); }
+    },
+  });
+
+  // ---------- press and hold on a room page's light / switch (v3.0.2: one for every room look) ----------
+  // Held still 0.5 s → fn(); moved more than 10 px (a list scrolling, an orb dimming), lifted or cancelled first: not a
+  // hold — the tap / drag stays the page's own. The tap that ends a hold is eaten (one click, right after the release; a
+  // tablet that sends none after its long-press doesn't lose the next real tap).
+  let lp = null, eatUntil = 0, heldId = null;
+  const lpOff = () => { if (lp) { clearTimeout(lp.timer); lp.el.classList.remove("holding"); lp = null; } };
+  const eatAfter = (pid) => { heldId = pid; eatUntil = Date.now() + 1500; };
+  const lpFire = () => { const p = lp; if (!p) return; lpOff(); eatAfter(p.id); p.fn(); };
+  Grid.longPress = (e, el, fn) => {
+    lpOff(); if (e.button > 0 || !e.isPrimary) return;
+    lp = { el, fn, id: e.pointerId, x: e.clientX, y: e.clientY, timer: setTimeout(lpFire, 500) };
+    el.classList.add("holding");
+  };
+  addEventListener("pointerdown", (e) => { if (e.pointerId !== heldId) { eatUntil = 0; heldId = null; } }, true);
+  addEventListener("pointermove", (e) => { if (lp && e.pointerId === lp.id && Math.hypot(e.clientX - lp.x, e.clientY - lp.y) > 10) lpOff(); }, true);
+  addEventListener("pointerup", (e) => { if (lp && e.pointerId === lp.id) lpOff(); if (e.pointerId === heldId) { heldId = null; eatUntil = Math.min(eatUntil, Date.now() + 400); } }, true);
+  addEventListener("pointercancel", (e) => { if (lp && e.pointerId === lp.id) lpOff(); }, true);
+  addEventListener("click", (e) => { if (Date.now() < eatUntil) { eatUntil = 0; e.stopPropagation(); e.preventDefault(); } }, true);
+  // what a hold on a device opens: a light's pop-up, else its automatic wheel (fans, shades …); null: nothing to open
+  Grid.holdable = (id) => lightPopOk(id) || !!Grid.autoWheel(+id);
+  Grid.holdDev = (el, id) => { if (lightPopOk(id)) return Grid.lightPop(id); const w = Grid.autoWheel(+id); if (w) Grid.openWheel(el, w, null, null); };
+
   // ---------- the press-and-hold wheel ----------
   // The card's chosen actions around it. Only the actions do something: a tap on one runs it and closes the wheel; the
   // middle (the card's own picture) and anywhere else just close it.
@@ -1125,7 +1235,7 @@
     const mid = c && c.t === "device" ? devState(c.o.id)[2] : "power";
     wheelEl = document.createElement("div");
     wheelEl.className = "gwheel";
-    wheelEl.innerHTML = `<div class="gw-c" style="left:${cx}px;top:${cy}px">${btns}<button class="gw-mid" aria-label=T("shade.close")>${ic(picture || mid, 34, true)}</button></div>`;
+    wheelEl.innerHTML = `<div class="gw-c" style="left:${cx}px;top:${cy}px">${btns}<button class="gw-mid" aria-label="${esc(T("common.close"))}">${ic(picture || mid, 34, true)}</button></div>`;   // (v3.0.2: was the literal text T("shade.close"))
     wheelEl.addEventListener("click", (e) => {
       e.preventDefault(); e.stopPropagation();
       if (Date.now() - opened < 350) return;   // (the hold's own finger lifting)

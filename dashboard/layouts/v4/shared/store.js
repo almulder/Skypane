@@ -4,12 +4,11 @@
 //   PanelStore.get(key) / PanelStore.set(key, value, paths?) / PanelStore.onChange(fn(keys))
 // Keys: "settings" (Settings.v), "cameraViews" (panel-made camera views), "weatherCustom" (added weather places).
 // paths = the dotted sub-paths that changed (e.g. ["cameras.liveMax"]); none = the whole value changed.
-// Start: the local cache is used at once; then the service's copy replaces it (onChange). If the service has
-// nothing yet, only a real panel creates it from its local data (the kitchen panel holds the real settings — a
-// laptop browser must not overwrite them), or any browser opened with ?migrate=1.
+// Start: the local cache is used at once; then the service's copy replaces it (onChange). (v3.0.2: a panel never
+// creates itself on the service any more — the Manager makes it and a tablet is paired to it; no built-in "main".)
 // Edits not yet on the service ("dirty") are kept in localStorage too, so they survive a reload while offline.
 (function () {
-  const id = typeof window.PANEL === "string" && window.PANEL ? window.PANEL : "main";
+  const id = typeof window.PANEL === "string" && window.PANEL ? window.PANEL : "";   // (v3.0.2: no "main" — without a panel, nothing is synced)
   const CACHE = `panelstore.${id}`, DIRTY = `panelstore.${id}.dirty`;
   // the layout builder's canvas (?design=1, design.js): reads this panel's data, never saves or caches anything;
   // override = the builder's unsaved changes on top ({settings: {homeLayout, homeGrid}})
@@ -40,11 +39,10 @@
   saveCache();
 
   let rev = 0, synced = false, timer = null, retry = null, busy = false, again = false, blocked = false, warned = false;
-  // the panel PIN, once Settings was unlocked with it (memory only, never stored): the service wants it for changes
-  // to the main panel's device choices / "never switch" list
+  // the panel PIN, once Settings was unlocked with it (memory only, never stored): sent with the changes, for a
+  // service that asks for it (403 pin-required / 423)
   let pin = null, releasePin = false;
   let pullRetry = null;   // the one pending "try again in a minute" after a failed pull()
-  const canCreate = !DESIGN && /Android/i.test(navigator.userAgent) || /[?&]panel\b/.test(location.search) || /[?&]migrate=1\b/.test(location.search);
   const tell = (keys) => listeners.forEach((fn) => { try { fn(keys); } catch (e) { console.warn(e); } });
 
   // the service's value with only this browser's changed sub-paths put back on top ("all": keep the local value)
@@ -84,7 +82,7 @@
   async function push() {
     timer = null;
     if (busy) { again = true; return; }
-    if (!synced || blocked || DESIGN) return;
+    if (!id || !synced || blocked || DESIGN) return;
     busy = true;
     let conflicts = 0, keys = Object.keys(dirty);
     try {
@@ -94,7 +92,7 @@
         let r, res;
         try {
           r = await fetch(api, { method: "PATCH", headers: { "Content-Type": "application/json" },
-            body: json({ data: { [k]: data[k] === undefined ? null : data[k] }, client, baseRev: rev, create: canCreate, ...(pin ? { pin } : {}) }) });
+            body: json({ data: { [k]: data[k] === undefined ? null : data[k] }, client, baseRev: rev, ...(pin ? { pin } : {}) }) });
           res = await r.json().catch(() => ({}));
         } catch (e) { later(e.message || e); return; }
         if (r.ok) {
@@ -114,7 +112,7 @@
         } else if (r.status === 409 && res.error !== "conflict") {
           // not created yet, or the service refuses a new panel (too many): keep the edits here, try after the next pull
           blocked = true;
-          if (!warned) { warned = true; console.warn(`[store] panel not saved on the service (${res.error || "refused"})${res.error === "not-created" ? " — open it on the panel itself first" : ""}`); }
+          if (!warned) { warned = true; console.warn(`[store] panel not saved on the service (${res.error || "refused"})`); }
           return;
         } else if (r.status === 409) {
           // someone else saved first: merge onto their copy and try again (3 times, then the 30 s retry)
@@ -143,6 +141,7 @@
     window.PanelStore.notSetUp = true;
   }
   async function pull() {
+    if (!id) return;   // (no panel: this browser's copy only)
     try {
       const r = await fetch(api, { cache: "no-store" });
       if (r.status === 404) {
@@ -155,12 +154,7 @@
       const res = await r.json();
       if ((res.rev || 0) < rev) return;   // older than what this browser already saw
       synced = true; blocked = false; window.PanelStore.notSetUp = false;
-      if (res.exists) take(res.rev, res.data);
-      else if (canCreate) {
-        // migration: the service has nothing yet — this panel's data becomes the service's copy
-        for (const k of Object.keys(data)) dirty[k] = { paths: "all", n: (dirty[k] ? dirty[k].n : 0) + 1 };
-        saveCache();
-      }
+      if (res.exists) take(res.rev, res.data);   // (v3.0.2: nothing there yet → nothing sent; no self-made panel)
       if (Object.keys(dirty).length) schedule();
     } catch (e) {
       // no service (e.g. the old test web server): keep working from the cache, try again in a minute

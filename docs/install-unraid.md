@@ -60,6 +60,8 @@ own address, as if it were a separate device. The tablets and your phone will op
 - **Docker** tab → the Skypane icon → **Logs**. You should see `[run_all] server started (pid …)` and
   `[server] … dashboard service … on 0.0.0.0:80`. The line `Hubitat not set up … bridge not started` is normal for now.
 - In a browser: `http://192.168.1.50/api/health` shows `{"ok": true, …}`.
+- `http://192.168.1.50/` itself shows Skypane's status. It isn't a panel: each tablet gets its own panel by pairing
+  with a code ([first-run.md](first-run.md), [panel-pairing.md](panel-pairing.md)).
 
 Open these from another computer or your phone. The Unraid server itself can't reach Skypane's own br0 address (an
 Unraid quirk; nothing is wrong).

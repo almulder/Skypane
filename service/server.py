@@ -2,18 +2,23 @@
 
 Design: docs/dashboard-service.md. Python 3.12 stdlib; paho-mqtt is optional (change notifications).
 
-  /                        -> layouts/v4/layout1.html for panel "main" (with <base> + window.PANEL + PANEL_CONFIG)
-  /<Panel>                 -> the same page for that panel id (^[A-Za-z][A-Za-z0-9_-]{0,31}$, case-insensitive)
-                              ?live=1: the Manager's "Open live" (a Manager login only: the admin controls, others
-                              view — no broker login in the page; GET /api/manage/panels/<id>/live feeds it)
-  /layouts/v4/layout1.html -> the page as before (window.PANEL_CONFIG only; the page then uses "main")
+  /                        -> (v3.0.2) the status / "Connect this panel" page (dashboard/connect/index.html); a browser
+                              holding a valid device key is sent on to its panel (302). There is no built-in panel.
+  /<Panel>                 -> layouts/v4/layout1.html for that panel id (^[A-Za-z][A-Za-z0-9_-]{0,31}$, case-insensitive)
+                              — only with that panel's device key (cookie skypane_dk, service/panel_devices.py), else a
+                              small "Unable to connect" page. ?live=1: the Manager's "Open live" (a Manager login only:
+                              the admin controls, others view — no broker login in the page; GET
+                              /api/manage/panels/<id>/live feeds it); ?design=1: the builder's canvas (a Manager login)
+  /layouts/v4/layout1.html -> (v3.0.2) a Manager login only (it holds the broker login), anyone else 404
   /<anything else>         -> static files under DASHBOARD_DIR only (Cache-Control: no-cache)
-  /layouts/v4/shared/hubitat-data.js, protect-cameras.js -> DATA_DIR/house/<name> when present
+  /layouts/v4/shared/hubitat-data.js, protect-cameras.js -> DATA_DIR/house/<name> when present (a device key or a login)
   GET/PATCH /api/panel/<id>, GET /api/health   (sync protocol v2: docs/dashboard-service-sync.md; a panel the
                               Manager hasn't set up: 404 {"error": "not-set-up"} — only the Manager creates panels)
+  GET /api/status, PATCH /api/pair, GET/PATCH /api/manage/pairing, /api/manage/pin -> (v3.0.2) panel pairing:
+                              mockups/PAIRING-API.md is the contract
   GET/PATCH /api/pin       -> house-wide panel PIN (service/panel_pin.py): status (?purpose=alert|disarm: that
-                              lock-out), verify, ticket (also [0, "alertAck", id]: dismissing a level 4–5 alert), set (limits per client IP); PATCH /api/panel/main changing settings.deviceOverrides / neverSwitch
-                              needs "pin" in the body while a PIN is set
+                              lock-out), verify, ticket (also [0, "alertAck", id]: dismissing a level 4–5 alert), set (limits
+                              per client IP), mqtt-login — from any paired panel
   GET /api/manage/overview -> the Manager's Overview (service/overview.py; live state: service/live_state.py)
   PATCH /api/manage/alerts -> the admin acknowledges alerts waiting on the panels (levels 4–5: the panel PIN)
   GET/PATCH /api/manage/weather -> (v3.0.0, admins) Integrations → Weather: the Hubitat weather device, its warnings on
@@ -34,6 +39,7 @@ import errno
 import gzip
 import hashlib
 import hmac
+import html
 import http.server
 import io
 import ipaddress
@@ -57,9 +63,11 @@ try:  # `python -m service.server` / tests; or run from inside service/
     from service.panel_pin import PanelPin
     from service import feedback
     from service import geocode
-    from service import activity_log, art_sources, calendars, camera_frames, cards, guest_wifi, health, house_devices, house_settings, layouts, lists, live_state, manager_auth, manager_prefs, overview, own_cameras, panel_settings, pictures, templates
+    from service import activity_log, art_sources, calendars, camera_frames, event_icons, cards, guest_wifi, health, house_devices, house_settings, layouts, lists, live_state, manager_auth, manager_prefs, overview, own_cameras, panel_settings, pictures, templates
     from service import weather_device
     from service import device_rules
+    from service import panel_devices, switch_rule
+    from service import broker
 
 except ImportError:  # pragma: no cover
     from panel_pin import PanelPin
@@ -68,6 +76,7 @@ except ImportError:  # pragma: no cover
     import geocode
     import calendars
     import camera_frames
+    import event_icons
     import cards
     import layouts
     import lists
@@ -86,6 +95,9 @@ except ImportError:  # pragma: no cover
     import overview
     import device_rules
     import weather_device
+    import panel_devices
+    import switch_rule
+    import broker
 
 
 GUEST_SETTINGS_LOCK = threading.Lock()
@@ -131,6 +143,8 @@ DRAIN_DEADLINE = 10.0   # seconds spent discarding a refused body before the con
 LENGTH_RE = re.compile(r"[0-9]{1,8}")
 LAYOUT = "layouts/v4/layout1.html"
 BASE_HREF = "/layouts/v4/"
+PAIRED_UNREADABLE = "Skypane can't read its panel list right now — nothing was changed"
+PAIRED_UNREADABLE_STATE = "Skypane can't read its panel list right now — which tablet each panel has isn't known"
 HOUSE_FILES = {"/layouts/v4/shared/hubitat-data.js": "hubitat-data.js",
                "/layouts/v4/shared/protect-cameras.js": "protect-cameras.js"}
 RESERVED_SEGMENTS = {"api", "admin", "manage"}   # (v3.0.1: the Manager is at /admin; /manage, its old address, stays
@@ -173,10 +187,13 @@ MANAGE_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-i
 # the design / live views ('self'); the plain panel page sends frame-ancestors 'none' (_send). The page's own settings
 # come as data (_layout), not as an inline script.
 PANEL_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; "
-             "media-src 'self' blob: data: http: https:; connect-src 'self' ws: wss: https:; frame-src 'self' http: https:; "
+             "media-src 'self' blob: data: http: https:; connect-src 'self' ws: wss: https: http://127.0.0.1:852; frame-src 'self' http: https:; "
              "font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'")
 # (worker-src: mqtt.js runs its keep-alive timer in a blob: worker — without it the pings stop and every panel drops off
 # the broker about every 95 s; v2.7.1)
+# (connect-src http://127.0.0.1:852, v3.0.2: the LED agent on the panel's own tablet — shared/agentlink.js,
+# mockups/AGENT-AUTOCONFIG.md — only that address on the loopback, nothing else over plain http)
+AGENT_STATES = ("ok", "off", "none")   # a check-in's agent=: connected / running but not connected / no agent answered
 LOCAL_HOSTS = {"", "localhost", "127.0.0.1", "::1"}
 MAX_PANEL_EVENTS = 1500   # a panel's calendar answer: the soonest this many (a huge feed must not cost every poll 1 MB)
 BLANK_GRID = {"v": 2, "cols": 192, "rows": 128, "gap": 14, "cards": []}   # a new panel's Home (builder.js FC × FR)
@@ -185,14 +202,29 @@ LIVE_REFUSED = ("<!doctype html><meta charset=utf-8><title>Skypane</title><body 
                 "min-height:100vh;background:#140b3a;color:#e9e5f7;font:15px system-ui,sans-serif;text-align:center\"><div>"
                 "<b style=\"display:block;font-size:17px;margin-bottom:6px\">Open this panel live from the Manager</b>"
                 "Sign in to the Manager with an account that may see this panel, then use Panels → Open live.</div></body>")
-PIN_GUARDED_PANEL = "main"                           # its settings below change only with the panel PIN (when set)
+HUB_STATUS_FILE = "hubitat-status.json"       # (v3.0.2) written by scripts/hubitat_bridge.py (hub_status)
+PROTECT_STATUS_FILE = "protect-status.json"   # (v3.0.2) written by service/protect_sync.py (Sync.status)
 # a panel's settings only the Manager's admin changes (accounts): unlocking there, its FreeKiosk name
 # (where sounds / spoken alerts / camera pop-ups go), the music page and a separate go2rtc address — both pages the
 # panel loads full screen. (Level 5 alerts always show now.) And every alert setting + the PIN windows.
 ADMIN_PANEL_KEYS = ("allowUnlock", "kioskName", "music.url", "cameras.go2rtc") + panel_settings.ADMIN_ONLY
 # (a path = nested key: the music page and a separate go2rtc are addresses the panel loads — a LAN device must not
 # point them at its own page; the PIN window guards the PIN itself. Not childLock: "auto lock" turns it on without a PIN)
-PIN_GUARDED_KEYS = ("deviceOverrides", "neverSwitch", ("music", "url"), ("cameras", "go2rtc"))
+# (v3.0.2: PIN_GUARDED_PANEL / PIN_GUARDED_KEYS went with the built-in main panel — the house's "may switch" rule is
+# house/switch-rule.json now, the admin's alone; music.url / cameras.go2rtc are PANEL_LOCKED once the Manager set them)
+LEGACY_MAIN = "main"     # (v3.0.2) only the start-up's one-time moves still read the old main panel's file
+DK_COOKIE = "skypane_dk"          # (v3.0.2) the tablet's device key: "<pid>.<key>" (mockups/PAIRING-API.md)
+DK_MAX_AGE = 315360000            # 10 years: the key is rotated anyway; the browser just mustn't drop it
+DK_RE = re.compile(r"([A-Za-z][A-Za-z0-9_-]{0,31})\.([A-Za-z0-9_-]{16,64})")
+PAIR_RATE = 120                   # /api/pair calls a minute per address (a screen polls every 2 s, ≤ 3 per address)
+STATUS_RATE = 60                  # /api/status calls a minute per address
+BLOCKED_NOTICE = 5                # refused visits to one panel within BLOCKED_WINDOW raise a notice
+BLOCKED_WINDOW = 600
+# (v3.0.2) the small pages a tablet gets instead of a panel it may not open: no script, nothing from elsewhere
+SMALL_CSP = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+# the status / pairing page (dashboard/connect/): our own scripts only; it talks to this server alone
+CONNECT_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; "
+               "connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'")
 COMMAND_RE = re.compile(r"[A-Za-z]{1,40}")           # device command names a ticket may be issued for
 VALUE_RE = re.compile(r"[A-Za-z0-9 .,\-]{1,32}")  # (same as the bridge's value check)
 MAX_TICKETS = 20                                     # per request
@@ -312,25 +344,28 @@ def host_allowed(host, allowed):
         return False
 
 
+def ua_profile(ua):
+    """(v3.0.2) What a browser's user-agent says about the device — {browser, platform, model?} in the shape of
+    panel_devices.clean_profile: tells tablets apart in the Manager, never trusted (it isn't secret)."""
+    ua = ua if isinstance(ua, str) else ""
+    browser = ("Samsung Internet" if "SamsungBrowser/" in ua else "Edge" if re.search(r"Edg(A|iOS)?/", ua) else "Opera" if "OPR/" in ua
+               else "Firefox" if "Firefox/" in ua or "FxiOS/" in ua else "Chrome" if "Chrome/" in ua or "CriOS/" in ua
+               else "Safari" if "Safari/" in ua else "")
+    platform = ("iOS" if "iPhone" in ua else "iPadOS" if "iPad" in ua else "Android" if "Android" in ua else "Windows" if "Windows" in ua
+                else "ChromeOS" if "CrOS" in ua else "macOS" if "Mac OS X" in ua or "Macintosh" in ua else "Linux" if "Linux" in ua else "")
+    out = {k: v for k, v in (("browser", browser), ("platform", platform)) if v}
+    m = re.search(r"Android [\d.]+; (?:[a-z]{2}[-_][A-Za-z]{2}; )?([^;)]+?)(?: Build/[^;)]*)?[;)]", ua)
+    if m and m[1].strip() not in ("K", "wv", "Mobile", "Tablet"):   # ("K": Chrome's reduced user-agent hides the model)
+        out["model"] = m[1].strip()
+    return panel_devices.clean_profile(out)
+
+
 def utc_now():
     return datetime.datetime.now(datetime.timezone.utc)
 
 
 def _canon(value):
     return json.dumps(value, sort_keys=True, ensure_ascii=True, separators=(",", ":"))
-
-
-def pin_guarded_change(old_settings, new_settings):
-    """Would replacing the stored settings by `new_settings` (None = deleted) change a PIN-guarded key?
-    Missing keys / non-object settings count as None."""
-    old = old_settings if isinstance(old_settings, dict) else {}
-    new = new_settings if isinstance(new_settings, dict) else {}
-
-    def at(d, k):
-        for part in (k if isinstance(k, tuple) else (k,)):
-            d = d.get(part) if isinstance(d, dict) else None
-        return d
-    return any(_canon(at(old, k)) != _canon(at(new, k)) for k in PIN_GUARDED_KEYS)
 
 
 def parse_ticket_items(items):
@@ -591,9 +626,7 @@ def panel_aliases(ids):
 
 
 def panel_address(pid, ids):
-    """The address a panel opens at: "/" (the main panel), "/<id>", or its moved address (panel_aliases)."""
-    if pid == PIN_GUARDED_PANEL:
-        return "/"
+    """The address a panel opens at: "/<id>", or its moved address (panel_aliases). (v3.0.2: no "/" — no main panel)"""
     moved = {p: a for a, p in panel_aliases(ids).items()}
     return "/" + moved.get(pid, pid)
 
@@ -643,8 +676,9 @@ def weather_status(payload):
 # MANAGER_CMD_RESULT with the request's rid.
 MANAGER_CMD_TOPIC = "manager/cmd"
 MANAGER_CMD_RESULT = "manager/cmd/result"
-DEFAULT_KIOSK = "skypane"       # (v3.0.0) the main panel's FreeKiosk name when none is set (data.js: the same)
-OLD_KIOSK = "poe_panel"         # (before 3.0 — an install from then keeps it: App._keep_old_kiosk_name)
+DEFAULT_KIOSK = "skypane"       # (v3.0.0) the old main panel's FreeKiosk name when none was set (v3.0.2: offered once
+                                # when approving the first tablet — panel_devices.migrate_v302 legacyKiosk)
+OLD_KIOSK = "poe_panel"         # (before 3.0 — an install from then kept it: the migration offers it instead)
 REVEAL_MAX = 300                # (v2.9.3) a revealed calendar: the panel's general PIN window, at most 5 minutes
 MANAGER_CMD_WAIT = 5.0          # seconds the server waits for the bridge's answer (the bridge drops a command after 10)
 MANAGER_CMD_LOGIN_RATE = 30     # device commands a minute per Manager login
@@ -931,9 +965,9 @@ class Notifier:
 
 
 class ApiError(Exception):
-    def __init__(self, code, message):
+    def __init__(self, code, message, **extra):
         super().__init__(message)
-        self.code, self.message = code, message
+        self.code, self.message, self.extra = code, message, extra   # (extra: more fields in the answer, v3.0.2)
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -981,6 +1015,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         renew = getattr(self, "_set_cookie", None)
         if renew and not any(k.lower() == "set-cookie" for k in (extra or {})):
             self.send_header("Set-Cookie", f"{MANAGE_COOKIE}={renew}; Path=/; HttpOnly; SameSite=Strict")
+        dk = getattr(self, "_dk_set", None)
+        if dk:   # (v3.0.2: a device key handed out or rotated — its own cookie, beside the Manager's)
+            self.send_header("Set-Cookie", f"{DK_COOKIE}={dk}; Path=/; HttpOnly; SameSite=Strict; Max-Age={DK_MAX_AGE}")
         if self.close_connection:
             self.send_header("Connection", "close")
         self.end_headers()
@@ -1083,6 +1120,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._t0 = time.monotonic()
         self._set_cookie = None   # a renewed Manager login cookie for this response (_manage_ok)
         self.manager = None       # who is calling a Manager API (manager_auth.Caller; set by _manage_ok)
+        self._dk_set = None       # (v3.0.2) "<pid>.<key>" to send in the device-key cookie with this response
+        self._dk_seen = None      # (v3.0.2) this request's device key, checked once: (pid, result) — _dk_check
         self._body_read = self.command != "PATCH"
         if self.command in ("GET", "HEAD") and (self.headers.get("Transfer-Encoding") or
                                                 (self.headers.get("Content-Length") or "0").strip() != "0"):
@@ -1114,9 +1153,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "/api/manage/never", "/api/manage/guest-wifi", "/api/manage/pictures", "/api/manage/cameras", "/api/manage/groups", "/api/manage/rooms",
                 "/api/manage/cards", "/api/manage/templates", "/api/manage/calendars", "/api/manage/prefs", "/api/lists",
                 "/api/manage/health", "/api/manage/guest-lockdown", "/api/manage/house/command", "/api/manage/activity/retention", "/api/manage/feedback",
-                "/api/manage/weather")
+                "/api/manage/weather", "/api/pair", "/api/manage/pairing", "/api/manage/pin", "/api/manage/event-icons")
             extra = {"Allow": "GET, HEAD, PATCH" if patchable else "GET, HEAD"} if e.code == 405 else None
-            self._json(e.code, {"error": e.message}, extra)
+            self._json(e.code, {"error": e.message, **e.extra}, extra)
         except (ConnectionError, TimeoutError):
             self.close_connection = True
         except Exception:
@@ -1146,6 +1185,214 @@ class Handler(http.server.BaseHTTPRequestHandler):
             raise ApiError(400, "Bad path")
         return path
 
+    # ---- (v3.0.2) the device key: a tablet's proof that it is that panel's (service/panel_devices.py) ---------------
+    def _dk_cookie(self):
+        """The device-key cookie as (pid, key) — None when there is none of that shape."""
+        for part in (self.headers.get("Cookie") or "").split(";"):
+            k, _, v = part.strip().partition("=")
+            if k == DK_COOKIE:
+                m = DK_RE.fullmatch(v.strip())
+                return (m[1].lower(), m[2]) if m else None
+        return None
+
+    def _dk_check(self):
+        """This request's device key, checked once: (pid, "ok" | "prev" | "late" | "copy" | "locked" | None); (None, None) without
+        one. A replaced key used again (a copy) is logged and raises a notice here."""
+        if self._dk_seen is None:
+            got = self._dk_cookie()
+            self._dk_seen = (got[0], self.app.paired.check(*got)) if got else (None, None)
+            if self._dk_seen[1] == "copy":
+                self._dk_alarm("copy", got[0])
+        return self._dk_seen
+
+    def _dk_alarm(self, kind, pid, notice=True):
+        """A copied key / a device that looks different / refused visits: the server log, the activity log and (notice)
+        one of the Manager's notices — the browser in words, never the key."""
+        ip, agent = self.client_address[0], panel_devices.describe(ua_profile(self.headers.get("User-Agent")))
+        words = {"copy": f"possible copy of panel {pid}'s device key", "profile": f"panel {pid}'s tablet looks like another device",
+                 "blocked": f"panel {pid} refused (no key of its own)", "adopted": f"panel {pid}'s tablet adopted (upgrade)"}[kind]
+        log(f"pairing: {words} (from {ip}, {agent})")
+        self._act({"copy": "panel.copy", "profile": "panel.profile", "blocked": "panel.blocked", "adopted": "panel.adopt"}[kind],
+                  target=pid, what=agent)
+        if notice:
+            try:
+                self.app.notices.add(kind, panel=pid, ip=ip, agent=agent)
+            except OSError as e:
+                log(f"pairing: notice not saved ({type(e).__name__})")
+
+    def _dk_rotate(self, pid, res):
+        """A good visit at a rotation point (a page load, the check-in): a new key at most every 10 minutes — at once after
+        "prev" (the tablet lost the last answer); never after "late" (v3.0.2: a key a newer one has passed — served, but
+        a new key would let a copy leapfrog the tablet). Sent in the cookie; returns "<pid>.<key>" or None."""
+        if res == "late":
+            return self._dk_set
+        key = self.app.paired.rotate(pid, force=res == "prev")
+        if key:
+            self._dk_set = f"{pid}.{key}"
+        return self._dk_set
+
+    def _dk_visit(self, pid, extra=None):
+        """Remember the good visit (when, from where); a device clearly not the one paired → logged + a notice (never
+        blocks: the profile isn't secret)."""
+        prof = {**ua_profile(self.headers.get("User-Agent")), **(extra or {})}
+        if self.app.paired.seen(pid, self.client_address[0], prof):
+            self._dk_alarm("profile", pid)
+
+    def _device(self, pid=None):
+        """Who may use a panel's routes: that panel's device key (pid given; any panel's key without), or a Manager login
+        (that sees pid) — the design canvas / "Open live" inside the Manager. → ("key", key's pid, result) or
+        ("manager", Caller). Else ApiError 401 device-key (copy: true for a replaced key, locked: true for a panel locked
+        after a copy) or 403 other-panel. Never used under /api/manage/*: a key never opens those."""
+        kpid, res = self._dk_check()
+        if res in panel_devices.GOOD and (pid is None or kpid == pid):
+            return ("key", kpid, res)
+        who, _ = self.app.auth.who(self._manage_token())
+        if who and (pid is None or who.sees(pid)):
+            self.manager = who
+            return ("manager", who)
+        if res in panel_devices.GOOD:
+            raise ApiError(403, "other-panel")
+        raise ApiError(401, "device-key", **({"copy": True} if res == "copy" else {"locked": True} if res == "locked" else {}))
+
+    def _device_panel(self, auth, panel):
+        """A panel named in a body (unlocking, the calendar's reveal ticket) must be the key's own panel."""
+        if auth[0] == "key" and str(panel or "").lower() != auth[1]:
+            raise ApiError(403, "other-panel")
+
+    def _small_page(self, code, title, words, button=True, refresh=False):
+        body = ("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, "
+                "initial-scale=1\"><meta name=\"robots\" content=\"noindex\">"
+                # (v3.0.2: no script here — the refresh to "/" lets connect.js try the tablet's backup of its key)
+                + ("<meta http-equiv=\"refresh\" content=\"3;url=/\">" if refresh else "") + f"<title>Skypane — {html.escape(title)}</title><style>"
+                "html,body{margin:0;height:100%}body{display:flex;align-items:center;justify-content:center;padding:16px;"
+                "box-sizing:border-box;background:#140b3a;background:linear-gradient(180deg,#140b3a,#3b2a8a);color:#f3f0ff;"
+                "font:16px/1.5 system-ui,-apple-system,\"Segoe UI\",Roboto,sans-serif}main{max-width:440px;width:100%;"
+                "padding:28px 24px;border-radius:20px;background:rgba(20,12,58,.72);border:1px solid rgba(255,255,255,.16);"
+                "text-align:center;box-sizing:border-box}h1{margin:0 0 10px;font-size:22px;font-weight:650}p{margin:0 0 22px;"
+                "color:#d6d0f5}a{display:inline-block;padding:12px 22px;border-radius:12px;background:#7c4dff;color:#fff;"
+                "font-weight:600;text-decoration:none}a:focus-visible{outline:3px solid #fff;outline-offset:3px}</style></head>"
+                f"<body><main><h1>{html.escape(title)}</h1><p>{html.escape(words)}</p>"
+                + ("<a href=\"/\">Connect this device</a>" if button else "") + "</main></body></html>").encode("utf-8")
+        return self._send(code, body, "text/html; charset=utf-8", {"Cache-Control": "no-store", "Content-Security-Policy": SMALL_CSP})
+
+    def _blocked(self, pid, res, kpid=None):
+        """/<pid> without that panel's key: "Unable to connect" (403), logged; BLOCKED_NOTICE refused visits with a wrong
+        or another panel's key within BLOCKED_WINDOW raise a notice (a copy raised its own already). (v3.0.2) No key at
+        all (kpid None: maybe the owner's tablet that lost its cookie): never counted, and the page goes on to "/" after
+        3 s, where connect.js restores the key from the tablet's backup."""
+        nokey = kpid is None and res is None
+        d = self.app.paired.devices().get(pid) if pid in self.app.store.panel_ids() else None
+        if d:   # (v3.0.2: never which device — anyone can open this page; the Manager shows it)
+            words = "This panel is connected to another device."
+        else:
+            words = "This panel isn't connected yet."
+        if not nokey and res != "copy" and pid in self.app.store.panel_ids():   # (an address that is no panel: just the page)
+            now = time.monotonic()
+            with self.app.hits_lock:
+                hits = [t for t in self.app.blocked_hits.get(pid, []) if now - t < BLOCKED_WINDOW] + [now]
+                full = len(hits) >= BLOCKED_NOTICE
+                self.app.blocked_hits[pid] = [] if full else hits
+                if len(self.app.blocked_hits) > 200:
+                    self.app.blocked_hits = {k: v for k, v in self.app.blocked_hits.items() if v and now - v[-1] < BLOCKED_WINDOW}
+            self._dk_alarm("blocked", pid, notice=full)
+        elif nokey and pid in self.app.store.panel_ids():
+            self._dk_alarm("blocked", pid, notice=False)   # (logged, never a notice)
+        return self._small_page(403, "Unable to connect", words, refresh=nokey)
+
+    def _connect_page(self):
+        """GET / (v3.0.2): a browser holding a valid key goes on to its panel (302); anyone else gets the status / "Connect
+        this panel" page (dashboard/connect/index.html, its files under /connect/)."""
+        kpid, res = self._dk_check()
+        if res in panel_devices.GOOD and kpid in self.app.store.panel_ids():
+            loc = panel_address(kpid, self.app.store.panel_ids())
+            return self._send(302, b"", "text/plain", {"Location": loc, "Cache-Control": "no-store"})
+        f = self._safe_file("connect/index.html")
+        if f is None or not f.is_file():
+            return self._small_page(200, "Skypane", "This page is still being set up. Try again in a moment.", button=False)
+        page = f.read_text(encoding="utf-8")
+        m = re.search(r"<head\b[^>]*>", page, re.IGNORECASE)
+        inject = '\n<base href="/connect/">'   # (the page's own files are under /connect/)
+        page = page[:m.end()] + inject + page[m.end():] if m else inject + "\n" + page
+        return self._send(200, page.encode("utf-8"), "text/html; charset=utf-8", {"Cache-Control": "no-store", "Content-Security-Policy": CONNECT_CSP})
+
+    def _status(self):
+        """GET /api/status (open, rate-limited): yes / no only — never an address of the house."""
+        if self.command not in ("GET", "HEAD"):
+            raise ApiError(405, "Method not allowed")
+        if not self.app.rate("status", self.client_address[0], STATUS_RATE):
+            return self._json(429, {"error": "too-many"}, {"Retry-After": "60"})
+        parts = self.app.health_parts()
+        probs = {re.split(r"[:.]", p["id"])[0] for p in self.app.health.current()}
+        st = self.app.settings.load()
+        mq = self.app.notifier.connected()
+        # (v3.0.2) per service "ok" | "trouble" (set up, but not working right now) | "off" (not set up) — `services`
+        # keeps the old yes / no (true only when "ok") for an older page
+        state = lambda setup, trouble: "off" if not setup else "trouble" if trouble else "ok"   # noqa: E731
+        sstate = {"hubitat": state(parts["hub"], "hubitat" in probs),
+                  "mqtt": state(mq is not None, mq is not True),
+                  "cameras": state(parts["cameras"], bool(probs & {"go2rtc", "protect", "camera", "cameras", "video"})),
+                  "calendars": state(self.app.calendars.house(), "calendar" in probs),
+                  "music": state((st.get("SONOS_PANEL_URL") or "").strip(), "music" in probs)}
+        services = {k: v == "ok" for k, v in sstate.items()}
+        kpid, res = self._dk_check()
+        ids = self.app.store.panel_ids()
+        paired = {"panel": kpid, "name": self.app.panel_name(kpid), "address": panel_address(kpid, ids)} \
+            if res in panel_devices.GOOD and kpid in ids else None
+        return self._json(200, {"version": self.app.cfg.version, "release": self.app.cfg.release or None, "services": services,
+                                "servicesState": sstate, "accepting": self.app.paired.accept(), "paired": paired})
+
+    def _pair(self):
+        """PATCH /api/pair (open, rate-limited) {action: "open" | "poll" | "leave" | "restore", …} — the tablet's side of
+        pairing (mockups/PAIRING-API.md). The secret, the code and the key are never logged."""
+        if self.command != "PATCH":
+            raise ApiError(405, "Method not allowed")
+        ip = self.client_address[0]
+        if not self.app.rate("pair", ip, PAIR_RATE):
+            return self._json(429, {"error": "too-many"}, {"Retry-After": "60"})
+        req = self._json_body()
+        action, reqs, dev = req.get("action"), self.app.pairing, self.app.paired
+        if action == "open":
+            if not dev.accept():
+                return self._json(200, {"closed": True})
+            prof = panel_devices.clean_profile({**ua_profile(self.headers.get("User-Agent")), "screen": req.get("screen"), "tz": req.get("tz")})
+            o = reqs.open(ip, prof)
+            if not o:
+                return self._json(429, {"error": "too-many"})
+            log(f"pairing: a tablet asks to connect ({panel_devices.describe(prof)}, from {ip})")
+            self._act("panel.pair", what=panel_devices.describe(prof))
+            return self._json(200, o)
+        if action == "poll":
+            r = reqs.poll(req.get("id"), req.get("secret"))
+            if r["state"] != "approved":
+                return self._json(200, r)
+            res = r.get("result") or {}
+            if not res.get("key"):
+                return self._json(200, {"state": "gone"})
+            self._dk_set = f"{res['panel']}.{res['key']}"
+            return self._json(200, {"state": "approved", "panel": res["panel"], "name": res["name"], "address": res["address"],
+                                    "deviceKey": res["key"]})   # (the bare key: the cookie holds "<pid>.<key>")
+        if action == "leave":
+            return self._json(200, {"ok": reqs.leave(req.get("id"), req.get("secret"))})
+        if action == "restore":
+            pid, key = str(req.get("panel") or "").lower(), req.get("key")
+            if isinstance(key, str) and "." in key:   # (the backup is "<pid>.<key>"; the key alone will do too)
+                kp, _, k = key.partition(".")
+                key = k if kp.lower() == pid else None
+            if not PANEL_RE.fullmatch(pid) or not isinstance(key, str) or pid not in self.app.store.panel_ids():
+                return self._json(401, {"error": "device-key"})
+            res = dev.check(pid, key)
+            if res == "copy":
+                self._dk_alarm("copy", pid)
+                return self._json(401, {"error": "device-key", "copy": True})
+            if res not in panel_devices.GOOD:
+                return self._json(401, {"error": "device-key", **({"locked": True} if res == "locked" else {})})
+            if res == "late":   # (v3.0.2: served, but no new key — and no cookie: the browser keeps what it has)
+                return self._json(200, {"ok": True})
+            new = dev.rotate(pid, force=res == "prev")
+            self._dk_set = f"{pid}.{new or key}"
+            return self._json(200, {"ok": True, **({"deviceKey": new} if new else {})})
+        raise ApiError(400, '"action" must be "open", "poll", "leave" or "restore"')
+
     # ---- pages and static files ------------------------------------------------------------------------------
     def _safe_file(self, rel):
         """Resolve `rel` (URL path without leading "/") inside DASHBOARD_DIR, following symlinks; None if not."""
@@ -1159,16 +1406,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return p
 
     def _page_or_file(self, path):
-        if path == "/":
-            return self._panel_page("main")
+        if path == "/":   # (v3.0.2: the status / pairing page — there is no main panel)
+            return self._connect_page()
         if path == "/hubitat/SkypaneNotifier.groovy":   # (v3.0.0: the hub imports the driver from here — plain text, no login)
             f = pathlib.Path(__file__).resolve().parent.parent / "hubitat" / "SkypaneNotifier.groovy"
             if not f.is_file():
                 raise ApiError(404, "Not found")
             return self._send(200, f.read_bytes(), "text/plain; charset=utf-8", {"Cache-Control": "no-cache",
-                                                                                "Content-Security-Policy": "default-src 'none'"})
+                                                                                "Content-Security-Policy": "default-src 'none'",
+                                                                                # (v3.0.2: Hubitat's Import reads it from the hub's page in the browser — a public file, no cookies)
+                                                                                "Access-Control-Allow-Origin": "*"})
         m = re.fullmatch(r"/pictures/([0-9a-f]{16})", path)
-        if m:   # the owner's own pictures (service/pictures.py) — the panels show them
+        if m:   # the owner's own pictures (service/pictures.py) — the panels show them. (v3.0.2: no device key asked — a card's
+            # sandboxed frame has no origin, so the browser never sends the SameSite=Strict key cookie with its pictures; the
+            # 64-bit random name is what keeps a picture private, as before)
             found = self.app.pictures.file(m.group(1))
             if not found:
                 raise ApiError(404, "Not found")
@@ -1195,19 +1446,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._panel_page(moved)
             if segments[0].lower() not in RESERVED_SEGMENTS and self._safe_file(segments[0]) is None:
                 return self._panel_page(segments[0])
-        overlay = path in HOUSE_FILES
+        hf = HOUSE_FILES.get(path.lower())   # (v3.0.2: any case — the disk may not care, e.g. /Hubitat-Data.js on Windows)
+        overlay = hf is not None
         if overlay:
-            house = self.app.data_dir / "house" / HOUSE_FILES[path]
+            self._device()   # (v3.0.2: the house's devices and cameras — a paired panel or a Manager login)
+            house = self.app.data_dir / "house" / hf
             if house.is_file():
                 return self._file(house, overlay=True)
         # the Manager: /admin/… are the files of dashboard/manage/ (its old address /manage was refused above)
         rel = "manage" + path[len("/admin"):] if segments[0] == "admin" else path[1:]
         f = self._safe_file(rel)
-        if overlay and HOUSE_FILES[path] == "protect-cameras.js" and (f is None or not f.is_file()):
+        if overlay and hf == "protect-cameras.js" and (f is None or not f.is_file()):
             # (a house without Protect: an empty camera file instead of a 404 on every panel load)
             return self._send(200, b"window.PROTECT_LIVEVIEWS = window.PROTECT_LIVEVIEWS || [];\n",
                               "text/javascript; charset=utf-8", {"Cache-Control": "no-cache"})
         if f is None:
+            raise ApiError(404, "Not found")
+        if f.is_file() and path.endswith("/"):   # (v3.0.2: "file.js/" is no file — it slipped past the gates above)
             raise ApiError(404, "Not found")
         if f.is_dir():
             if not path.endswith("/"):
@@ -1219,11 +1474,32 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if not f.is_file():
             raise ApiError(404, "Not found")
         if f == self.app.layout_path():
+            # (v3.0.2) the page without a panel carries the broker login: a Manager login only, else "not found"
+            if not self.app.auth.who(self._manage_token())[0]:
+                raise ApiError(404, "Not found")
             return self._layout(panel=None)
         return self._file(f, overlay=overlay)
 
     def _panel_page(self, panel):
-        self._layout(panel)
+        """(v3.0.2) A panel's page: ?design=1 / ?live=1 for a Manager login as before (_layout decides); else only with
+        this panel's device key (rotated here at most every 10 min) — or, during the upgrade's grace period, a panel from
+        before 3.0.2 is adopted on its first visit. Anyone else: "Unable to connect"."""
+        pid = panel.lower()
+        if re.search(r"[?&](?:design|live)=1(?:&|$)", self.path.split("#", 1)[0]):
+            return self._layout(panel)
+        kpid, res = self._dk_check()
+        exists = pid in self.app.store.panel_ids()
+        if exists and kpid == pid and res in panel_devices.GOOD:
+            self._dk_rotate(pid, res)
+            self._dk_visit(pid)
+            return self._layout(panel)
+        if exists and res is None and self.app.paired.adoptable(pid):   # (no key of any panel: an old tablet)
+            key = self.app.paired.adopt(pid, ua_profile(self.headers.get("User-Agent")), self.client_address[0])
+            if key:
+                self._dk_set = f"{pid}.{key}"
+                self._dk_alarm("adopted", pid)
+                return self._layout(panel)
+        return self._blocked(pid, res, kpid)
 
     def _layout(self, panel):
         layout = self.app.layout_path()
@@ -1241,6 +1517,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # switches nothing, saves nothing, makes no sound: data.js / store.js), shown only inside our own Manager
         query = self.path.split("#", 1)[0]
         design = panel is not None and re.search(r"[?&]design=1(?:&|$)", query) is not None
+        if design:   # (v3.0.2: the canvas too is the Manager's alone — a login that sees the panel)
+            who, _ = self.app.auth.who(self._manage_token())
+            pid = panel.lower()
+            if not who or not who.sees(pid) or pid not in self.app.store.panel_ids():
+                return self._send(403, LIVE_REFUSED.encode("utf-8"), "text/html; charset=utf-8",
+                                  {"Cache-Control": "no-store", "X-Frame-Options": "SAMEORIGIN",
+                                   "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'self'",
+                                   "Referrer-Policy": "same-origin"}, frameable=True)
         # ?live=1 (v2.5.0): the Manager's "Open live" — the real page for that panel, for a Manager login only (its
         # cookie; the page is same-origin inside the Manager). The admin controls it as that panel would (its groups
         # and "may switch" rules, the PIN asked as on the wall — the PIN goes to /api/pin, never over MQTT); any other
@@ -1250,7 +1534,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if panel is not None and not design and re.search(r"[?&]live=1(?:&|$)", query):
             who, _ = self.app.auth.who(self._manage_token())
             pid = panel.lower()
-            if not who or not who.sees(pid) or not PANEL_RE.fullmatch(pid) or (pid not in self.app.store.panel_ids() and pid != PIN_GUARDED_PANEL):
+            if not who or not who.sees(pid) or not PANEL_RE.fullmatch(pid) or (pid not in self.app.store.panel_ids()):
                 return self._send(403, LIVE_REFUSED.encode("utf-8"), "text/html; charset=utf-8",
                                   {"Cache-Control": "no-store", "X-Frame-Options": "SAMEORIGIN",
                                    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'self'",
@@ -1280,13 +1564,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             boot["PANEL_DESIGN"] = True
         if live:
             boot["PANEL_LIVE"] = live
+        if self._dk_set and not design and not live:   # (v3.0.2: the rotated key — the page keeps its own backup copy)
+            boot["PANEL_DEVICE_KEY"] = self._dk_set.partition(".")[2]   # (the bare key; the page stores "<pid>.<key>")
         # (v2.4.1) as data, never run: <script type="application/json"> (js_json: no "<" can end it), read by
         # /assets/panel-boot.js before every other script — the page has no inline script (PANEL_CSP)
         inject += (f'\n<script type="application/json" id="panel-boot">{js_json(boot)}</script>'
                    '\n<script src="/assets/panel-boot.js"></script>')
         m = re.search(r"<head\b[^>]*>", html, re.IGNORECASE)
         html = html[:m.end()] + inject + html[m.end():] if m else inject + "\n" + html
-        headers = {"Cache-Control": "no-store" if live else "no-cache", "Content-Security-Policy": PANEL_CSP}
+        headers = {"Cache-Control": "no-store" if live or self._dk_set else "no-cache", "Content-Security-Policy": PANEL_CSP}
         if design or live:
             headers.update({"X-Frame-Options": "SAMEORIGIN", "Content-Security-Policy": PANEL_CSP + "; frame-ancestors 'self'", "Referrer-Policy": "same-origin"})
         self._send(200, html.encode("utf-8"), "text/html; charset=utf-8", headers, frameable=bool(design or live))
@@ -1390,10 +1676,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 raise ApiError(405, "Method not allowed")
             writable = self.app.store.writable()
             return self._json(200 if writable else 503, {"ok": writable, "version": self.app.cfg.version,
-                                                         **({"release": self.app.cfg.release} if self.app.cfg.release else {}), "panels": self.app.store.panel_ids(),
+                                                         **({"release": self.app.cfg.release} if self.app.cfg.release else {}),   # (v3.0.2: no panel names — open to anyone)
                                                          "dataWritable": writable, "mqtt": self.app.notifier.connected(), "boot": BOOT_ID})
+        if path == "/api/status":   # (v3.0.2: pairing — open to anyone, rate-limited per address)
+            return self._status()
+        if path == "/api/pair":
+            return self._pair()
+        if path == "/api/manage/pairing":
+            return self._manage_pairing()
+        if path == "/api/manage/pin":
+            return self._manage_pin()
         if path == "/api/pin":
-            return self._pin()
+            return self._pin(self._device())
         if path == "/api/manage/login":
             return self._manage_login()
         if path == "/api/manage/users":
@@ -1467,11 +1761,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._manage_alerts()
         if path == "/api/manage/calendars":
             return self._manage_calendars()
+        if path == "/api/manage/event-icons":   # (v3.0.2: Integrations → Calendars → Event icons, the admin)
+            return self._manage_event_icons()
         if path == "/api/manage/weather":   # (v3.0.0: Integrations → Weather, the admin)
             return self._manage_weather()
         if path == "/api/lists":   # the shared lists and notes (lists.py): every panel reads and changes them
+            self._device()   # (v3.0.2: a paired panel or a Manager login)
             return self._lists()
         if path == "/api/cards":   # the panels: which cards there are (no code: that comes with each card's frame)
+            self._device()
             if self.command not in ("GET", "HEAD"):
                 raise ApiError(405, "Method not allowed")
             return self._json(200, {"cards": [cards.public(c) for c in self.app.cards.all()]})
@@ -1490,6 +1788,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             pid = m.group(1).lower()
             if self.command != "PATCH" or not PANEL_RE.fullmatch(pid):
                 raise ApiError(405 if self.command != "PATCH" else 400, "Not allowed")
+            self._device(pid)
             live = self.app.bench_live.get(pid)
             if not live or time.monotonic() - live["asked"] > 900:
                 raise ApiError(409, "No benchmark was asked for")
@@ -1504,6 +1803,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         m = re.fullmatch(r"/api/panel/([^/]+)/events", path)
         if m:
             return self._panel_events(m.group(1))
+        m = re.fullmatch(r"/api/panel/([^/]+)/agent", path)
+        if m:
+            return self._panel_agent(m.group(1))
         m = re.fullmatch(r"/api/manage/panels/([^/]+)/live", path)
         if m:   # v2.5.0: "Open live" for a login that may only view — the house now, read only
             return self._manage_panel_live(m.group(1))
@@ -1511,8 +1813,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if m:
             return self._manage_panel(m.group(1))
         if path == "/api/guest-wifi":
+            self._device()
             return self._guest_wifi()
         if path == "/api/guest-wifi/qr.svg":
+            self._device()
             return self._guest_qr()
         m = re.fullmatch(r"/api/panel/([^/]*)", path)
         if not m:
@@ -1522,9 +1826,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if self.command == "PATCH":
                 self.close_connection = True
             raise ApiError(400, "Invalid panel id")
+        self._device(panel.lower())   # (v3.0.2: this panel's device key, or a Manager login that sees it)
         if self.command in ("GET", "HEAD"):
             doc = self.app.store.get(panel)
-            if not doc["exists"] and doc["panel"] != PIN_GUARDED_PANEL:
+            if not doc["exists"]:
                 # only the Manager (the admin) sets panels up: a tablet at an unknown address shows "not set up"
                 raise ApiError(404, "not-set-up")
             return self._json(200, doc)
@@ -1587,9 +1892,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         create = req.get("create", False)
         if not isinstance(create, bool):
             raise ApiError(400, '"create" must be true or false')
-        if panel.lower() != PIN_GUARDED_PANEL:
-            create = False   # (only the Manager creates panels — the main one is always there;)
-        pin_guard = self._pin_guard(req) if panel.lower() == PIN_GUARDED_PANEL and "settings" in data else None
+        create = False   # (only the Manager creates panels; v3.0.2: there is no main panel that is always there)
 
         def guard(stored):
             # the settings the Manager owns (service/panel_settings.py) aren't changed through this open route once
@@ -1607,39 +1910,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 data["settings"] = panel_settings.screen_unset(data["settings"], stored.get("settings"))
                 if keep:   # (as stored, whole — not merged with what was sent)
                     data["settings"] = panel_settings.put(data["settings"], keep)
-            if pin_guard:
-                pin_guard(stored)
         try:
             rev = self.app.store.patch(panel, data, base_rev=base_rev, create=create, guard=guard)
         except StoreError as e:
-            if e.body.get("error") == "not-created" and panel.lower() != PIN_GUARDED_PANEL:
+            if e.body.get("error") == "not-created":
                 raise ApiError(404, "not-set-up")   # (never set up in the Manager, or removed there: nothing saved)
             return self._json(e.code, e.body)
         self._json(200, {"rev": rev})
         self.app.notifier.changed(panel, rev, sorted(data), client)
 
-    def _pin_guard(self, req):
-        """For PATCH /api/panel/main: changing a PIN_GUARDED_KEYS setting (device choices, addresses) needs the panel PIN
-        (top-level body field "pin"; never stored, logged or echoed) while one is set. Runs inside the store lock
-        against the very data the change is merged into (no check-then-write gap)."""
-        pin, who, new_settings = self.app.pin, self.client_address[0], req["data"]["settings"]
-
-        def guard(stored):
-            if not pin.is_set() or not pin_guarded_change(stored.get("settings"), new_settings):
-                return
-            supplied = req.get("pin")
-            if supplied is None:  # not asked yet: not a failed attempt
-                raise StoreError(403, {"error": "pin-required"})
-            result = pin.verify(supplied, who)
-            if result in ("ok", "unset"):
-                return
-            if result == "locked":
-                raise StoreError(423, {"error": "locked", "lockedFor": pin.locked_for(who)})
-            raise StoreError(403, {"error": "pin-required"})
-
-        return guard
-
-    def _pin(self):
+    def _pin(self, auth=("manager", None)):
         # The PIN is checked here, never in the page. PATCH on purpose: a cross-site page can't send it without a
         # CORS preflight, which this server refuses. The body (the PIN) is never logged. Guessing is limited per
         # client IP, so someone guessing on the LAN locks out only themselves.
@@ -1663,7 +1943,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             # right PIN on THIS panel → {ok, ticket, seconds}: /api/panel/<id>/events accepts it in the X-Skypane-Reveal
             # header (never in the address) for the panel's general PIN window (never longer than 5 min)
             pid = str(req.get("panel") or "").lower()
-            if not PANEL_RE.fullmatch(pid) or (pid not in self.app.store.panel_ids() and pid != PIN_GUARDED_PANEL):
+            self._device_panel(auth, pid)   # (v3.0.2: a panel's key reveals only its own calendar)
+            if not PANEL_RE.fullmatch(pid) or (pid not in self.app.store.panel_ids()):
                 raise ApiError(400, '"panel": a panel that exists')
             if req.get("pin") is None:   # (not asked yet: never a wrong guess)
                 return self._json(403 if pin.is_set() else 409, {"ok": False, "error": "pin-required" if pin.is_set() else "unset"})
@@ -1684,6 +1965,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if action == "ticket":
             items = parse_ticket_items(req.get("items"))
             if any(c == "unlock" for _, c, _ in items):
+                self._device_panel(auth, req.get("panel"))   # (v3.0.2: unlocking as its own panel only)
                 why = self._unlock_refused(req.get("panel"), [i for i, c, _ in items if c == "unlock"])
                 if why:
                     return self._json(403, {"ok": False, "error": why})
@@ -1727,6 +2009,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._json(404, {"ok": False, "error": "not-builtin"})
             if not pin.is_set():
                 return self._json(403, {"ok": False, "error": "unset"})
+            if not req.get("pin"):   # (v3.0.2: the page asks first with no PIN, to learn "unset" — never a wrong try)
+                return self._json(401, {"ok": False, "error": "need-pin"})
             result = pin.verify(req.get("pin"), who)
             if result != "ok":
                 return self._verify_answer(pin, result, who)
@@ -1734,7 +2018,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 lg = json.loads((self.app.cfg.data_dir / "private" / "mqtt-logins.json").read_text(encoding="utf-8"))["devices"]
             except (OSError, ValueError, KeyError, TypeError):
                 return self._json(503, {"ok": False, "error": "no-login"})
-            return self._json(200, {"ok": True, "user": lg["user"], "pass": lg["pass"], "port": 1883},
+            return self._json(200, {"ok": True, "user": lg["user"], "pass": lg["pass"], "port": broker.LAN_PORT},
                               extra={"Cache-Control": "no-store"})
         raise ApiError(400, '"action" must be "verify", "ticket", "set" or "mqtt-login"')
 
@@ -1939,7 +2223,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # (a login's panel must be there now: a panel added later at that address isn't given to it by accident)
         want = (req.get("perms") or {}).get("panel") if isinstance(req.get("perms"), dict) else None
         if (action in ("add", "perms") and isinstance(want, str) and want
-                and want.lower() not in set(self.app.store.panel_ids()) | {PIN_GUARDED_PANEL}):
+                and want.lower() not in set(self.app.store.panel_ids())):
             return self._json(400, {"ok": False, "error": "no such panel"})
         if action == "add":
             ok, why = auth.add_user(me, name, req.get("password"), req.get("perms"))
@@ -2008,7 +2292,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             e = last.get(u["user"].lower())
             u["lastSignIn"] = {"at": e["at"], "agent": e.get("agent"), "from": e.get("from")} if e else None
         return {"users": users, "permissions": self._permission_list(), "you": me.user, "owner": me.owner, "confirmed": step,
-                "panels": sorted(set(self.app.store.panel_ids()) | {PIN_GUARDED_PANEL})}
+                "panels": self.app.store.panel_ids()}
 
     def _manage_prefs(self):
         """This login's own look in the Manager (service/manager_prefs.py): GET → {theme, pinned, views, defaultView};
@@ -2189,24 +2473,89 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     # (v2.7.0) which health problems belong to which group of the Integrations page
     SETTINGS_PROBLEMS = {"Hubitat": ("hubitat",), "UniFi Protect": ("protect",), "Guest Wi-Fi": ("unifi", "guestwifi", "guest"),
-                         "MQTT broker": ("mqtt",), "Cameras": ("go2rtc", "camera", "cameras", "video"), "Calendars": ("calendar",)}
+                         "MQTT broker": ("mqtt",), "Cameras": ("go2rtc", "camera", "cameras", "video"), "Calendars": ("calendar",),
+                         "Music": ("music",)}   # (v3.0.2: the Music page had no status at all)
+
+    # (v3.0.2) a group whose address and key are set: what its child last said it got (its status file), so "Working"
+    # means the hub / Protect / the console really answered with this key — not just that something is filled in
+    SETTINGS_PROOF = {"Hubitat": ("HUBITAT_HOST", "HUBITAT_TOKEN", "Maker API token", HUB_STATUS_FILE),
+                      "UniFi Protect": ("PROTECT_HOST", "PROTECT_API_KEY", "Protect API key", PROTECT_STATUS_FILE),
+                      "Guest Wi-Fi": ("UNIFI_HOST", "UNIFI_API_KEY", "UniFi Network API key", guest_wifi.STATUS)}
+
+    def _proof(self, group, st, saved_at):
+        """None (fine), or a state for the group: "nokey" / "noaddress" / "waiting" (no answer since the last save) /
+        "problem" (the child's own words)."""
+        host, key, key_label, fname = self.SETTINGS_PROOF[group]
+        if not st.get(host):
+            return {"state": "problem", "reason": "noaddress", "words": "The address isn't set yet.", "since": None}
+        if not st.get(key):
+            return {"state": "problem", "reason": "nokey", "words": f"The {key_label} isn't set yet.", "since": None}
+        try:
+            got = json.loads((self.app.data_dir / "private" / fname).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            got = None
+        at = got.get("readAt") if isinstance(got, dict) else None
+        if not isinstance(at, (int, float)) or at < saved_at - 1:
+            return {"state": "waiting", "words": "", "since": None}
+        if got.get("ok") is False:
+            return {"state": "problem", "words": str(got.get("error") or "It reports a problem.")[:300], "since": at}
+        return None
+
+    def _camera_video(self, st, saved_at):
+        """(v3.0.2) Camera video set up (Protect, or cameras of the house's own): None when it really works, else
+        "waiting" (Protect hasn't handed over any cameras since the last save) or "problem" (go2rtc isn't running — the
+        health check's own probe, so the Overview says the same once it has confirmed it). Never "Working" on a guess."""
+        if st.get("PROTECT_HOST") or st.get("PROTECT_API_KEY"):
+            try:
+                got = json.loads((self.app.data_dir / "private" / PROTECT_STATUS_FILE).read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                got = None
+            got = got if isinstance(got, dict) else {}
+            at, n = got.get("readAt"), got.get("cameras")
+            if got.get("ok") is not True or not isinstance(at, (int, float)) or at < saved_at - 1                     or not isinstance(n, int) or isinstance(n, bool) or n <= 0:
+                return {"state": "waiting", "reason": "protect", "words": "Waiting for the cameras from UniFi Protect.", "since": None}
+        pc = self.app.cfg.page_config
+        if pc.get("go2rtcPort"):   # (the image's own go2rtc — as health_checks probes it)
+            probe = health.tcp_probe("127.0.0.1", 1985, timeout=1.0)
+        elif pc.get("go2rtc"):     # (a separate one)
+            probe = health.url_probe(pc["go2rtc"], timeout=1.5)
+        else:
+            probe = None
+        if probe is None or probe() is not True:
+            return {"state": "problem", "reason": "go2rtc", "words": "Camera video (go2rtc) is not running.", "since": None}
+        return None
 
     def _settings_status(self):
-        """{group: {"state": "ok" | "problem" | "off", "words", "since"}} — from the health monitor (words only)."""
+        """{group: {"state": "ok" | "problem" | "waiting" | "off", "words", "since"}} — the health monitor's problems,
+        and (v3.0.2) for Hubitat / Protect / Guest Wi-Fi whether they really answered since the settings were saved."""
         parts = self.app.health_parts()
-        st = self.app.settings.load()
+        st = {k: (v or "").strip() for k, v in self.app.settings.load().items()}
+        try:
+            saved_at = self.app.settings.path.stat().st_mtime
+        except OSError:
+            saved_at = 0
         # (the same parts as the health pill: a broker the server doesn't use, no calendar at all → "off", never "working")
         on = {"Hubitat": parts["hub"], "MQTT broker": parts["broker"], "Cameras": parts["cameras"],
-              "UniFi Protect": bool((st.get("PROTECT_HOST") or "").strip()), "Guest Wi-Fi": bool((st.get("UNIFI_HOST") or "").strip()),
-              "Calendars": bool(self.app.calendars.house())}
+              "UniFi Protect": bool(st.get("PROTECT_HOST") or st.get("PROTECT_API_KEY")),
+              "Guest Wi-Fi": bool(st.get("UNIFI_HOST") or st.get("UNIFI_API_KEY")),
+              "Calendars": bool(self.app.calendars.house()), "Music": bool(st.get("SONOS_PANEL_URL"))}
         probs = self.app.health.current()
         out = {}
         for group, kinds in self.SETTINGS_PROBLEMS.items():
             mine = [p for p in probs if re.split(r"[:.]", p["id"])[0] in kinds]
-            if mine:
+            proof = self._proof(group, st, saved_at) if on.get(group) and group in self.SETTINGS_PROOF else None
+            if proof and proof["state"] == "problem":
+                out[group] = proof
+            elif mine:
                 out[group] = {"state": "problem", "words": mine[0]["title"], "since": mine[0].get("first"), "count": len(mine)}
+            elif proof:
+                out[group] = proof
+            elif group == "Cameras" and on.get(group) and (video := self._camera_video(st, saved_at)):
+                out[group] = video
             else:
                 out[group] = {"state": "ok" if on.get(group) else "off", "words": "", "since": None}
+        if "Hubitat" in out and self.app.live is not None:   # (v3.0.2: the Notifier's test, seen without a panel)
+            out["Hubitat"]["lastAlert"] = self.app.live.last_alert()
         # (v3.0.0) the weather device, as the bridge last said (the page words it: reason, device, last change)
         cfg, wst = self.app.weather_setting(), self.app.notifier.weather or {}
         if not (cfg.get("on") and cfg.get("device")):
@@ -2246,9 +2595,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except (KeyError, TypeError):
             switchable = set()
         if self.command in ("GET", "HEAD"):
-            main = self.app.store.get(PIN_GUARDED_PANEL)["data"].get("settings") or {}
             # (byName: what "automatic" is — the name rule alone, without the owner's exceptions)
-            return self._json(200, {"switchable": sorted(switchable), "never": sorted(self._never_now(main, model)),
+            return self._json(200, {"switchable": sorted(switchable), "never": sorted(self._never_now(self._rule(), model)),
                                     "byName": sorted(self._never_now({}, model))})
         if self.command != "PATCH":
             raise ApiError(405, "Method not allowed")
@@ -2256,17 +2604,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
         did, allowed = req.get("id"), req.get("allowed")
         if not isinstance(did, int) or isinstance(did, bool) or did not in switchable or not isinstance(allowed, bool):
             raise ApiError(400, '"id" (a switchable device) and "allowed" (true / false)')
-        try:
-            self._set_allowed(model, [did], allowed)
-        except StoreError as e:
-            return self._json(e.code, e.body)
+        self._set_allowed(model, [did], allowed)
         return self._json(200, {"ok": True})
 
     def _set_allowed(self, model, ids, allowed):
-        """The panels may (allowed) or may not switch these devices (checked switchable before): one change to the main
-        panel's switch rule, the panels told. StoreError when it can't be saved."""
-        def fn(data):
-            settings = dict(data.get("settings") or {})
+        """The panels may (allowed) or may not switch these devices (checked switchable before): one change to the
+        house's switch rule (v3.0.2: house/switch-rule.json — the bridge reads it again within seconds). ApiError 503
+        when it can't be saved."""
+        def fn(settings):
             by_name = self._never_now({}, model)
             if isinstance(settings.get("neverSwitch"), dict):   # an old explicit list: edit it as it is
                 never = self._never_now(settings, model)
@@ -2285,9 +2630,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     elif not allowed and did not in by_name:
                         nev[str(did)] = True
                 settings["switchRule"] = {"allow": allow, "never": nev}
-            return {"settings": settings}
-        rev = self.app.store.modify(PIN_GUARDED_PANEL, fn, create=True)
-        self.app.notifier.changed(PIN_GUARDED_PANEL, rev, ["settings"], "manager")
+            return settings
+        try:
+            self.app.rule.modify(fn)
+        except switch_rule.Unreadable as e:   # (v3.0.2: never written over — the owner's rule may still be in there)
+            log(f"switch rule: {e} — nothing changed")
+            raise ApiError(503, "The switch rule on the server can't be read — nothing was changed") from None
+        except OSError as e:
+            log(f"switch rule: not saved ({type(e).__name__})")
+            raise ApiError(503, "The switch rule couldn't be saved on the server") from None
+
+    def _rule(self):
+        """(v3.0.2) The house's switch rule — ApiError 503 when house/switch-rule.json is there but can't be read: a
+        failed read never widens what may be switched (it would read as the name rule alone)."""
+        try:
+            return self.app.rule.load()
+        except switch_rule.Unreadable as e:
+            log(f"switch rule: {e}")
+            raise ApiError(503, "The switch rule on the server can't be read") from None
 
     # ---- Manager: the owner's pictures (service/pictures.py) -----------------------------------------------------
     def _picture_users(self, pid):
@@ -2300,10 +2660,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _picture_panels(self, pid):
         """[(panel id, its name)] of the panels whose background is this upload."""
         out = []
-        for p in sorted(set(self.app.store.panel_ids()) | {PIN_GUARDED_PANEL}):
+        for p in self.app.store.panel_ids():
             s = self.app.store.get(p)["data"].get("settings") or {}
             if isinstance(s.get("look"), dict) and s["look"].get("background") == f"up:{pid}":
-                out.append((p, s.get("panelName") or ("Main panel" if p == PIN_GUARDED_PANEL else p)))
+                out.append((p, s.get("panelName") or p))
         return out
 
     def _picture_on_people(self, p, icon):
@@ -2350,10 +2710,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         for k, o in self.app.devices.load()["overrides"].items():
             if str(k).isdecimal() and isinstance(o, dict) and isinstance(o.get("icon"), str) and up.fullmatch(o["icon"]):
                 add(o["icon"][3:], {"kind": "device", "name": labels.get(int(k)) or "#" + str(k)})
-        for p in sorted(set(self.app.store.panel_ids()) | {PIN_GUARDED_PANEL}):
+        for p in self.app.store.panel_ids():
             hidden = who is not None and not who.sees(p)
             s = self.app.store.get(p)["data"].get("settings") or {}
-            pn = {"panel": s.get("panelName") or (None if p == PIN_GUARDED_PANEL else p), "main": p == PIN_GUARDED_PANEL}
+            pn = {"panel": s.get("panelName") or p, "main": False}
             bg = s["look"].get("background") if isinstance(s.get("look"), dict) else None
             if isinstance(bg, str) and up.fullmatch(bg):
                 add(bg[3:], {"kind": "background", **pn})
@@ -2386,7 +2746,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         lib = self.app.cards
         if self.command in ("GET", "HEAD"):
             used = {}
-            for p in me.panels(sorted(set(self.app.store.panel_ids()) | {PIN_GUARDED_PANEL})):
+            for p in me.panels(self.app.store.panel_ids()):
                 st_ = self.app.store.get(p)["data"].get("settings") or {}
                 rooms_ = st_.get("roomGrids") if isinstance(st_.get("roomGrids"), dict) else {}
                 for grid in [st_.get("homeGrid"), *rooms_.values()]:   # (Home and every room's own grid)
@@ -2439,7 +2799,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         lib = self.app.pictures
         if self.command in ("GET", "HEAD"):
             # (v2.6.0) per upload: its size and dimensions, and the panels this login sees that use it as their background
-            sees = set(me.panels(sorted(set(self.app.store.panel_ids()) | {PIN_GUARDED_PANEL})))
+            sees = set(me.panels(self.app.store.panel_ids()))
             ups = [dict(u, panels=[{"id": p, "name": n} for p, n in self._picture_panels(u["id"]) if p in sees] if u.get("style") == "background" else [])
                    for u in lib.detailed()]
             return self._json(200, {"uploads": ups, "used": self._picture_uses(me), **lib.info()})
@@ -2475,7 +2835,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 uses = self._picture_uses().get(pid) or []
                 gone = f"up:{pid}"
                 # the panels it changes: its background, or a person's / calendar's icon there
-                changes = {p for p, _ in panels} | {p for p in set(self.app.store.panel_ids()) | {PIN_GUARDED_PANEL}
+                changes = {p for p, _ in panels} | {p for p in set(self.app.store.panel_ids())
                                                      if self._picture_on_people(p, gone)}
                 if uses:
                     if any(not me.sees(p) for p in changes):
@@ -2495,7 +2855,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         self.app.notifier.changed(p, rev, ["settings"], "manager")
                     # people and calendars with it as their icon go back to their colour (cards using it show no picture
                     # until another is picked)
-                    for p in sorted(set(self.app.store.panel_ids()) | {PIN_GUARDED_PANEL}):
+                    for p in self.app.store.panel_ids():
                         if not self._picture_on_people(p, gone):
                             continue
 
@@ -2660,24 +3020,101 @@ class Handler(http.server.BaseHTTPRequestHandler):
         panels being offline left out) and whether the server has a broker.
         ?checkin=1[&version=…&page=…] = the panel itself says it's there (the Manager's Health page) — only for a panel
         that is set up. (A laptop viewing the page asks without checkin: it doesn't make a missing tablet look fine.)
-        No login (the tablets have none yet): the Health page shows the address each check-in came from."""
+        No login (the tablets have none yet): the Health page shows the address each check-in came from.
+        (v3.0.2) That panel's device key (or a Manager login that sees it — no check-in then); a check-in also sends
+        scr=WxH and tz= (the device profile), rotates the key at most every 10 min → {deviceKey} (bare) + the cookie."""
         if self.command not in ("GET", "HEAD"):
             raise ApiError(405, "Method not allowed")
         pid = panel.lower()
         if not PANEL_RE.fullmatch(pid):
             raise ApiError(400, "Invalid panel id")
+        auth = self._device(pid)
         try:
             q = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "", max_num_fields=8)
         except ValueError:   # (more than 8 fields: no check-in)
             q = {}
-        if q.get("checkin") == ["1"] and pid in {p for p, _ in self.app.panel_names()}:
+        new = None
+        if q.get("checkin") == ["1"] and auth[0] == "key" and pid in self.app.store.panel_ids():
+            # (v3.0.2: agent=ok|off|none — the LED agent on this tablet, shared/agentlink.js; a check-in before the page
+            # knew keeps the last word)
+            agent = (q.get("agent") or [None])[0]
+            if agent not in AGENT_STATES:
+                agent = (self.app.health.info.get(pid) or {}).get("agent")
             self.app.health.checkin(pid, {**{k: v[0] for k, v in q.items() if k in ("version", "page") and v},
+                                          **({"agent": agent} if agent in AGENT_STATES else {}),
                                           "from": self.client_address[0]})
+            if agent in ("ok", "off"):   # (rev. 2: the Manager says "Not found" later only for a tablet that had one)
+                self.app.paired.agent_seen(pid)
+            self._dk_visit(pid, {"screen": (q.get("scr") or [None])[0], "tz": (q.get("tz") or [None])[0]})
+            new = self._dk_rotate(pid, auth[2])
         # (v2.7.2: this panel's guest lockdown as now set — an open panel follows a change on Guest Wi-Fi within its next
         # poll, without a reload: layouts/v4/shared/guestlock.js; null = it doesn't lock down)
         lock = self.app.lockdown_for(pid)   # (v2.9.3: {switch, mode: "pin" | "dark" | "none", idle, blur})
-        return self._json(200, {**self.app.health.panel_status(panel=pid), "mqtt": self.app.notifier.connected(), "lockdown": lock},
-                          extra={"Cache-Control": "no-store"})
+        return self._json(200, {**self.app.health.panel_status(panel=pid), "mqtt": self.app.notifier.connected(), "lockdown": lock,
+                                **({"deviceKey": new.partition(".")[2]} if new else {})}, extra={"Cache-Control": "no-store"})
+
+    def _panel_agent(self, panel):
+        """GET /api/panel/<id>/agent (v3.0.2, mockups/AGENT-AUTOCONFIG.md): what the LED agent on this panel's tablet
+        needs (shared/agentlink.js POSTs it to http://127.0.0.1:852/config) — {broker: "tcp://<the host this request
+        used>:<the LAN port, broker.LAN_PORT>", user, pass (the built-in broker's devices login), name (the panel's
+        FreeKiosk name, as data.js Home.kiosk), token (rev. 2: this tablet's agent token — panel_devices.agent_token),
+        tokenId (3.0.2 re-test: panel_devices.token_id — the agent's /status says the same of its token), prevToken (only
+        when an unlink renewed the token: the old one, so the agent takes the new one — token rotation)}.
+        Only that panel's device key: a Manager login gets 403 (it isn't the tablet). A separate broker: 404
+        not-builtin (its agent.args is set by hand). Opened by an IPv6 literal: 400 ipv6 (the built-in broker's LAN
+        listener is IPv4-only). The answer is never logged (the request line has no secret)."""
+        if self.command not in ("GET", "HEAD"):
+            raise ApiError(405, "Method not allowed")
+        pid = panel.lower()
+        if not PANEL_RE.fullmatch(pid):
+            raise ApiError(400, "Invalid panel id")
+        if self._device(pid)[0] != "key":
+            raise ApiError(403, "panel-only")
+        if pid not in self.app.store.panel_ids():
+            raise ApiError(404, "no such panel")
+        if not self.app.cfg.mqtt_builtin:
+            return self._json(404, {"error": "not-builtin"})
+        host = str(self.headers.get("Host") or "").strip()
+        if host.startswith("["):   # [v6]:port
+            host = host[:host.find("]") + 1] if "]" in host else ""
+        else:
+            host = host.rsplit(":", 1)[0] if host.count(":") == 1 else host
+        if not re.fullmatch(r"[A-Za-z0-9.-]{1,253}|\[[0-9A-Fa-f:.]{2,45}\]", host):
+            raise ApiError(400, "bad-host")
+        if host.startswith("["):
+            # (rev. 2 review: the built-in broker's LAN listener is IPv4-only (broker.py), so an IPv6 broker would never
+            # connect; agentlink.js stops asking until the page reloads, as for not-builtin)
+            return self._json(400, {"error": "ipv6", "message": "open Skypane by its IPv4 address on this tablet"},
+                              extra={"Cache-Control": "no-store"})
+        try:
+            lg = json.loads((self.app.cfg.data_dir / "private" / "mqtt-logins.json").read_text(encoding="utf-8"))["devices"]
+            user, pw = lg["user"], lg["pass"]
+        except (OSError, ValueError, KeyError, TypeError):
+            return self._json(503, {"error": "no-login"})
+        try:
+            token, prev = self.app.paired.agent_tokens(pid)
+        except OSError as e:
+            log(f"panel agent: {pid}'s token not saved ({type(e).__name__})")
+            token = prev = None
+        if not token:
+            return self._json(503, {"error": "no-token"})
+        return self._json(200, {"broker": f"tcp://{host}:{broker.LAN_PORT}", "user": user, "pass": pw, "name": self._kiosk_of(pid),
+                                "token": token, "tokenId": panel_devices.token_id(token), **({"prevToken": prev} if prev else {})},
+                               extra={"Cache-Control": "no-store"})
+
+    def _agent_forget(self, pid):
+        """(v3.0.2 rev. 2) A panel's tablet unlinked or replaced (re-pair): what its LED agent last reported is dropped
+        (the device record — its agent token and agentSeen — went with panel_devices.unlink / issue)."""
+        with self.app.health.lock:
+            (self.app.health.info.get(pid) or {}).pop("agent", None)
+
+    def _kiosk_of(self, pid):
+        """A panel's FreeKiosk name as its page uses it (data.js Home.kiosk): its kioskName, else its id made safe."""
+        s = self.app.store.get(pid)["data"].get("settings") or {}
+        k = s.get("kioskName")
+        if isinstance(k, str) and re.fullmatch(r"[a-z0-9_-]{1,40}", k):
+            return k
+        return re.sub(r"[^a-z0-9_-]", "_", pid.lower())[:40]
 
     def _qr_logo_choice(self):
         """The admin's picture in the middle of the guest QR code (a library id), "" = the Skypane icon."""
@@ -2826,19 +3263,44 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._act("settings.weather", keys=keys, on=cfg.get("on"))
         return self._json(200, {"ok": True, "changed": keys, **self._weather_answer()})
 
+    def _calendars_timing(self):
+        """(v3.0.2) The Manager's "Check for changes every …" row: the setting, its choices, the last check."""
+        cals = self.app.calendars
+        return {"every": cals.every(), "everyChoices": list(calendars.EVERY_CHOICES), "lastChecked": cals.last_checked()}
+
     def _manage_calendars(self):
         """GET: the house's calendars [{id, name, color, linkSet, status}] — never a link. PATCH {action: "add", name, link,
         color} | {action: "change", id, name?, color?, link?} (link: Replace) | {action: "remove", id} |
-        {action: "refresh", id?} (Check now). The admin only. A link is a secret: kept in private/calendars.json, never
+        {action: "refresh", id} (a calendar's Check now: in the background) | {action: "refresh"} (v3.0.2: "Check calendars
+        now" — all of them, answered when done: {checked: {checked, newEvents, errors}}; once a minute, else 429 + wait) |
+        {action: "every", every: 5|10|15|30} (v3.0.2: minutes between the automatic checks). The admin only. A link is a secret: kept in private/calendars.json, never
         sent back, never logged (the request log has the path only)."""
         self._manage_need("admin")
         cals = self.app.calendars
         if self.command in ("GET", "HEAD"):
-            return self._json(200, {"calendars": cals.public(), "max": calendars.MAX_CALENDARS})
+            return self._json(200, {"calendars": cals.public(), "max": calendars.MAX_CALENDARS, **self._calendars_timing()})
         if self.command != "PATCH":
             raise ApiError(405, "Method not allowed")
         req = self._json_body()
         action, cid = req.get("action"), req.get("id")
+        if action == "every":   # (v3.0.2: the house's "check every … minutes"; the refresher reads it at its next tick)
+            try:
+                cals.set_every(req.get("every"))
+            except calendars.Invalid as e:
+                return self._json(400, {"ok": False, "error": str(e)})
+            except OSError as e:
+                log(f"calendars: not saved ({type(e).__name__})")
+                raise ApiError(503, "The calendars couldn't be saved on the server")
+            log(f"manager: calendars checked every {cals.every()} min, from {self.client_address[0]}")
+            return self._json(200, {"ok": True, "calendars": cals.public(), **self._calendars_timing()})
+        if action == "refresh" and cid is None:   # (v3.0.2: "Check calendars now": all, here, so the page can say how it went)
+            try:
+                summary = cals.check_all()
+            except calendars.TooSoon as e:
+                return self._json(429, {"ok": False, "wait": e.wait,
+                                        "error": f"Checked less than a minute ago — try again in {e.wait} s"})
+            log(f"manager: calendars checked now from {self.client_address[0]}")   # (refresh() told the panels if events changed)
+            return self._json(200, {"ok": True, "checked": summary, "calendars": cals.public(), **self._calendars_timing()})
         try:
             if action == "add":
                 cid = cals.add(req.get("name"), req.get("link"), req.get("color"))
@@ -2868,22 +3330,64 @@ class Handler(http.server.BaseHTTPRequestHandler):
             raise ApiError(503, "The calendars couldn't be saved on the server")
         log(f"manager: calendar {action} {str(cid)[:40]!r} from {self.client_address[0]}")
         self.app.notifier.calendars_changed()
-        return self._json(200, {"ok": True, "id": cid, "calendars": cals.public()})
+        return self._json(200, {"ok": True, "id": cid, "calendars": cals.public(), **self._calendars_timing()})
+
+    def _event_icons_answer(self):
+        app = self.app
+        doc = app.event_icons()
+        return {"icons": doc["icons"], "lang": doc["lang"], "edited": doc["edited"], "damaged": doc["damaged"],
+                "defaults": event_icons.defaults(doc["lang"]), "available": event_icons.available(app.cfg.dashboard_dir),
+                "max": {"icons": event_icons.MAX_ICONS, "words": event_icons.MAX_WORDS, "word": event_icons.MAX_WORD, "name": event_icons.MAX_NAME}}
+
+    def _manage_event_icons(self):
+        """(v3.0.2) GET → {icons, defaults, available, lang, edited, damaged, max}. PATCH {icons: [{id, name, icon, color,
+        words, on}]} saves the house's list (event_icons.clean_icons: 400 with what's wrong) | {action: "reset"} → the
+        house language's defaults. The admin only; each save in the activity log; the panels told
+        (dashboard/calendars/changed: they load their events — and the icons with them — again)."""
+        me = self._manage_need("admin")
+        if self.command in ("GET", "HEAD"):
+            return self._json(200, self._event_icons_answer(), extra={"Cache-Control": "no-store"})
+        if self.command != "PATCH":
+            raise ApiError(405, "Method not allowed")
+        req = self._json_body()
+        house = self.app.data_dir / "house"
+        lang = self.app.event_icons()["lang"]
+        try:
+            if req.get("action") == "reset" and set(req) == {"action"}:
+                icons, edited, what = event_icons.defaults(lang), False, "reset"
+            elif set(req) == {"icons"}:
+                icons, edited, what = event_icons.clean_icons(req["icons"], set(event_icons.available(self.app.cfg.dashboard_dir))), True, "save"
+            else:
+                raise ApiError(400, '{"icons": [...]} or {"action": "reset"}')
+        except event_icons.Invalid as e:
+            return self._json(400, {"ok": False, "error": str(e)[:120]})
+        try:
+            event_icons.save(house, icons, lang, edited)
+        except OSError as e:
+            log(f"event icons: not saved ({type(e).__name__})")
+            raise ApiError(503, "The event icons couldn't be saved on the server")
+        log(f"manager: event icons {what} ({len(icons)}) by {me.user} from {self.client_address[0]}")
+        self._act("settings.event-icons", what=what, count=len(icons), on=sum(1 for x in icons if x["on"]))
+        self.app.notifier.calendars_changed()
+        return self._json(200, {"ok": True, **self._event_icons_answer()})
 
     def _panel_events(self, panel):
         """GET /api/panel/<id>/events — the panel's calendar card: {"configured": false} while the house has no calendar
         (the panel shows its sample events), else {"configured": true, "calendars": [{id, name, color, icon?}] (the ones
-        this panel shows), "events": [{cal, title, start, end, allDay, where?}]}. Never a link."""
+        this panel shows), "events": [{cal, title, start, end, allDay, where?}]}. Never a link. Every answer has "icons" (v3.0.2: the
+        house's event icons, the switched-on ones in order — event_icons.for_panel)."""
         if self.command not in ("GET", "HEAD"):
             raise ApiError(405, "Method not allowed")
         pid = panel.lower()
         if not PANEL_RE.fullmatch(panel):
             raise ApiError(400, "Invalid panel id")
-        if pid not in self.app.store.panel_ids() and pid != PIN_GUARDED_PANEL:
+        self._device(pid)   # (v3.0.2: this panel's key, or a Manager login that sees it)
+        if pid not in self.app.store.panel_ids():
             raise ApiError(404, "no such panel")
+        icons = event_icons.for_panel(self.app.event_icons()["icons"])
         house = self.app.calendars.house()
         if not house:
-            return self._json(200, {"configured": False, "calendars": [], "events": []})
+            return self._json(200, {"configured": False, "calendars": [], "events": [], "icons": icons})
         own = (self.app.store.get(pid)["data"].get("settings") or {}).get("calendars")
         shown = calendars.panel_view(house, own if isinstance(own, list) else None)
         # (v2.9.3 — security review) while this panel's calendar is blurred for guests (the switch on, or not known:
@@ -2891,36 +3395,47 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # /api/pin {action: "ticket", purpose: "reveal"} for this panel (data.js loadEvents)
         if self.app.calendar_hidden(pid):
             if not self.app.reveal_ok(pid, (self.headers.get("X-Skypane-Reveal") or "")[:200]):
-                return self._json(200, {"configured": True, "calendars": [], "events": [], "hidden": True},   # (not even the names)
+                return self._json(200, {"configured": True, "calendars": [], "events": [], "hidden": True, "icons": icons},   # (not even the names)
                                   extra={"Cache-Control": "no-store"})
         events = self.app.calendars.events([c["id"] for c in shown])   # (soonest first)
-        return self._json(200, {"configured": True, "calendars": shown, "events": events[:MAX_PANEL_EVENTS],
+        return self._json(200, {"configured": True, "calendars": shown, "events": events[:MAX_PANEL_EVENTS], "icons": icons,
                                 **({"more": True} if len(events) > MAX_PANEL_EVENTS else {})})
 
     # ---- Manager: the panels (stage 5) ---------------------------------------------------------------------------
     def _manage_panels(self):
-        """GET: every panel (id, name, FreeKiosk name, address, last saved). PATCH {action: "add", id, name}: a new panel
-        (its address http://<this server>/<id>; open that on the new tablet — it starts blank: an empty Home) |
-        {action: "remove", id}: its settings go (backups kept; never the main panel, never the only one) and it leaves
-        every login's panel list. Only here are panels created (a tablet at an unknown address: "not set up"). The list: only the panels this login sees; adding
-        and removing: the admin only."""
+        """GET: every panel this login sees (id, name, FreeKiosk name, address, last saved, status; v3.0.2 "claim": its
+        tablet — mockups/PAIRING-API.md). PATCH (the admin only):
+          {action: "add", name, address?}: a new panel, unclaimed (no tablet yet: one is approved for it on Panels →
+              New panel requests, or a request names it); the address is made from the name when not given ({id} too,
+              as before 3.0.2)
+          {action: "remove", id}: its settings go (backups kept), its tablet is let go, it leaves every login's panels
+          {action: "unlink", id}: its tablet's key stops working; the panel keeps its name and settings (unclaimed)
+          {action: "move", id, to}: the tablet of `id` becomes the unclaimed panel `to`'s; the panel left empty is removed
+          {action: "rename", id, name}: the name only (the address and the FreeKiosk name stay)
+          {action: "retrust", id}: after a copy alert — unlocked, the alert cleared
+        Only here (and by approving a tablet) are panels created."""
         me = self._manage_ok()
         if self.command in ("GET", "HEAD"):
             out = []
             every = self.app.store.panel_ids()
-            ids = me.panels(sorted(set(every) | {PIN_GUARDED_PANEL}, key=lambda p: (p != "main", p)))
+            ids = me.panels(every)
             docs = {pid: self.app.store.get(pid) for pid in ids}
-            names = [(pid, (docs[pid]["data"].get("settings") or {}).get("panelName") or ("Main panel" if pid == "main" else pid)) for pid in ids]
+            names = [(pid, (docs[pid]["data"].get("settings") or {}).get("panelName") or pid) for pid in ids]
             # (v2.5.0, Panels → Status: online / offline and the last check-in, the screen, the benchmark, a drawn map)
             health = {h["id"]: h for h in self.app.health.panels(names)}
             words = self._page_words()
+            devs = self.app.paired.devices() if self.app.paired.readable() else None   # (None: can't tell — v3.0.2)
             for pid, name in names:
                 doc = docs[pid]
                 s = doc["data"].get("settings") or {}
                 out.append({"id": pid, "exists": doc["exists"], "rev": doc["rev"], "name": name,
-                            "kiosk": s.get("kioskName") or (DEFAULT_KIOSK if pid == "main" else pid),
+                            "kiosk": s.get("kioskName") or pid,
+                            # (rev. 2) "This tablet's own light" (panels.js notifySel): the Manager expects an LED agent
+                            "ownLight": s.get("ledStrip") is True and not s.get("notifyLight"),
                             "address": panel_address(pid, every),
                             "status": self._panel_status(health.get(pid), words, me.admin),
+                            "claim": self._claim(devs.get(pid), me.admin) if devs is not None
+                            else {"state": "unknown", "words": PAIRED_UNREADABLE_STATE},
                             "map": panel_settings.thumbnail(s),
                             "perf": panel_settings.perf(doc["data"].get("perf"))})
             return self._json(200, {"panels": out, "max": MAX_PANELS}, extra={"Cache-Control": "no-store"})
@@ -2928,62 +3443,351 @@ class Handler(http.server.BaseHTTPRequestHandler):
             raise ApiError(405, "Method not allowed")
         self._manage_need("admin")
         req = self._json_body()
-        if req.get("action") == "remove":
-            pid = req.get("id")
-            if not isinstance(pid, str) or not PANEL_RE.fullmatch(pid) or pid.lower() not in self.app.store.panel_ids():
-                raise ApiError(404, "There's no such panel")
-            pid = pid.lower()
-            if pid == PIN_GUARDED_PANEL:
-                raise ApiError(400, "The main panel can't be removed")
-            # (the main panel always counts: it has its page at "/" before anything is saved on it)
-            if len(set(self.app.store.panel_ids()) | {PIN_GUARDED_PANEL}) <= 1:
-                raise ApiError(400, "It's the only panel — add another one before removing this one")
-            self.app.store.remove(pid)
-            self.app.auth.forget_panel(pid)   # (gone from every login's panels: adding it again starts afresh)
-            self.app.perftests.pop(pid, None)
-            self.app.bench_live.pop(pid, None)
+        action = req.get("action")
+        if action == "add":
+            return self._panel_add(req)
+        if action not in ("remove", "unlink", "move", "rename", "retrust"):
+            raise ApiError(400, '"action" must be "add", "remove", "unlink", "move", "rename" or "retrust"')
+        pid = req.get("id")
+        if not isinstance(pid, str) or not PANEL_RE.fullmatch(pid) or pid.lower() not in self.app.store.panel_ids():
+            raise ApiError(404, "There's no such panel")
+        pid, dev = pid.lower(), self.app.paired
+        if action != "rename":   # (v3.0.2: they change panel-devices.json — not while it can't be read)
+            self._paired_readable()
+        if action == "remove":
+            self._panel_remove(pid)
             log(f"manager: panel {pid} removed from {self.client_address[0]} (its backups are kept)")
             self._act("panel.remove", target=pid)
             return self._json(200, {"ok": True})
-        if req.get("action") != "add":
-            raise ApiError(400, '"action" must be "add" or "remove"')
-        pid = req.get("id")
-        if not isinstance(pid, str) or not pid:
-            raise ApiError(400, "Type an address for the new panel")
+        if action == "unlink":
+            had = dev.unlink(pid)
+            self._agent_forget(pid)
+            log(f"pairing: panel {pid}'s tablet unlinked by {self.manager.user} from {self.client_address[0]}")
+            self._act("panel.unlink", target=pid)
+            return self._json(200, {"ok": True, "had": had})
+        if action == "retrust":
+            if not dev.retrust(pid):
+                return self._json(409, {"ok": False, "error": "unclaimed"})
+            log(f"pairing: panel {pid}'s tablet trusted again by {self.manager.user}")
+            self._act("panel.retrust", target=pid)
+            return self._json(200, {"ok": True})
+        if action == "rename":
+            try:
+                name = panel_settings.PATHS["panelName"](req.get("name"))
+            except panel_settings.Invalid:
+                name = ""
+            if not name.strip():
+                raise ApiError(400, "Type a name for the panel")
+            other = self._panel_by_name(name)
+            if other and other != pid:   # (a tablet's request names its panel: two with one name can't be told apart)
+                return self._json(409, {"ok": False, "error": "name-taken"})
+            old = self.app.panel_name(pid)
+            rev = self.app.store.modify(pid, lambda data: {"settings": {**(data.get("settings") or {}), "panelName": name}})
+            self.app.notifier.changed(pid, rev, ["settings"], "manager")
+            self._act("panel.rename", target=pid, old=old, new=name)
+            return self._json(200, {"ok": True, "rev": rev, "name": name})
+        # move: this panel's tablet to an unclaimed panel; the panel left empty goes
+        to = req.get("to")
+        if not isinstance(to, str) or not PANEL_RE.fullmatch(to) or to.lower() not in self.app.store.panel_ids():
+            raise ApiError(404, "There's no such panel")
+        to = to.lower()
+        if not dev.claimed(pid):
+            return self._json(409, {"ok": False, "error": "unclaimed"})
+        if dev.claimed(to) or to == pid:
+            return self._json(409, {"ok": False, "error": "claimed", "words": self._claimed_words(to)})
+        if not dev.move(pid, to):
+            return self._json(409, {"ok": False, "error": "claimed", "words": self._claimed_words(to)})
+        self._panel_remove(pid)
+        log(f"pairing: panel {pid}'s tablet moved to {to} by {self.manager.user}; {pid} removed (its backups are kept)")
+        self._act("panel.move", target=to, old=pid, new=to)
+        return self._json(200, {"ok": True, "panel": to, "removed": pid, "address": panel_address(to, self.app.store.panel_ids())})
+
+    def _panel_remove(self, pid):
+        """A panel gone: its settings (a last backup kept), its tablet, its place in every login's panels."""
+        self.app.store.remove(pid)
+        self.app.paired.unlink(pid)
+        self._agent_forget(pid)
+        self.app.auth.forget_panel(pid)   # (gone from every login's panels: adding it again starts afresh)
+        self.app.perftests.pop(pid, None)
+        self.app.bench_live.pop(pid, None)
+
+    @staticmethod
+    def _claim(d, admin):
+        """(v3.0.2) A panel's tablet for the Manager's card: {state, device, model, browser, platform, screen, lastIp,
+        lastSeen, pairedAt, locked, copyAt, adopted, agentSeen} — lastIp (an address) the admin only. Never a hash."""
+        if not d:
+            return {"state": "unclaimed"}
+        p = d.get("profile") or {}
+        return {"state": "claimed", "device": panel_devices.describe(p), "model": p.get("model"), "browser": p.get("browser"),
+                "platform": p.get("platform"), "screen": p.get("screen"), "lastIp": d.get("lastIp") if admin else None,
+                "lastSeen": d.get("lastSeen"), "pairedAt": d.get("pairedAt"), "locked": bool(d.get("locked")),
+                "copyAt": d.get("copyAt"), "adopted": bool(d.get("adopted")), "agentSeen": d.get("agentSeen") is True}
+
+    def _address_problem(self, pid):
+        """Why `pid` can't be a new panel's address (in plain words), or None."""
         if any(ch in pid for ch in ".:/\\"):   # (v3.0.0: the tablet's IP or a URL typed — a real name never has these)
-            raise ApiError(400, "That looks like the tablet's address — Skypane doesn't need it. Type a short name such as "
-                           "kitchen; then open the address shown on the tablet.")
+            return ("That looks like the tablet's address — Skypane doesn't need it. Type a short name such as "
+                    "kitchen; then open the address shown on the tablet.")
         if not PANEL_RE.fullmatch(pid):   # (what's wrong with it, in plain words)
-            raise ApiError(400, "The address must start with a letter" if not pid[0].isascii() or not pid[0].isalpha()
-                           else "The address can be at most 32 characters" if len(pid) > 32
-                           else "The address may only have letters, digits, _ and - (no spaces)")
-        if pid.lower() in RESERVED_SEGMENTS or pid.lower() == "main" or self._safe_file(pid) is not None \
+            return ("The address must start with a letter" if not pid[:1].isascii() or not pid[:1].isalpha()
+                    else "The address can be at most 32 characters" if len(pid) > 32
+                    else "The address may only have letters, digits, _ and - (no spaces)")
+        if pid.lower() in RESERVED_SEGMENTS or pid.lower() == LEGACY_MAIN or self._safe_file(pid) is not None \
+                or self._safe_file(pid.lower()) is not None \
                 or pid.lower() in panel_aliases(self.app.store.panel_ids()):   # (/admin-panel: a moved panel's address)
-            raise ApiError(400, "That address is already used by the pages — pick another")
+            return "That address is already used by the pages — pick another"
+        # (v3.0.2: "main" stays kept — an old bookmark or tablet at /main must not open somebody else's new panel)
         if pid.lower().startswith("manager"):   # (v2.3.1: "manager-<login>" names the Manager in Hubitat's ackPanel)
-            raise ApiError(400, "Addresses starting with “manager” are kept for the Manager — pick another")
-        if pid.lower() in self.app.store.panel_ids() or self._safe_file(pid.lower()) is not None:
+            return "Addresses starting with “manager” are kept for the Manager — pick another"
+        return None
+
+    def _address_for(self, name):
+        """(v3.0.2) A new panel's address made from its name: "Kitchen Panel" → kitchen-panel (another free one when that
+        is taken: kitchen-panel-2…)."""
+        import unicodedata
+        plain = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii").lower()
+        words = [w for w in re.sub(r"[^a-z0-9]+", "-", plain).split("-") if w]
+        while len(words) > 1 and words[-1] in ("panel", "tablet", "screen", "dashboard"):   # (the Manager's panelSlug too:
+            words.pop()                                                                       # "Kitchen panel" → /kitchen)
+        base = "-".join(words)[:28].strip("-") or "panel"
+        if not base[0].isalpha() or base.startswith("manager") or base == LEGACY_MAIN:
+            base = ("panel-" + base)[:28].strip("-")
+        pid, n = base, 2
+        ids = set(self.app.store.panel_ids())
+        while pid in ids or self._address_problem(pid):
+            pid, n = f"{base}-{n}", n + 1
+            if n > 99:
+                raise ApiError(400, "Pick another name")
+        return pid
+
+    def _panel_create(self, pid, name, kiosk=None):
+        """A new, blank panel (an empty Home, no LED strip) with its own FreeKiosk name; returns its rev. StoreError when
+        it exists already or there are MAX_PANELS."""
+        if kiosk is None:
+            kiosk = base = re.sub(r"[^a-z0-9_-]", "_", pid.lower())[:36]
+            n = 2
+            while kiosk in self._kiosk_names():   # (each tablet needs its own FreeKiosk name)
+                kiosk, n = f"{base}_{n}", n + 1
+        # (base_rev 0: refused if it was created meanwhile — never replaces an existing panel's settings)
+        return self.app.store.patch(pid, {"settings": {"panelName": name, "kioskName": kiosk, "ledStrip": False, "dockOff": True,
+                                                      "homeLayout": "custom", "homeGrid": dict(BLANK_GRID, cards=[])}},
+                                    base_rev=0, create=True)
+
+    def _panel_add(self, req):
+        """{action: "add", name, address?} (or {id, name} as before 3.0.2) → a new unclaimed panel."""
+        name_in, pid = req.get("name"), req.get("address") or req.get("id")
+        if pid is None and isinstance(name_in, str) and name_in.strip():
+            pid = self._address_for(name_in)
+        if not isinstance(pid, str) or not pid:
+            raise ApiError(400, "Type a name for the new panel")
+        why = self._address_problem(pid)
+        if why:
+            raise ApiError(400, why)
+        if pid.lower() in self.app.store.panel_ids():
             return self._json(409, {"ok": False, "error": "exists"})
         try:
-            name = panel_settings.PATHS["panelName"](req.get("name") or pid)
+            name = panel_settings.PATHS["panelName"](name_in or pid)
         except panel_settings.Invalid:
             name = pid
-        kiosk = base = re.sub(r"[^a-z0-9_-]", "_", pid.lower())[:36]
-        n = 2
-        while kiosk in self._kiosk_names():   # (each tablet needs its own FreeKiosk name)
-            kiosk, n = f"{base}_{n}", n + 1
+        if self._panel_by_name(name):
+            return self._json(409, {"ok": False, "error": "name-taken"})
         try:
-            # (base_rev 0: refused if it was created meanwhile — never replaces an existing panel's settings)
-            # a new panel starts completely blank: an empty Home layout (only its settings gear shows) and no LED strip
-            # until the owner says so
-            rev = self.app.store.patch(pid, {"settings": {"panelName": name, "kioskName": kiosk, "ledStrip": False, "dockOff": True,
-                                                          "homeLayout": "custom", "homeGrid": dict(BLANK_GRID, cards=[])}},
-                                       base_rev=0, create=True)
+            rev = self._panel_create(pid.lower(), name)
         except StoreError as e:
             return self._json(e.code, e.body)
         log(f"manager: panel {pid} added from {self.client_address[0]}")
         self._act("panel.add", target=pid.lower())
-        return self._json(200, {"ok": True, "id": pid.lower(), "rev": rev})
+        return self._json(200, {"ok": True, "id": pid.lower(), "rev": rev, "name": name,
+                                "address": panel_address(pid.lower(), self.app.store.panel_ids())})
+
+    def _panel_by_name(self, name):
+        """(v3.0.2) The panel a name means: its name (case and spaces don't count) or its address. None when none."""
+        want = " ".join(str(name or "").split()).lower()
+        if not want:
+            return None
+        ids = self.app.store.panel_ids()
+        for pid in ids:
+            if " ".join(self.app.panel_name(pid).split()).lower() == want:
+                return pid
+        slug = want.replace(" ", "-")
+        return slug if slug in ids else None
+
+    def _paired_readable(self):
+        """(v3.0.2) Pairing changes need panel-devices.json: while it can't be read, 503 in words (never a traceback)."""
+        if not self.app.paired.readable():
+            raise ApiError(503, PAIRED_UNREADABLE, unreadable=True)
+
+    def _claimed_words(self, pid):
+        return f"{self.app.panel_name(pid)} is already claimed by another device. Unlink it first or choose another name."
+
+    # ---- (v3.0.2) panel pairing: the Manager's side (mockups/PAIRING-API.md) ---------------------------------------
+    def _pairing_out(self):
+        dev, ids = self.app.paired, self.app.store.panel_ids()
+        st, ok = dev.status(), dev.readable()
+        reqs = [{"id": r["id"], "ip": r["ip"], "device": panel_devices.describe(r["profile"]), "screen": r["profile"].get("screen"),
+                 "openedAt": r["openedAt"], "wrong": r["wrong"]} for r in self.app.pairing.list()]
+        # (v3.0.2: while the list can't be read nothing is known — never every panel "unclaimed")
+        unclaimed = [{"id": p, "name": self.app.panel_name(p), "address": panel_address(p, ids)} for p in ids if not dev.claimed(p)] if ok else []
+        notes = self.app.notices.list()
+        return {"accept": st["accept"], "lockOnCopy": st["lockOnCopy"], "grace": st["grace"], "graceUntil": st["graceUntil"],
+                "legacyKiosk": st["legacyKiosk"], "legacy": st["legacy"] if ok else [], "requests": reqs, "unclaimed": unclaimed, "notices": notes,
+                "unread": sum(not n.get("read") for n in notes),
+                **({} if ok else {"unreadable": True, "words": PAIRED_UNREADABLE_STATE})}
+
+    def _manage_pairing(self):
+        """GET /api/manage/pairing → _pairing_out. PATCH {action: "approve" | "reject" | "accept" | "lock-on-copy" |
+        "lock-now" | "notice-read", …} — the admin only (the contract's words)."""
+        me = self._manage_need("admin")
+        if self.command in ("GET", "HEAD"):
+            return self._json(200, self._pairing_out(), extra={"Cache-Control": "no-store"})
+        if self.command != "PATCH":
+            raise ApiError(405, "Method not allowed")
+        req = self._json_body()
+        action, dev, ip = req.get("action"), self.app.paired, self.client_address[0]
+        if action == "approve":
+            return self._approve(me, req)
+        if action == "reject":
+            r = self.app.pairing.get(req.get("id"))
+            if not self.app.pairing.reject(req.get("id")):
+                return self._json(404, {"ok": False, "error": "gone"})
+            log(f"pairing: a tablet's request turned down by {me.user} ({panel_devices.describe((r or {}).get('profile'))})")
+            self._act("panel.reject", what=panel_devices.describe((r or {}).get("profile")))
+            return self._json(200, {"ok": True})
+        if action in ("accept", "lock-on-copy"):
+            if not isinstance(req.get("on"), bool):
+                raise ApiError(400, '"on": true or false')
+            self._paired_readable()
+            (dev.set_accept if action == "accept" else dev.set_lock_on_copy)(req["on"])
+            log(f"pairing: {'accept new panels' if action == 'accept' else 'lock on copy'} {'on' if req['on'] else 'off'} ({me.user}, from {ip})")
+            self._act("panel.accept" if action == "accept" else "panel.lock-on-copy", on=req["on"])
+            return self._json(200, {"ok": True, **self._pairing_out()})
+        if action == "lock-now":
+            self._paired_readable()
+            dev.lock_now()
+            log(f"pairing: the upgrade's grace period ended by {me.user} — panels not adopted yet must pair")
+            self._act("panel.lock-now")
+            return self._json(200, {"ok": True, **self._pairing_out()})
+        if action == "notice-read":
+            nid = req.get("id")
+            if nid is not None and not isinstance(nid, str):
+                raise ApiError(400, '"id": a notice\'s id, or none for all')
+            return self._json(200, {"ok": True, "changed": self.app.notices.mark_read(nid)})
+        raise ApiError(400, '"action" must be "approve", "reject", "accept", "lock-on-copy", "lock-now" or "notice-read"')
+
+    def _approve(self, me, req):
+        """{action: "approve", id, code, name, kiosk?}: the code shown on that tablet and the panel's name. A name of an
+        unclaimed panel: the tablet takes it over (its settings kept); a new name: a new panel (its address from the
+        name); a claimed panel's: 409. kiosk: that FreeKiosk name (true: the old main panel's, legacyKiosk)."""
+        rid, dev, reqs = req.get("id"), self.app.paired, self.app.pairing
+        try:
+            name = panel_settings.PATHS["panelName"](req.get("name"))
+        except panel_settings.Invalid:
+            name = ""
+        if not name.strip():
+            raise ApiError(400, "Type a name for the panel")
+        kiosk = req.get("kiosk")
+        if kiosk is True:
+            kiosk = dev.status()["legacyKiosk"]
+        if kiosk is not None and kiosk is not False:
+            try:
+                kiosk = panel_settings.PATHS["kioskName"](kiosk)
+            except panel_settings.Invalid as e:
+                raise ApiError(400, f"FreeKiosk device name: {e}") from None
+        else:
+            kiosk = None
+        got = {}
+
+        def take(r):   # (runs only after the right code, under the requests' lock; raising leaves the request waiting)
+            pid = self._panel_by_name(name)
+            if pid and dev.claimed(pid):
+                raise ApiError(409, "claimed", words=self._claimed_words(pid))
+            if kiosk:
+                taken = self._kiosk_names(but=pid)
+                if kiosk in taken:
+                    raise ApiError(400, f"FreeKiosk device name: the panel “{taken[kiosk]}” already uses it — each tablet needs its own")
+            if pid is None:
+                pid = self._address_for(name)
+                try:
+                    self._panel_create(pid, name, kiosk)
+                except StoreError as e:
+                    raise ApiError(e.code, str(e.body.get("error") or "not saved")) from None
+                self._act("panel.add", target=pid)
+                got["new"] = True
+            elif kiosk:
+                rev = self.app.store.modify(pid, lambda data: {"settings": {**(data.get("settings") or {}), "kioskName": kiosk}})
+                self.app.notifier.changed(pid, rev, ["settings"], "manager")
+            key = dev.issue(pid, r["profile"], r["ip"])
+            got.update(panel=pid, name=self.app.panel_name(pid), address=panel_address(pid, self.app.store.panel_ids()),
+                       device=panel_devices.describe(r["profile"]), ip=r["ip"])
+            return {"panel": pid, "name": got["name"], "address": got["address"], "key": key}
+        code = req.get("code")
+        if not isinstance(code, str) or not re.sub(r"[\s-]", "", code):   # (v3.0.2: nothing typed is no wrong try)
+            raise ApiError(400, "Type the code shown on the tablet")
+        self._paired_readable()
+        before = reqs.get(rid)
+        try:
+            res = reqs.approve(rid, code, take)
+        except OSError as e:   # (the tablet's key not saved: the request waits on — the admin can try again)
+            log(f"pairing: not saved ({type(e).__name__})")
+            raise ApiError(503, "Skypane couldn't save its panel list — try again in a moment") from None
+        if res == "empty":
+            raise ApiError(400, "Type the code shown on the tablet")
+        if res == "ok":
+            self._agent_forget(got["panel"])
+            if kiosk and kiosk == dev.status()["legacyKiosk"]:
+                dev.forget_legacy_kiosk()
+            log(f"pairing: {got['device']} (from {got['ip']}) connected as panel {got['panel']} by {me.user}")
+            self._act("panel.approve", target=got["panel"], what=got["device"], name=got["name"])
+            return self._json(200, {"ok": True, "panel": got["panel"], "name": got["name"], "address": got["address"],
+                                    **({"created": True} if got.get("new") else {})})
+        if res == "gone":
+            return self._json(404, {"ok": False, "error": "gone"})
+        what = panel_devices.describe((before or {}).get("profile"))
+        if res == "cancelled":
+            log(f"pairing: a tablet's request cancelled after {panel_devices.MAX_WRONG} wrong codes ({what}, from {(before or {}).get('ip')})")
+            self._act("panel.cancelled", what=what, tries=panel_devices.MAX_WRONG)
+            try:
+                self.app.notices.add("wrong-code", panel=None, ip=(before or {}).get("ip"), agent=what)
+            except OSError as e:
+                log(f"pairing: notice not saved ({type(e).__name__})")
+            return self._json(400, {"ok": False, "error": "cancelled"})
+        now = reqs.get(rid) or {}
+        self._act("panel.wrong-code", what=what, tries=now.get("wrong"))
+        return self._json(400, {"ok": False, "error": "wrong-code", "left": max(0, panel_devices.MAX_WRONG - int(now.get("wrong") or 0))})
+
+    def _manage_pin(self):
+        """(v3.0.2) GET /api/manage/pin → {set}. PATCH {action: "set", pin, password} | {action: "clear", password}:
+        the admin sets or clears the house's panel PIN with their own Manager password again — no old PIN asked. Logged as
+        panel.pin-admin; the PIN never appears in any log (the request log has the path only)."""
+        me = self._manage_need("admin")
+        pin = self.app.pin
+        if self.command in ("GET", "HEAD"):
+            return self._json(200, {"set": pin.is_set()}, extra={"Cache-Control": "no-store"})
+        if self.command != "PATCH":
+            raise ApiError(405, "Method not allowed")
+        req = self._json_body()
+        action = req.get("action")
+        if action not in ("set", "clear"):
+            raise ApiError(400, '"action" must be "set" or "clear"')
+        if action == "set" and not isinstance(req.get("pin"), str):
+            return self._json(400, {"ok": False, "error": "bad-format"})
+        if not isinstance(req.get("password"), str) or not req["password"]:
+            return self._json(403, {"ok": False, "error": "password"})
+        # (the admin's own password: a wrong one counts as that login's wrong try, as everywhere)
+        ok, why = self.app.auth.verify(me.user, req["password"], self.client_address[0])
+        if not ok:
+            if why == "wrong":
+                self._act("signin.wrong", who=None, target=me.user, what="pin-admin")
+            return self._json(423 if why in ("locked", "reset-needed") else 403, {"ok": False, "error": why})
+        if action == "set":
+            done, err = pin.admin_set(req["pin"])
+            if not done:
+                return self._json(400, {"ok": False, "error": err})
+        else:
+            pin.clear()
+        log(f"manager: the panel PIN was {'set' if action == 'set' else 'cleared'} by {me.user} from {self.client_address[0]}")
+        self._act("panel.pin-admin", what=action)
+        return self._json(200, {"ok": True, "set": pin.is_set()})
 
     @staticmethod
     def _panel_status(h, words, admin):
@@ -2993,9 +3797,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         info = h.get("info") if isinstance(h.get("info"), dict) else {}
         seen = h.get("lastSeen")
         page = info.get("page") or ""
+        # (v3.0.2) agent: the LED agent on its tablet, from the check-in — "ok" / "off" / "none", null = not reported
+        # (mockups/AGENT-AUTOCONFIG.md); led: the tablet has a light of its own (an agent answered)
+        agent = info.get("agent") if info.get("agent") in AGENT_STATES else None
         return {"state": "never" if seen is None else "online" if h.get("state") == "connected" else "offline",
                 "lastSeen": seen, "version": info.get("version") or "",
-                "page": words.get(page) or ("a room page" if page.startswith("room:") else page)}
+                "page": words.get(page) or ("a room page" if page.startswith("room:") else page),
+                "agent": agent, "led": agent in ("ok", "off")}
 
     def _page_words(self):
         """Which page a panel shows, in words: {"room:<id>": its name, "home": "Home", …} (the health monitor's page)."""
@@ -3012,7 +3820,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._manage_need(None, pid)
         if self.command not in ("GET", "HEAD"):
             raise ApiError(405, "Method not allowed")
-        if not PANEL_RE.fullmatch(pid) or (pid not in self.app.store.panel_ids() and pid != PIN_GUARDED_PANEL):
+        if not PANEL_RE.fullmatch(pid) or (pid not in self.app.store.panel_ids()):
             raise ApiError(404, "no such panel")
         live = getattr(self.app, "live", None)
         devs = live.devices() if live is not None else {}
@@ -3024,10 +3832,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _kiosk_names(self, but=None):
         """{FreeKiosk name: panel name} of every panel (but `but`)."""
         out = {}
-        for p in sorted(set(self.app.store.panel_ids()) | {PIN_GUARDED_PANEL}):
+        for p in self.app.store.panel_ids():
             if p != but:
                 s = self.app.store.get(p)["data"].get("settings") or {}
-                out[s.get("kioskName") or (DEFAULT_KIOSK if p == PIN_GUARDED_PANEL else p)] = s.get("panelName") or ("Main panel" if p == PIN_GUARDED_PANEL else p)
+                out[s.get("kioskName") or p] = s.get("panelName") or p
         return out
 
     def _manage_panel(self, pid):
@@ -3036,7 +3844,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         Reading, changes and tests: a login that sees this panel (its own, or "all"); ADMIN_PANEL_KEYS: the admin."""
         pid = pid.lower()
         me = self._manage_need(None, pid)   # (before "no such panel": a panel it doesn't see is never told apart)
-        if not PANEL_RE.fullmatch(pid) or (pid not in self.app.store.panel_ids() and pid != PIN_GUARDED_PANEL):
+        if not PANEL_RE.fullmatch(pid) or (pid not in self.app.store.panel_ids()):
             raise ApiError(404, "no such panel")
         if self.command in ("GET", "HEAD"):
             doc = self.app.store.get(pid)
@@ -3117,7 +3925,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return {"settings": written}
         saved = {}
         try:
-            rev = self.app.store.modify(pid, change, create=pid == PIN_GUARDED_PANEL)
+            rev = self.app.store.modify(pid, change)
         except StoreError as e:
             return self._json(e.code, e.body)
         self.app.notifier.changed(pid, rev, ["settings"], "manager")
@@ -3209,6 +4017,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return out
         priv = self.app.data_dir / "private"
         cams = self._camera_list()
+
+        def protect_pending():
+            # (v3.0.2: a fresh install showed "no cameras" while the sync was still reading Protect — the page waits
+            # and re-reads while {protectPending}; {protectError}: Protect's own words when it said no)
+            st = self.app.settings.load()
+            if not ((st.get("PROTECT_HOST") or "").strip() and (st.get("PROTECT_API_KEY") or "").strip()):
+                return {}
+            try:
+                saved_at = self.app.settings.path.stat().st_mtime
+            except OSError:
+                saved_at = 0
+            try:
+                got = json.loads((priv / PROTECT_STATUS_FILE).read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                got = None
+            at = got.get("readAt") if isinstance(got, dict) else None
+            if not isinstance(at, (int, float)) or at < saved_at - 1:
+                return {"protectPending": True}
+            if got.get("ok") is False:
+                return {"protectError": str(got.get("error") or "Protect reports a problem.")[:300]}
+            # (it answered with cameras the list doesn't hold yet: still writing)
+            return {"protectPending": True} if got.get("cameras") and not any(not c.get("own") for c in cams) else {}
         if self.command in ("GET", "HEAD"):
             model = self.app.house_model() or {}
             rooms = sorted({r.get("name") for r in model.get("rooms") or [] if isinstance(r, dict) and r.get("name")})
@@ -3217,17 +4047,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
             views = self._views_cams()
             ids = self._cameras_for(me, cams)
             panels_ = []
-            for p in me.panels(sorted(set(self.app.store.panel_ids()) | {PIN_GUARDED_PANEL}, key=lambda x: (x != PIN_GUARDED_PANEL, x))):
+            for p in me.panels(self.app.store.panel_ids()):
                 s_ = self.app.store.get(p)["data"].get("settings") or {}
                 hv = ((s_.get("cameras") or {}).get("hiddenViews") or {}) if isinstance(s_.get("cameras"), dict) else {}
-                panels_.append({"id": p, "name": s_.get("panelName") or ("Main panel" if p == PIN_GUARDED_PANEL else p),
+                panels_.append({"id": p, "name": s_.get("panelName") or p,
                                 "mayEdit": me.can("panels", p), "shows": sorted(self._panel_cameras(p, views, cams)),
                                 "hiddenViews": sorted(k for k, v in hv.items() if v is True) if isinstance(hv, dict) else []})
             return self._json(200, {**public(own_cameras.load(priv)), "all": [dict(c, pictures=c["id"] in ids) for c in cams], "rooms": rooms,
                                     "panels": panels_, "viewCams": views,
                                     "builtin": bool(self.app.cfg.page_config.get("go2rtcPort")),
                                     "separate": bool(self.app.cfg.page_config.get("go2rtc")),
-                                    "protectViews": self._protect_views(), "viewMax": own_cameras.VIEW_MAX})
+                                    "protectViews": self._protect_views(), "viewMax": own_cameras.VIEW_MAX, **protect_pending()})
         if self.command != "PATCH":
             raise ApiError(405, "Method not allowed")
         self._manage_need("cameras")
@@ -3316,7 +4146,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return {c["id"] for c in cams}
         views = self._views_cams()
         out = set()
-        for p in who.panels(sorted(set(self.app.store.panel_ids()) | {PIN_GUARDED_PANEL})):
+        for p in who.panels(self.app.store.panel_ids()):
             out |= self._panel_cameras(p, views, cams)
         return out
 
@@ -3426,7 +4256,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             lg = json.loads((self.app.cfg.data_dir / "private" / "mqtt-logins.json").read_text(encoding="utf-8"))["devices"]
         except (OSError, ValueError, KeyError, TypeError):
             return self._json(503, {"error": "no-login"})
-        return self._json(200, {"builtin": True, "user": lg["user"], "pass": lg["pass"], "port": 1883})
+        return self._json(200, {"builtin": True, "user": lg["user"], "pass": lg["pass"], "port": broker.LAN_PORT})
 
     def _live_of(self, catalog):
         """v2.4.0: what each catalogue device is doing now (service/live_state.py) — {id: {lastAt, battery, health,
@@ -3500,7 +4330,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         rooms = [r.get("id") for r in model.get("rooms") or [] if isinstance(r, dict)
                  and any(isinstance(x, dict) and x.get("id") == did for x in (r.get("devices") if isinstance(r.get("devices"), list) else []))]
         out = []
-        for p in sorted(set(self.app.store.panel_ids()) | {PIN_GUARDED_PANEL}):
+        for p in self.app.store.panel_ids():
             if not who.sees(p):
                 continue
             s = self.app.store.get(p)["data"].get("settings") or {}
@@ -3522,7 +4352,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if isinstance(th, dict) and th.get("id") == did:   # (v2.9.3: every panel has the thermostat's own page)
                 via.append("thermostat")
             if via or hidden:
-                out.append({"id": p, "name": s.get("panelName") or ("Main panel" if p == PIN_GUARDED_PANEL else p),
+                out.append({"id": p, "name": s.get("panelName") or p,
                             "via": via, "cards": cards, "hidden": hidden})
         return out
 
@@ -3531,10 +4361,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         the same rules as the command route's steps 1–3 (it decides again on every command). {} without the right."""
         if not who.can("switch") or not model:
             return {}
-        main = self.app.store.get(PIN_GUARDED_PANEL)["data"].get("settings") or {}
         try:
-            ids = self._manager_switchable(model) - self._never_now(main, model)   # (v2.9.3: the card devices too)
-        except (KeyError, TypeError):
+            ids = self._manager_switchable(model) - self._never_now(self.app.rule.load(), model)   # (v2.9.3: the card devices too)
+        except (KeyError, TypeError, switch_rule.Unreadable):   # (v3.0.2: an unreadable rule: no controls, never more)
             return {}
         out = {}
         for did in sorted(ids):
@@ -3608,11 +4437,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if entry is None:
             raise ApiError(404, "no such device in the house model")
         # 2. which device
-        main = self.app.store.get(PIN_GUARDED_PANEL)["data"].get("settings") or {}
         switchable = self._manager_switchable(model)
         if did not in switchable:
             return refuse(403, "not-switchable")
-        if did in self._never_now(main, model):
+        try:
+            rule = self.app.rule.load()
+        except switch_rule.Unreadable as e:   # (v3.0.2: a failed read never widens — refused, nothing sent)
+            log(f"switch rule: {e}")
+            return refuse(503, "rule-unreadable")
+        if did in self._never_now(rule, model):
             return refuse(403, "never-switch")
         if not who.admin:
             only = (model.get("onlyPanels") or {}).get(str(did))
@@ -3829,7 +4662,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         (0, the command, the value) and its own mode / HSM budgets). Logged as house.mode / house.hsm."""
         who = self._manage_ok()
         can = bool(who.can("switch") and not getattr(who, "demo", False) and not getattr(self.app.cfg, "demo", False)
-                   and (who.admin or any(who.sees(p) for p in set(self.app.store.panel_ids()) | {PIN_GUARDED_PANEL})))
+                   and (who.admin or any(who.sees(p) for p in set(self.app.store.panel_ids()))))
         n = self.app.notifier
         if self.command in ("GET", "HEAD"):
             if not can:   # (security review: a login that can't change them doesn't learn the mode or whether the house is armed)
@@ -3965,29 +4798,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 raise ApiError(400, str(e))
         before = None
         if "allowed" in change:   # (the switch rule first: when it can't be saved, nothing is)
-            s0 = self.app.store.get(PIN_GUARDED_PANEL)["data"].get("settings") or {}
-            before = {k: s0.get(k) for k in ("neverSwitch", "switchRule")}
-            try:
-                self._set_allowed(model, ids, change["allowed"])
-            except StoreError as e:
-                return self._json(e.code, e.body)
+            before = self._rule()   # (v3.0.2: 503 when it can't be read — nothing saved)
+            self._set_allowed(model, ids, change["allowed"])
         if clean:
             try:
                 rev = self.app.devices.write_many(clean)
             except OSError:
                 if before is not None:   # (the fields couldn't be saved: the switch rule goes back as it was)
-                    def undo(data):
-                        st = dict(data.get("settings") or {})
-                        for k, v in before.items():
-                            if v is None:
-                                st.pop(k, None)
-                            else:
-                                st[k] = v
-                        return {"settings": st}
                     try:
-                        r2 = self.app.store.modify(PIN_GUARDED_PANEL, undo, create=True)
-                        self.app.notifier.changed(PIN_GUARDED_PANEL, r2, ["settings"], "manager")
-                    except StoreError:
+                        self.app.rule.save(before)
+                    except OSError:
                         pass
                 raise ApiError(503, "not saved — the server couldn't write the device settings")
         ov = self.app.devices.load()["overrides"]
@@ -4114,6 +4934,7 @@ class App:
     def __init__(self, cfg):
         self.cfg = cfg
         self.dashboard_root = cfg.dashboard_dir.resolve()
+        self._ei_cache = (False, None)   # (v3.0.2: the event icons as last read — event_icons())
         self.data_dir = cfg.data_dir
         try:
             self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -4168,20 +4989,47 @@ class App:
 
         # stage 4: the device choices move from the main panel's settings to house/device-settings.json (once)
         try:
-            old = (self.store.get(PIN_GUARDED_PANEL)["data"].get("settings") or {}).get("deviceOverrides")
+            old = (self.store.get(LEGACY_MAIN)["data"].get("settings") or {}).get("deviceOverrides")
             if self.devices.migrate(old if isinstance(old, dict) else {}) and old:   # (a new install: nothing moved, nothing said)
                 log("devices: the device choices moved from the main panel's settings to house/device-settings.json")
         except (OSError, ValueError) as e:
             log(f"devices: could not move the device choices ({type(e).__name__})")
         # v2.2.0: the one PIN window (pinUnlockSeconds) becomes the general window; the alarm window starts at 30 s
-        for pid in sorted(set(self.store.panel_ids()) | {PIN_GUARDED_PANEL}):
+        for pid in self.store.panel_ids():
             try:
                 if panel_settings.migrate_pin_window(self.store.get(pid)["data"].get("settings")) is not None:
                     self.store.modify(pid, lambda data: {"settings": panel_settings.migrate_pin_window(data.get("settings")) or data.get("settings")})
                     log(f"panel {pid}: its PIN window became the general PIN window (Manager → Panels → Safety)")
             except (OSError, ValueError, StoreError) as e:
                 log(f"panel {pid}: could not move its PIN window ({type(e).__name__})")
-        self._keep_old_kiosk_name()
+        # (v3.0.2) pairing replaces the built-in main panel — once: its "may switch" rule moves to house/switch-rule.json,
+        # its FreeKiosk name is offered when approving the first tablet (an install from before 3.0 whose main panel
+        # never set one: the old default, OLD_KIOSK), its settings go (a last backup kept); on an upgrade the other
+        # panels' tablets are adopted on their first visit for 24 h. (_keep_old_kiosk_name went: this replaces it.)
+        mark = self.data_dir / self.KIOSK_MARK
+        kiosk = OLD_KIOSK if self._pre_v3 and not mark.exists() else DEFAULT_KIOSK
+        had_login = (self.data_dir / "private" / "manager-users.json").exists()
+        try:
+            moved = panel_devices.migrate_v302(self.data_dir, self.store, log=lambda m: log(m), default_kiosk=kiosk)
+        except (OSError, ValueError, StoreError) as e:
+            moved = {"ran": False}
+            log(f"pairing (3.0.2): the one-time move didn't run ({type(e).__name__}) — tried again at the next start")
+        try:
+            if not mark.exists():
+                mark.parent.mkdir(parents=True, exist_ok=True)
+                mark.write_text("3.0.0\n", encoding="utf-8")
+        except OSError:
+            pass
+        self.paired = panel_devices.PanelDevices(cfg.data_dir / "private")   # (v3.0.2: the tablets' device keys, hashed)
+        if moved.get("ran") and not moved.get("mainRemoved") and had_login and self.paired.doc.get("legacyKiosk") is None:
+            # (an install whose main panel never saved anything: its tablet still had the default FreeKiosk name)
+            with self.paired.lock:
+                self.paired.doc["legacyKiosk"] = kiosk
+                self.paired._save()
+        self.pairing = panel_devices.PairingRequests()                     # (the "Connect this panel" screens: memory only)
+        self.notices = panel_devices.PanelNotices(cfg.data_dir / "private")
+        self.rule = switch_rule.SwitchRule(cfg.data_dir / "house")          # (the house's "may switch" rule, the admin's)
+        self.hits_lock, self.rate_hits, self.blocked_hits = threading.Lock(), {}, {}   # (per address / per panel: memory only)
         self.write_card_devices()
 
     KIOSK_MARK = pathlib.Path("house") / ".kiosk-default-v3"
@@ -4204,23 +5052,6 @@ class App:
             except OSError as e:
                 log(f"could not write {mark.name} ({type(e).__name__})")
         return pre
-
-    def _keep_old_kiosk_name(self):
-        """(v3.0.0) New installs: the main panel's FreeKiosk name defaults to "skypane". An install from before 3.0
-        (_first_look) whose main panel never set one kept the old default (OLD_KIOSK) — its tablet still uses that name
-        for MQTT, so it is written into the panel's settings once, then the mark."""
-        mark = self.data_dir / self.KIOSK_MARK
-        if mark.exists() or not self._pre_v3:
-            return
-        try:
-            doc = self.store.get(PIN_GUARDED_PANEL)
-            if not (doc["data"].get("settings") or {}).get("kioskName"):
-                self.store.modify(PIN_GUARDED_PANEL, lambda data: {"settings": {**(data.get("settings") or {}), "kioskName": OLD_KIOSK}}, create=True)
-                log(f"panel {PIN_GUARDED_PANEL}: kept its FreeKiosk name {OLD_KIOSK!r} (new installs use {DEFAULT_KIOSK!r})")
-            mark.parent.mkdir(parents=True, exist_ok=True)
-            mark.write_text("3.0.0\n", encoding="utf-8")
-        except (OSError, ValueError, StoreError) as e:
-            log(f"panel {PIN_GUARDED_PANEL}: could not check its FreeKiosk name ({type(e).__name__})")
 
     def feedback_about(self):
         """(v3.0.0) The server's part of a feedback report's "About this install": counts and yes / no only — never a
@@ -4295,6 +5126,19 @@ class App:
             if i not in now:
                 self.activity.add("weather.clear", id=i, level=lvl, title=title)
 
+    def event_icons(self):
+        """(v3.0.2) The house's event icons (event_icons.load: the defaults with no file or a damaged one) — read again
+        only when the file changed."""
+        p = event_icons.path(self.data_dir / "house")
+        try:
+            st = p.stat()
+            key = (st.st_mtime_ns, st.st_size)
+        except OSError:
+            key = None
+        if self._ei_cache[0] != key or key is None:
+            self._ei_cache = (key, event_icons.load(self.data_dir / "house", event_icons.available(self.cfg.dashboard_dir)))
+        return self._ei_cache[1]
+
     def weather_file(self):
         return self.data_dir / "house" / weather_device.FILE
 
@@ -4364,15 +5208,31 @@ class App:
         return {"switch": ld["switch"], "mode": ld["mode"] if locks else "none", "idle": ld["idle"], "blur": blur}
 
     def panel_names(self):
-        """[(panel id, its name)…] of every panel set up (the main panel first) — the health monitor's panel list."""
-        out = []
-        for pid in sorted(set(self.store.panel_ids()) | {PIN_GUARDED_PANEL}, key=lambda p: (p != PIN_GUARDED_PANEL, p)):
-            try:
-                s = self.store.get(pid)["data"].get("settings") or {}
-            except (OSError, ValueError, KeyError):
-                s = {}
-            out.append((pid, s.get("panelName") or ("Main panel" if pid == PIN_GUARDED_PANEL else pid)))
-        return out
+        """[(panel id, its name)…] of every panel set up — the health monitor's panel list."""
+        return [(pid, self.panel_name(pid)) for pid in self.store.panel_ids()]
+
+    def panel_name(self, pid):
+        """A panel's name (its settings' panelName, else its id)."""
+        try:
+            s = self.store.get(pid)["data"].get("settings") or {}
+        except (OSError, ValueError, KeyError, StoreError):
+            s = {}
+        return s.get("panelName") or pid if isinstance(s, dict) else pid
+
+    def rate(self, bucket, who, limit, window=60):
+        """(v3.0.2) At most `limit` calls a `window` from one address to one open route (/api/pair, /api/status) — as the
+        shared lists' limit. False when this one is over it (not counted then)."""
+        now = time.monotonic()
+        with self.hits_lock:
+            key = (bucket, who)
+            hits = [t for t in self.rate_hits.get(key, []) if now - t < window]
+            if len(hits) >= limit:
+                self.rate_hits[key] = hits
+                return False
+            self.rate_hits[key] = hits + [now]
+            if len(self.rate_hits) > 2000:
+                self.rate_hits = {k: v for k, v in self.rate_hits.items() if v and now - v[-1] < window}
+            return True
 
     def health_checks(self):
         """What the health monitor checks (service/health.py). Addresses are read at every check (the Manager's
@@ -4386,7 +5246,13 @@ class App:
                   health.service_check("protect.host", "UniFi Protect: no console address",
                                        lambda: "The Protect cameras wait until the Protect console address is set (Integrations → UniFi Protect)"
                                        if setting("PROTECT_API_KEY")() and not setting("PROTECT_HOST")() else None, 3),
-                  health.panels_check(self.panel_names), self._calendar_check, self._moved_panel_check]
+                  health.panels_check(self.panel_names), self._calendar_check, self._moved_panel_check,
+                  # (v3.0.2) what the bridge / the camera sync really got with the saved token / key (their status files)
+                  health.service_check("hubitat.maker", "Hubitat: Skypane can't read the hub", lambda: health.status_file_probe(
+                      priv / HUB_STATUS_FILE, max_age=1800)() if setting("HUBITAT_HOST")() and setting("HUBITAT_TOKEN")() else None, 4),
+                  health.service_check("protect.api", "UniFi Protect: Skypane can't read the cameras", lambda: health.status_file_probe(
+                      priv / PROTECT_STATUS_FILE, max_age=900)() if setting("PROTECT_HOST")() and setting("PROTECT_API_KEY")() else None, 3),
+                  health.service_check("music", "Music page (Sonos Panel) not reachable", health.url_probe(setting("SONOS_PANEL_URL")), 2)]
         if self.cfg.mqtt_host:   # (no broker = a test setup: no bridge to expect)
             checks.insert(0, health.bridge_check(self.notifier.bridge, enabled=lambda: self.health_parts()["hub"]))
         if self.cfg.page_config.get("go2rtcPort"):   # the image's own go2rtc (once the camera sync wrote its config)
@@ -4408,7 +5274,8 @@ class App:
         that isn't set up has no problem — the Manager's pill shows it grey ("not set up"), not green."""
         st = self.settings.load()
         has = lambda key: bool((st.get(key) or "").strip())   # noqa: E731
-        cams = has("PROTECT_HOST") or has("PROTECT_API_KEY") or bool(self.cfg.page_config.get("go2rtc"))             or (bool(self.cfg.page_config.get("go2rtcPort")) and (self.data_dir / "private" / "go2rtc.yaml").exists())
+        # (v3.0.2: not "go2rtc.yaml exists" — the camera sync always writes one, empty on a fresh install: "Working" with nothing set)
+        cams = has("PROTECT_HOST") or has("PROTECT_API_KEY") or bool(self.cfg.page_config.get("go2rtc"))             or bool(own_cameras.load(self.data_dir / "private")["cameras"])
         return {"hub": has("HUBITAT_HOST"), "broker": bool(self.cfg.mqtt_host), "cameras": cams}
 
     def _moved_file(self):
@@ -4456,7 +5323,7 @@ class App:
         """house/card-devices.json: every device the panels' layouts use (layouts.card_devices) — the bridge allows
         these to be switched too. Written after a Manager save and at start; only when it changed."""
         ids = set()
-        for p in sorted(set(self.store.panel_ids()) | {PIN_GUARDED_PANEL}):
+        for p in self.store.panel_ids():
             try:
                 ids |= layouts.card_devices(self.store.get(p)["data"].get("settings"))
             except (OSError, ValueError, KeyError, TypeError):
@@ -4635,7 +5502,7 @@ def main():
     if hasattr(signal, "SIGBREAK"):   # (Windows: Ctrl+Break / a console closing — logged, not a silent end)
         signal.signal(signal.SIGBREAK, on_signal)
     srv.app.health.start(publish=srv.app.notifier.health)   # (every 30 s; the heartbeat goes to Hubitat)
-    srv.app.calendars.start()                                # (every 10 minutes: each calendar's link fetched again)
+    srv.app.calendars.start()                                # (every 5–30 minutes, the admin's setting: each link fetched again)
     host, port = srv.server_address[:2]
     log(f"dashboard service {cfg.version} on {host}:{port} - dashboard {cfg.dashboard_dir}, data {cfg.data_dir}")
     try:

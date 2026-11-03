@@ -28,6 +28,9 @@ body.bld-open #main { padding: 0; }
 .bld-top select { height: 32px; padding: 0 8px; font-size: 13px; border-radius: 8px; max-width: 290px; }
 .bld-top .bld-roompick { display: flex; align-items: center; gap: 10px; margin-left: 6px; }
 .bld-top .bld-roompick button { height: 28px; padding: 0 10px; font-size: 12.5px; }
+/* (v3.0.2) "Editing: Kitchen only" / "Editing: every room — showing Kitchen as an example" */
+.bld-top .bld-editwhat { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 330px; min-width: 0; }
+@media (max-width: 1365px) { .bld-top .bld-editwhat { max-width: 220px; } }
 .btn.bld-ib { width: 32px; padding: 0; }
 .btn.bld-ib:disabled { opacity: .35; }
 .btn.bld-focusb[aria-pressed=true] { border-color: var(--acc); color: var(--acc-text); background: var(--acc-soft); }

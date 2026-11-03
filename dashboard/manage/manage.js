@@ -463,7 +463,8 @@
   let dirty = null;
   const changedIn = (f) => [...f.querySelectorAll("input, select, textarea")].some((i) => (i.type === "checkbox" || i.type === "radio" ? i.checked !== i.defaultChecked
     : i.tagName === "SELECT" ? i.selectedIndex !== Math.max(0, [...i.options].findIndex((o) => o.defaultSelected)) : i.value !== i.defaultValue));
-  const dirtyForm = () => (dirty && dirty.isConnected ? dirty : [...document.querySelectorAll("[data-unsaved]")].find(changedIn) || null);
+  // (v3.0.2: the innermost one — Integrations → Calendars → Event icons has its own Save inside the Integrations page)
+  const dirtyForm = () => (dirty && dirty.isConnected ? dirty : [...document.querySelectorAll("[data-unsaved]")].reverse().find(changedIn) || null);
   const isDirty = () => !!dirtyForm();
   // (v3.0.0) reloading = the page reloads itself after a save (Save and restart): never "Leave site?" then
   let reloading = false;

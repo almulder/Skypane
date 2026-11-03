@@ -38,7 +38,7 @@
   // page shown; else the panel's home place — the first place of its Home weather card (remembered in this browser,
   // so a room page without a weather card keeps the home sky even before Home was drawn); else the panel's own list
   const firstWx = (g) => g && g.cards.filter((c) => c.t === "weather" && Weather.placesOf(c.o && c.o.locs).length).sort((a, b) => a.y - b.y || a.x - b.x)[0];
-  const HOMEP = () => `panel.homePlace.${((window.PanelStore && PanelStore.id) || "main").toLowerCase()}`;
+  const HOMEP = () => `panel.homePlace.${String((window.PanelStore && PanelStore.id) || "").toLowerCase()}`;   // (v3.0.2: no "main")
   const homePlace = () => {
     const c = firstWx(customGrid());
     if (c) {
@@ -707,18 +707,12 @@
   document.addEventListener("pointercancel", drop, true);
   // the tap that ended a press-and-hold or a swipe must not also press what's under the finger
   document.addEventListener("click", (e) => { if (Date.now() < eatClickUntil) { e.stopPropagation(); e.preventDefault(); eatClickUntil = 0; } }, true);
-  // a room page's light / switch tile (the list style): press and hold → its wheel — on / off, brightness, white, colour
-  // (grid.js, as a room's device list does); a tap still switches it
-  let tileHold = null;
+  // a room page's light / switch tile (Tiles and List): press and hold → a light's pop-up (on / off, brightness, white,
+  // colour) or the device's wheel (grid.js, as a room's cards do); a tap still switches it
+  // (v3.0.2: grid.js's one long-press — a tablet's own long-press menu, which cancelled the touch before 0.55 s, is the hold)
   document.addEventListener("pointerdown", (e) => {
-    clearTimeout(tileHold);
-    const t = e.target.closest && e.target.closest("main.roomview .tile[data-dev]"); if (!t || !window.Grid || !Grid.autoWheel) return;
-    const w = Grid.autoWheel(+t.dataset.dev); if (!w) return;
-    const x0 = e.clientX, y0 = e.clientY;
-    const off = () => { clearTimeout(tileHold); removeEventListener("pointermove", mv, true); removeEventListener("pointerup", off, true); removeEventListener("pointercancel", off, true); };
-    const mv = (ev) => { if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > 12) off(); };
-    addEventListener("pointermove", mv, true); addEventListener("pointerup", off, true); addEventListener("pointercancel", off, true);
-    tileHold = setTimeout(() => { off(); eatClickUntil = Date.now() + 1500; Grid.openWheel(t, w, null, null); }, 550);
+    const t = e.target.closest && e.target.closest("main.roomview .tile[data-dev]"); if (!t || !window.Grid || !Grid.longPress) return;
+    const id = +t.dataset.dev; if (Grid.holdable(id)) Grid.longPress(e, t, () => Grid.holdDev(t, id));
   }, true);
   PinPad.onLock(() => App.endReorder());
 
@@ -1091,7 +1085,9 @@
     // alerts first (Hubitat's level 4–5, alarm.js): a view that fails below must never keep one off the screen
     const alerts = Alarm.overlay(), al = document.getElementById("alerts");
     if (al && alerts !== App.alertsHtml) { al.innerHTML = App.alertsHtml = alerts; if (Alarm.afterOverlay) Alarm.afterOverlay(al); }   // (#alerts comes with App.start)
-    if (!test && App.view !== "home" && App.view !== "cameras" && !H.rooms().some((r) => r.id === App.view)) App.view = "home"; // room was hidden
+    // (v3.0.2: the builder's canvas keeps a room hidden on this panel / with nothing placed yet — it's the one being edited;
+    // it dropped to Home)
+    if (!test && App.view !== "home" && App.view !== "cameras" && !H.rooms().some((r) => r.id === App.view) && !(H.design && H.room(App.view))) App.view = "home"; // room was hidden
     App.syncSky();
     if (App.sky) { const sp = App.skyPlace(); if ((sp && sp.id) !== App.skyAt) App.applyEffects(false); }   // (another page: maybe another place)
     dock();
@@ -1287,10 +1283,12 @@
     document.addEventListener("pointerdown", () => { touched = Date.now(); }, true);
     // Settings → Panel → "Back to Home after": a room / camera page left alone goes back to Home (never Music, and
     // not while Settings, a popup, a full-screen camera or a thermostat drag is up — those have their own endings)
+    // (v3.0.2: never in the builder's canvas or the Manager's live view — the touches are in the Manager, not this page:
+    // the room being edited went to Home after N s; nor while the room bar or a room's devices are being arranged)
     setInterval(() => {
       const after = +Settings.v.homeAfter || 0;
-      if (!after || App.view === "home" || App.view === "music" || App.dragging || (window.Settings && Settings.open) || testing()) return;
-      if (document.querySelector(".cam-full, .popup-host.show")) return;
+      if (!after || window.PANEL_DESIGN === true || window.PANEL_LIVE || App.view === "home" || App.view === "music" || App.dragging || App.thermoEdit || reorder || (window.Settings && Settings.open) || testing()) return;
+      if (document.querySelector(".cam-full, .popup-host.show, .gwheel, [class*=arranging]")) return;
       // (from the later of the last touch and when this page opened: a page opened by a rule or a swipe gets its time)
       if (Date.now() - Math.max(touched, App.viewAt || 0) >= after * 1000) { App.endReorder(); App.go("home"); }
     }, 1000);

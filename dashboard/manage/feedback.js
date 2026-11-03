@@ -95,7 +95,7 @@
   }
   let previewBox = null, privWarn = null;
   // (v3.0.0) what's typed is sent as typed: an e-mail address or an IP address in it gets a gentle warning
-  const PRIVATE = /[\w.+-]+@[\w-]+\.[\w.-]+|\d{1,3}(\.\d{1,3}){3}/;
+  const PRIVATE = /[\w.+-]+@[\w-]+\.[\w.-]+|\b\d{1,3}(\.\d{1,3}){3}\b/;   // (v3.0.2: its word boundaries were backspace characters — no IP address ever matched)
   function drawPreview() {
     if (previewBox) previewBox.textContent = asText(report());
     if (privWarn) privWarn.hidden = !["title", "what", "expected", "steps"].some((k) => PRIVATE.test(st[k] || ""));

@@ -18,6 +18,7 @@
 <main id="main"></main>
 <div class="dock glass" id="dock"></div>
 
+<script src="shared/devicekey.js"></script><!-- (v3.0.2) this tablet's device key: kept, restored after a 401, else back to "/" — before every other script -->
 <script src="../../vendor/mqtt.min.js"></script>
 <script src="shared/acts.js"></script><!-- what a tap on the generated HTML does: data-click="…", no handler in the markup (the page's CSP) -->
 <script src="shared/strings/en.js"></script><!-- the panel's words, English (v3.0.0: other languages are files like it) -->
@@ -57,6 +58,7 @@
 <script src="shared/cards.js"></script><!-- cards people made, each in its sandboxed frame (Manager → Cards) -->
 <script src="shared/app.js"></script>
 <script src="shared/guestlock.js"></script><!-- guest lockdown: locked (or the screen off) while the admin's guest switch is on -->
+<script src="shared/agentlink.js"></script><!-- (v3.0.2) sets up the LED agent on this tablet (127.0.0.1:852) — before status.js, which reports it -->
 <script src="shared/status.js"></script><!-- status bars (lost the server / issues) and the panel as a speaker -->
 <script src="shared/bench.js"></script><!-- the full benchmark (Manager → Panels → Weather effects) -->
 <script src="/assets/panel-start.js"></script><!-- App.start() (v2.4.1: no inline script — the page's CSP) -->
