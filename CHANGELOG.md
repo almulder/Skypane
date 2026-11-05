@@ -1,5 +1,66 @@
 # Changelog
 
+## 3.0.3
+
+### Weather
+- **A weather card for another place shows that place's weather,** not the house's.
+- **Changing °F / °C or mph / km/h** in the Manager changes the panel at once.
+- **Today moves on at midnight,** and a forecast shows one Today.
+- **"7 days" really shows 7.**
+- When the weather can't be fetched, the card says so in plain words.
+- **A place west of the panel keeps its own Today** after the panel's midnight (New York on a panel in Amsterdam).
+- When the Hubitat weather leaves gaps that Open-Meteo fills, the card says "From your Hubitat weather and Open-Meteo".
+
+### Cards and the layout builder
+- **A new card starts small;** then make it as big as you need.
+- **The words and icons keep their own size** (Style: Icons, Text). A bigger card only gives them room; a
+  smaller one first takes the empty space.
+- **"Grow and shrink with the card"** (off by default): on, what's inside follows the card from its size then.
+- **The Guest Wi-Fi card** keeps its QR code large and wraps a long network name; on a tall or square card the QR
+  code sits above the words.
+- A few cards (clock, calendar, door locks …) start a little bigger so they're readable straight away.
+- An empty Alert note card shows a hint in the builder on what to put in it.
+- **Fixed:** "Someone else saved this layout meanwhile" on every save after adding some weather places; switching
+  "Grow and shrink" on and off no longer shrinks the card; the Screen list follows Undo.
+
+### The PIN pad
+- **PIN pad sound:** a soft tick on each key, the same for every key (Panels → Setup → General; on by default).
+- **The screen holds still while the PIN pad is open,** so no tap misses.
+
+### Panels
+- **Show the version on this panel:** a switch per panel for the small version tag in the lower-left corner.
+- **The System card** uses plainer status words.
+- Text you see now uses US English spelling (color, gray, center, license …).
+
+### Integrations
+- **Guest Wi-Fi:**
+  - A good UniFi key says **Connected** while the guest network is still to be set up, with **Open → set up**.
+  - One **Change password now** is enough.
+  - The guest network you pick stays shown while Skypane asks the console about it.
+  - A change made from the Manager is logged as "changed from the Manager".
+- **"Check now"** reports the check, even while something else has a problem; the page then shows what it found.
+- **Calendars:**
+  - The status follows an added, changed or removed calendar at once.
+  - A removed broken calendar takes its Trouble with it, and a new broken link never shows Working.
+  - Removing a calendar asks in the Manager's own dialog.
+- **Recent** names the settings in words ("UniFi Network API key"), and the side card's lines are no longer cut off.
+- **Clearer words:** the UniFi key message doesn't send you to the page you're on, and "since" lines lose their double
+  punctuation.
+
+### Opening Skypane by a name; extra devices
+- **"Extra names for this server" and "Extra devices the panels may control" left the Manager.** Set the container
+  variables `ALLOWED_HOSTS` and `BRIDGE_ALLOW` instead ([install-docker.md](docs/install-docker.md#setting-a-container-variable)).
+  - A value saved before keeps working until the container variable is set; `none` clears it.
+  - A new container variable needs the container **re-created** (Compose: `docker compose up -d`; Unraid: Edit →
+    Apply), not just restarted.
+  - **Unraid, updating from before stage 4:** `ALLOWED_HOSTS` or `BRIDGE_ALLOW` left in the template now win over
+    the Manager's value — check or remove them. The start-up log says where each value comes from.
+- The *Skypane doesn't know this address* page mentions `ALLOWED_HOSTS` for people who want to use a name.
+
+### Upgrading
+- Cards that used to enlarge their contents when made bigger now keep words and icons at their Style size — switch
+  on **Grow and shrink with the card** to get the old look.
+
 ## 3.0.2
 
 ### Panels connect with a code now ([panel-pairing.md](docs/panel-pairing.md))

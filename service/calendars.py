@@ -1100,7 +1100,7 @@ class Calendars:
         if v is None:
             return DEFAULT_COLOR
         if not isinstance(v, str) or not COLOR_RE.fullmatch(v):
-            raise Invalid("The colour must look like #8b5cf6")
+            raise Invalid("The color must look like #8b5cf6")
         return v.lower()
 
     @staticmethod

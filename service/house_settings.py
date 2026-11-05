@@ -45,6 +45,11 @@ FIELDS = {
     "BRIDGE_ALLOW": ("General", "Extra device ids the bridge may switch", r"[0-9,\s]{0,300}", False, "Comma separated"),
 }
 SECRETS = {k for k, f in FIELDS.items() if f[3]}
+# (v3.0.3) no longer on the Manager page (the owner: two optional fields nobody needs). The container variable of the
+# same name is the way to set them from now on (run_all.hidden_value): a non-empty container value wins over one saved
+# in settings.json before 3.0.3, "none" means empty (clears an old saved value without editing files), and with no
+# container value the old saved value keeps working. HouseSettings.change refuses them (no Manager field to save from).
+HIDDEN = {"ALLOWED_HOSTS", "BRIDGE_ALLOW"}
 # the Dockerfile's ENV defaults: present in every container — never copied as if a template had set them
 IMAGE_DEFAULTS = {"MQTT_PORT": "1883", "TZ": "UTC"}
 # an address and the secret that is sent to it
@@ -124,6 +129,10 @@ class HouseSettings:
         login on the Manager can't send the stored token / key to another machine."""
         if not isinstance(changes, dict) or not changes:
             raise Invalid("nothing to change")
+        hidden = sorted(k for k in changes if k in HIDDEN)
+        if hidden:
+            raise Invalid(f"{', '.join(hidden)} can't be set on the Manager page any more — set the container variable of "
+                          "the same name instead (\"none\" clears it) and re-create the container")
         clean = {k: check(k, v) for k, v in changes.items()}
         values = self.load()
         for host, secret in HOST_SECRET.items():
@@ -139,7 +148,7 @@ class HouseSettings:
         v = self.load()
         out = [{"key": k, "group": g, "label": label, "help": hint, "secret": sec,
                 **({"set": bool(v.get(k))} if sec else {"value": v.get(k, "")})}
-               for k, (g, label, _pat, sec, hint) in FIELDS.items()]
+               for k, (g, label, _pat, sec, hint) in FIELDS.items() if k not in HIDDEN]
         tz = ((os.environ if env is None else env).get("TZ") or "").strip()
         for f in out:
             if f["key"] == "TZ" and not f["value"]:
@@ -158,6 +167,8 @@ class HouseSettings:
         found, bad = {}, []
         for k in FIELDS:
             val = (env.get(k) or "").strip()
+            if k in HIDDEN:   # (v3.0.3: read from the container variable at every start — never copied into the file)
+                continue
             if val and IMAGE_DEFAULTS.get(k) == val:   # (v3.0.0: the image's own defaults aren't a template's values)
                 continue
             if val:

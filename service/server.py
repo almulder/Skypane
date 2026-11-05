@@ -1090,12 +1090,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 pass
         return b"".join(parts)
 
-    UNKNOWN_HOST = ("This address isn't one Skypane knows. Open Skypane by its IP address, or add this name in the "
-                    "Manager: Integrations → General → Other names for this server, then Save and restart.")
+    # (v3.0.3: the Manager's "Extra names for this server" is gone — a name only through the container's settings)
+    UNKNOWN_HOST = ("This address isn't one Skypane knows. Open Skypane by its IP address instead "
+                    "(for example http://192.168.1.20:8088/). To use a name, set the container variable ALLOWED_HOSTS "
+                    "to it (for example ALLOWED_HOSTS=skypane.local) and re-create the container.")
 
     def _unknown_host(self):
         """421: the page was opened by a name that isn't this server's (DNS rebinding guard, host_allowed). A browser
-        gets a readable page, an API caller JSON; both name the Manager setting (never the Host sent: not echoed)."""
+        gets a readable page, an API caller JSON; both name the ALLOWED_HOSTS container variable (never the Host sent: not
+        echoed)."""
         bare = self.path.split("?", 1)[0]
         if not bare.startswith("/api/") and "text/html" in (self.headers.get("Accept") or ""):
             page = ("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" "
@@ -2485,21 +2488,32 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _proof(self, group, st, saved_at):
         """None (fine), or a state for the group: "nokey" / "noaddress" / "waiting" (no answer since the last save) /
         "problem" (the child's own words)."""
-        host, key, key_label, fname = self.SETTINGS_PROOF[group]
+        host, key, key_label, _fname = self.SETTINGS_PROOF[group]
         if not st.get(host):
             return {"state": "problem", "reason": "noaddress", "words": "The address isn't set yet.", "since": None}
         if not st.get(key):
             return {"state": "problem", "reason": "nokey", "words": f"The {key_label} isn't set yet.", "since": None}
-        try:
-            got = json.loads((self.app.data_dir / "private" / fname).read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            got = None
+        got = self._status_got(group)
         at = got.get("readAt") if isinstance(got, dict) else None
         if not isinstance(at, (int, float)) or at < saved_at - 1:
             return {"state": "waiting", "words": "", "since": None}
-        if got.get("ok") is False:
+        # (v3.0.3: "needsSetup" — the console answered with this key, only the guest network isn't set up yet: Connected)
+        if got.get("ok") is False and got.get("needsSetup") is not True:
             return {"state": "problem", "words": str(got.get("error") or "It reports a problem.")[:300], "since": at}
         return None
+
+    # (v3.0.3) the health problem that comes from the same status file as _proof: _proof reads the file live, the health
+    # monitor only every 30 s — its problem is dropped once the file says fine again since it was last seen (the Manager
+    # said "Trouble" for up to half a minute after a fix, e.g. the guest password set: "changed it twice before it cleared")
+    PROOF_PROBLEM = {"Hubitat": "hubitat.maker", "UniFi Protect": "protect.api", "Guest Wi-Fi": "unifi"}
+
+    def _status_got(self, group):
+        """The group's child status file (SETTINGS_PROOF), or None."""
+        try:
+            got = json.loads((self.app.data_dir / "private" / self.SETTINGS_PROOF[group][3]).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        return got if isinstance(got, dict) else None
 
     def _camera_video(self, st, saved_at):
         """(v3.0.2) Camera video set up (Protect, or cameras of the house's own): None when it really works, else
@@ -2544,6 +2558,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         for group, kinds in self.SETTINGS_PROBLEMS.items():
             mine = [p for p in probs if re.split(r"[:.]", p["id"])[0] in kinds]
             proof = self._proof(group, st, saved_at) if on.get(group) and group in self.SETTINGS_PROOF else None
+            got = self._status_got(group) if on.get(group) and group in self.SETTINGS_PROOF else None
+            if got is not None and proof is None:   # (the file says fine now: its older health problem is over)
+                at = got.get("readAt") if isinstance(got.get("readAt"), (int, float)) else 0
+                mine = [p for p in mine if not (p["id"] == self.PROOF_PROBLEM.get(group) and at >= (p.get("last") or p.get("first") or 0))]
             if proof and proof["state"] == "problem":
                 out[group] = proof
             elif mine:
@@ -2554,6 +2572,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 out[group] = video
             else:
                 out[group] = {"state": "ok" if on.get(group) else "off", "words": "", "since": None}
+            if got is not None and got.get("needsSetup") is True and out[group]["state"] == "ok":
+                out[group]["needsSetup"] = True   # (v3.0.3: Connected; the page's "Open →" says "set up")
+        if on.get("Calendars"):
+            out["Calendars"] = self._calendars_status(probs)
         if "Hubitat" in out and self.app.live is not None:   # (v3.0.2: the Notifier's test, seen without a panel)
             out["Hubitat"]["lastAlert"] = self.app.live.last_alert()
         # (v3.0.0) the weather device, as the bridge last said (the page words it: reason, device, last change)
@@ -2565,6 +2587,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
             out["Weather"] = {"state": "problem" if bad else "ok", "words": "", "since": None, "reason": wst.get("reason") if wst else "waiting",
                               "device": ((wst.get("device") or {}).get("name") or "") if wst else "", "updatedAt": wst.get("updatedAt") if wst else None}
         return out
+
+    def _calendars_status(self, probs):
+        """(v3.0.3) Integrations → Calendars from the calendars themselves, not from the health monitor's last round
+        (every 30 s, a problem counted after two): a removed broken calendar kept its Trouble until then, and a just
+        added broken link said Working. One not fetched yet (added, a new link): "waiting" (Checking…). A failed fetch
+        is Trouble at once only for a calendar that never worked; one that has worked (okAt) — a single bad fetch, its
+        last good copy still shown — only once the health monitor has the problem up (calendar:<id>)."""
+        cals = self.app.calendars.public()
+        first = {p["id"]: p.get("first") for p in probs if p["id"].startswith("calendar:")}
+        pid = lambda c: f"calendar:{c['id']}"[:80]  # noqa: E731
+        bad = [c for c in cals if c["status"]["state"] == "error" and (not c["status"].get("okAt") or pid(c) in first)]
+        if bad:
+            return {"state": "problem", "words": f"Calendar “{bad[0]['name']}” can't be read",
+                    "since": first.get(pid(bad[0])), "count": len(bad)}
+        if any(c["status"]["state"] == "waiting" for c in cals):
+            return {"state": "waiting", "words": "", "since": None}
+        return {"state": "ok", "words": "", "since": None}
 
     # ---- Manager: what the panels may switch (house-wide; kept in the main panel's settings.neverSwitch) ---------
     def _never_now(self, settings, model):
@@ -2892,7 +2931,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.app.last_check_now = time.monotonic()
             self.app.health.run_once(manual=True)
             self._act("settings.check")
-            return self._json(200, {"ok": True, **self._health_for(who)}, extra={"Cache-Control": "no-store"})
+            # (v3.0.3: the health answer's own "ok" — false while any problem is known — overwrote this check's ok: true,
+            # so "Check now" said "Not checked." whenever something was wrong. The check's result wins; the house's
+            # health is "healthy")
+            h = self._health_for(who)
+            return self._json(200, {**h, "ok": True, "healthy": bool(h.get("ok"))}, extra={"Cache-Control": "no-store"})
         if self.command not in ("GET", "HEAD"):
             raise ApiError(405, "Method not allowed")
         n = self._query(4).get("log", ["100"])[0]
@@ -3191,7 +3234,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 cur = guest_wifi.clean_settings(read_json_file(priv / guest_wifi.SETTINGS))
                 guest_wifi.write_private(priv / guest_wifi.SETTINGS, json.dumps({**cur, **new}, indent=1))
         if change_now:
-            guest_wifi.write_private(priv / guest_wifi.REQUEST, json.dumps({"changeNow": time.time()}))
+            guest_wifi.write_private(priv / guest_wifi.REQUEST, json.dumps({"changeNow": time.time(), "from": "manager"}))
         if new is not None:
             self._act("settings.guest", keys=sorted(new))
         if change_now:
@@ -3314,6 +3357,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     cals.refresh_soon(cid)
             elif action == "remove":
                 cals.remove(cid)
+                self.app.health.forget(f"calendar:{cid}"[:80])   # (v3.0.3: its Trouble goes now, not at the next round)
             elif action == "refresh":
                 if cid is not None and not (isinstance(cid, str) and cals.exists(cid)):
                     raise ApiError(404, "There's no such calendar")
@@ -3914,10 +3958,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if was is not None and (not isinstance(was, dict) or not set(was) <= set(clean)):
             raise ApiError(400, '"was" must name settings that are being set')
 
+        # (v3.0.3) numbers compared as numbers: a place's -105.0 stored here is the browser's -105 (JSON has no 1.0 vs 1)
+        def canon(v):
+            if isinstance(v, float) and v.is_integer():
+                return int(v)
+            if isinstance(v, dict):
+                return {k: canon(x) for k, x in v.items()}
+            if isinstance(v, list):
+                return [canon(x) for x in v]
+            return v
+
+        def same(a, b):
+            return json.dumps(canon(a), sort_keys=True) == json.dumps(canon(b), sort_keys=True)
+
         def change(data):
             if was:
                 now = panel_settings.managed(data.get("settings"))
-                moved = sorted(p for p, v in was.items() if json.dumps(now.get(p), sort_keys=True) != json.dumps(v, sort_keys=True))
+                moved = sorted(p for p, v in was.items() if not same(now.get(p), v))
                 if moved:
                     raise StoreError(409, {"ok": False, "error": "changed", "paths": moved})
             written = panel_settings.apply(data.get("settings"), clean)

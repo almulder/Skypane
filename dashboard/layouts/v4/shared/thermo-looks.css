@@ -1,6 +1,7 @@
 /* The thermostat card's 12 looks (thermo-looks.js). Theme colours only
    (--text, --muted, --heat, --cool, --accent…); a look's colour follows the thermostat: --tl-c. Buttons stay a finger
-   wide (44 px on the screen) when the card is drawn smaller (--gfit: grid.js), up to twice their size.
+   wide (44 px on the screen) when the card is drawn smaller (--gfit: grid.js), up to twice their size. (v3.0.3: each
+   drawing's own size, × Style's Icons, is in theme.css — it no longer grows with the card.)
    Moving parts: transform only (a CSS variable: --tk the set point, --tn the room, --th / --tc the heat / cool ends). */
 .tl { --tl-c: var(--accent-2); --tlb: clamp(48px, calc(46px / var(--gfit, 1)), 110px); --tlch: clamp(36px, calc(46px / var(--gfit, 1)), 96px);
   --tl-grad: linear-gradient(135deg, color-mix(in srgb, var(--tl-c) 85%, #fff), color-mix(in srgb, var(--tl-c) 72%, #000));

@@ -181,7 +181,7 @@ def wheel(v):
             a["icon"] = w["icon"]
         if w.get("col") is not None:
             if not isinstance(w["col"], str) or not COLOR.fullmatch(w["col"]):
-                raise Invalid("a wheel colour")
+                raise Invalid("a wheel color")
             a["col"] = w["col"]
         out.append(a)
     return out
@@ -210,15 +210,23 @@ def style(s):
         if not isinstance(s["b"], bool):
             raise Invalid("style b: true / false")
         out["b"] = s["b"]
-    # fit: what's inside follows the card's size — "scale" (bigger and smaller, the default on the fine grid),
-    # "scroll" (scaled to the width; lists scroll, the title stays put); true = the old "shrink to fit", false = scroll
+    # fit: when what's inside doesn't fit — "scale" (made smaller; v3.0.3: the words and icons keep their own size until
+    # the box reaches them, they never grow with it), "scroll" (fitted to the width; lists scroll, the title stays put);
+    # true = the old "shrink to fit" (the same as "scale" now), false = scroll
     if s.get("fit") is not None:
         if s["fit"] not in (True, False, "scale", "scroll"):
             raise Invalid("style fit: scale / scroll")
         out["fit"] = s["fit"]
+    # grow (v3.0.3): "Grow and shrink with the card" — the card's box, in the grid's cells, when it was switched on; what's
+    # inside follows the box from there
+    if s.get("grow") is not None:
+        g = s["grow"]
+        if not isinstance(g, dict):
+            raise Invalid("style grow: {w, h}")
+        out["grow"] = {"w": _int(g.get("w"), 1, 256, "style grow w"), "h": _int(g.get("h"), 1, 256, "style grow h")}
     if s.get("c") is not None:   # the card's own accent colour
         if not isinstance(s["c"], str) or not COLOR.fullmatch(s["c"]):
-            raise Invalid("style c: a colour")
+            raise Invalid("style c: a color")
         out["c"] = s["c"]
     return out
 

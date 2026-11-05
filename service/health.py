@@ -179,8 +179,8 @@ def url_probe(url, timeout=3.0, down="not reachable"):
 
 def status_file_probe(path, max_age=None, clock=time.time):
     """A probe for a child's status file ({"ok": bool, "error": text, "readAt": epoch s}, e.g. guest Wi-Fi's): None
-    when the file isn't there (the feature isn't used), its error text when not ok, "no news for …" when readAt is
-    older than max_age seconds."""
+    when the file isn't there (the feature isn't used), its error text when not ok (unless "needsSetup": it answered
+    fine, something is only still to be set up), "no news for …" when readAt is older than max_age seconds."""
     def probe():
         try:
             st = json.loads(path.read_text(encoding="utf-8"))
@@ -193,7 +193,7 @@ def status_file_probe(path, max_age=None, clock=time.time):
         at = st.get("readAt")
         if max_age and isinstance(at, (int, float)) and clock() - at > max_age:
             return f"no news for {ago(clock() - at)}"
-        if st.get("ok") is False:
+        if st.get("ok") is False and st.get("needsSetup") is not True:   # (v3.0.3: still to be set up isn't a fault)
             return _plain(st.get("error"), DETAILS_MAX) or "it reports a problem"
         return True
     return probe
@@ -365,6 +365,19 @@ class Monitor:
             if worst.get(k, 0) > w:
                 self._dirty = True
             b[k] = [max(w, worst.get(k, 0)), fine + (k not in worst), n + 1]
+
+    def forget(self, pid):
+        """(v3.0.3) A problem whose cause is gone for good (a removed calendar): resolved now, not at the next round."""
+        with self.lock:
+            had = self.pending.pop(pid, None) is not None
+            o = self.open.pop(pid, None)
+            if o is not None:
+                now = self.clock()
+                o["resolved"] = now
+                self._event("resolved", o, now)
+            if o is not None or had:
+                self._save()
+        return o is not None
 
     def history_api(self):
         """[{t, parts: {part: {worst, fine, checks}}}…] oldest first — the Health page's bars."""

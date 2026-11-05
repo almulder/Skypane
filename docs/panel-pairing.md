@@ -73,7 +73,7 @@ Under **Panels → Notices**, until you mark them read (nothing is pushed to you
 - someone tried to open a panel from another device;
 - a possible copy of a panel's key;
 - a panel that looks like a different device now;
-- a pairing request cancelled after 5 wrong codes;
+- a pairing request canceled after 5 wrong codes;
 - (after an upgrade) a tablet that was connected automatically.
 
 Everything is also in **Health → Timeline**.

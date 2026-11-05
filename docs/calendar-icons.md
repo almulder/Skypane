@@ -1,6 +1,6 @@
 # Calendar event icons: which words show which icon
 
-The panels give each calendar event a small icon and colour, picked from **words in the event's title**. Nothing else
+The panels give each calendar event a small icon and color, picked from **words in the event's title**. Nothing else
 counts: not the description, not the location, not the calendar's name. Since 3.0.2 the admin can change the list:
 **Manager → Integrations → Calendars → Event icons** (below). A guide with a "Try a title" box: guides/calendar-icons.html.
 
@@ -14,7 +14,7 @@ counts: not the description, not the location, not the calendar's name. Since 3.
 ## Changing the list (3.0.2)
 One list for the whole house, kept by the server (`house/event-icons.json`); every panel gets it with its calendar
 events and uses a saved change within seconds, without a reload. In **Manager → Integrations → Calendars → Event icons**:
-- each row is one icon: its picture (click it to pick another), name, colour, an on / off switch, and its words as
+- each row is one icon: its picture (click it to pick another), name, color, an on / off switch, and its words as
   chips — type a word and press Enter (or a comma) to add it, × to remove it;
 - **drag a row** by its ⠿ grip, or use ▲ ▼, to change the order: the first match from the top wins. With Doctor above
   Eyes, "Eye doctor" shows the doctor; with Eyes above, the eye;

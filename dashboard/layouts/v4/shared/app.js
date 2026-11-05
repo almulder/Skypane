@@ -58,7 +58,7 @@
   };
   App.applyEffects = (force) => {
     if (!App.sky) return;
-    const sp = App.skyPlace(), e = Settings.v.effects, d = sp && Weather.get(sp.id, true);   // (the sky's place is always a "Home" — a card's first place or the panel's: the Hubitat weather while it's shown)
+    const sp = App.skyPlace(), e = Settings.v.effects, d = sp && Weather.get(sp.id);   // (the sky follows what that place shows — the Hubitat weather only when it is the house's own place: v3.0.3)
     App.skyAt = sp && sp.id;
     App.sky.mode = e.cycle ? "demo" : "real";
     if (d) { App.sky.sunrise = d.sunrise; App.sky.sunset = d.sunset; }
@@ -380,20 +380,21 @@
     // weather, as the built-in layouts show it (a starting layout's card is never empty)
     const cw0 = o ? { key, ...Weather.forCard(key, o.locs) } : null, cw = cw0 && cw0.places.length ? cw0 : null;
     const d0 = cw ? cw.data : Weather.current(), cls = `card glass wx${solo ? " solo" : ""}`;
-    // (a custom grid card may list fewer days, or none: o.days)
-    const d = d0 && o && o.days != null ? { ...d0, days: d0.days.slice(0, o.days) } : d0;
+    // (a custom grid card may list fewer days, or none, or 7: o.days; "All" and the built-in layouts: 5 as before —
+    // v3.0.3 fetches 7 so the builder's 7 really shows 7)
+    const d = d0 ? { ...d0, days: d0.days.slice(0, o && o.days != null ? o.days : 5) } : d0;
     // (no place yet — a new install has none built in: one button to add the first)
     if (!d && !cw && !Weather.tabs().length) return `<section class="${cls}"><span class="label">${UI.esc(T("wx.title"))}</span><div class="loc"><button class="loc-t add"${Acts.on("ui.addPlace")}>${icon("plus", 16)} ${UI.esc(T("wx.addFirst"))}</button></div></section>`;
-    if (!d) return `<section class="${cls}"><span class="label">${UI.esc(T("wx.title"))}</span>${UI.locTabs(cw)}<div class="muted">${UI.esc(Weather.error || T("common.loading"))}</div></section>`;
+    if (!d) return `<section class="${cls}"><span class="label gz-t">${UI.esc(T("wx.title"))}</span>${UI.locTabs(cw)}<div class="muted gz-t">${UI.esc(Weather.errorOf(cw ? cw.sel : Weather.shownId()) || T("common.loading"))}</div></section>`;   // (that place's own state: v3.0.3)
     const n = d.now, u = Weather.units ? Weather.units() : { temp: "F", wind: "mph" }, num = (v) => (v == null ? "—" : v);
     const ribbon = window.HubAlerts && HubAlerts.weatherRibbon ? HubAlerts.weatherRibbon() : "";
     const src = `<div class="wx-src${d.stale ? " stale" : ""}">${UI.esc(d.stale ? T("wx.staleSince", { time: d.updated && Date.now() - d.updated < 864e5 && new Date().toDateString() === d.updated.toDateString() ? T.time(d.updated) : T.dateTime(d.updated) })
-      : T(d.source === "hubitat" ? "wx.fromHubitat" : "wx.fromOpenMeteo"))}</div>`;
-    return `<section class="${cls}"><div class="card-head"><span class="label">${UI.esc(T("wx.title"))}</span>${UI.locTabs(cw)}${ribbon}</div>
-      <div class="wx-now">${wxIcon(n.kind, 104, WX, !n.isDay)}<div><div class="t num">${num(n.temp)}<sup>°${u.temp}</sup></div><div class="muted">${UI.esc(n.text)}</div>${src}</div>
-        <div class="wx-meta">${UI.esc(T("wx.feels", { t: num(n.feels) }))}<br>${UI.esc(T("wx.humidity", { n: num(n.humidity) }))}<br>${UI.esc(T("wx.windUnit", { n: num(n.wind), unit: u.wind }))}</div></div>
-      <div class="wx-days">${d.days.map((x, i) => `<div class="wx-day ${i ? "" : "today"}"><span class="d">${UI.esc(x.day)}</span>${wxIcon(x.kind, 56, WX)}
-        <div class="hl"><b class="num">${num(x.high)}°</b><span class="num">${num(x.low)}°</span></div><span class="rain">${UI.esc(T("wx.rain", { n: x.rain ?? 0 }))}</span></div>`).join("")}</div></section>`;
+      : T(d.source === "hubitat" ? (d.mixed ? "wx.fromHubitatAndOpenMeteo" : "wx.fromHubitat") : "wx.fromOpenMeteo"))}</div>`;
+    return `<section class="${cls}"><div class="card-head gz-t"><span class="label">${UI.esc(T("wx.title"))}</span>${UI.locTabs(cw)}${ribbon}</div>
+      <div class="wx-now">${wxIcon(n.kind, 104, WX, !n.isDay)}<div class="gz-t"><div class="t num">${num(n.temp)}<sup>°${u.temp}</sup></div><div class="muted">${UI.esc(n.text)}</div>${src}</div>
+        <div class="wx-meta gz-t">${UI.esc(T("wx.feels", { t: num(n.feels) }))}<br>${UI.esc(T("wx.humidity", { n: num(n.humidity) }))}<br>${UI.esc(T("wx.windUnit", { n: num(n.wind), unit: u.wind }))}</div></div>
+      <div class="wx-days gz-t">${d.days.map((x, i) => `<div class="wx-day ${i ? "" : "today"}"><span class="d">${UI.esc(x.day)}</span>${wxIcon(x.kind, 56, WX)}
+        <div class="hl"><b class="num">${num(x.high)}°</b><span class="num">${num(x.low)}°</span></div><span class="rain">${UI.esc(x.rain == null ? "—" : T("wx.rain", { n: x.rain }))}</span></div>`).join("")}</div></section>`;
   }
 
   // the thermostat's mode buttons (and its fan's, when the card shows them): a grid card shows only the modes the
@@ -490,7 +491,8 @@
   // the pieces a custom grid's cards can show (grid.js; o = the card's own options)
   const gridParts = () => {
     const banner = Alarm.banner();
-    return { clock: clockBlock, alerts: () => banner, people: pills, weather: (o, c) => weather(true, o, `${Grid.room ? Grid.room.id : "home"}:${c ? c.i : ""}`),
+    // (an Alert note card with no note up: nothing on the wall; in the builder's canvas a hint — not an empty pill)
+    return { clock: clockBlock, alerts: () => banner || (H.design ? `<div class="gc-empty">${UI.esc(T("g.alertsHint"))}</div>` : ""), people: pills, weather: (o, c) => weather(true, o, `${Grid.room ? Grid.room.id : "home"}:${c ? c.i : ""}`),
       // (hidden on this panel: on the wall nothing, in the builder's canvas a note — not an empty box)
       guest: () => (!window.GuestWifi ? "" : GuestWifi.visible() || !H.design ? GuestWifi.card()
         : `<section class="card glass gw-card"><div class="gc-empty">${UI.esc(T(GuestWifi.cfg && !GuestWifi.cfg().ssid ? "guestwifi.hiddenNoNet" : "guestwifi.hiddenOff"))}</div></section>`), calendar: (o) => `<section class="card glass cal">${UI.calendar(o.days || 3)}</section>`,
@@ -1080,6 +1082,8 @@
     for (const k of ["pill", "rail", "segmented", "tabs", "chips", "split"]) root.classList.toggle(`dock-style-${k}`, k === ds);
     root.classList.toggle("dock-nolabels", typeof Settings.v.dockLabels === "boolean" ? !Settings.v.dockLabels : ds === "rail");
     root.classList.toggle("dock-autohide", Settings.v.dockAutoHide === true);
+    // (v3.0.3) the version tag in the corner, unless this panel hides it (Manager → Panels → Setup; theme.css)
+    root.classList.toggle("no-ver-tag", Settings.v.showVersion === false);
 
     const test = window.TestViews && Object.hasOwn(TestViews, App.view) ? TestViews[App.view] : null;
     // alerts first (Hubitat's level 4–5, alarm.js): a view that fails below must never keep one off the screen
@@ -1260,9 +1264,14 @@
     if (window.PanelStore) H.subscribe(`dashboard/panel/${PanelStore.id.toLowerCase()}/perftest`, () => App.perfTest());
     // (during a performance test / the benchmark the screensaver is woken instead: the test keeps the screen awake)
     const testing = () => App.perfTesting || (window.Bench && Bench.running);
-    const animPause = (paused) => {
-      if (paused && testing()) { App.wakeKiosk(); paused = false; }
-      document.documentElement.classList.toggle("anim-paused", paused); if (App.sky) App.sky.paused = paused;
+    // (v3.0.3) two reasons can hold it: "saver" (the screensaver / screen off, below — a touch ends it) and "pin" (a
+    // PIN pad is open, pinpad.js — only its closing ends it); paused while either holds
+    const gate = { saver: false, pin: false };
+    const animPause = (paused, why = "saver") => {
+      if (paused && why === "saver" && testing()) { App.wakeKiosk(); paused = false; }
+      gate[why === "pin" ? "pin" : "saver"] = !!paused;
+      const any = gate.saver || gate.pin;
+      document.documentElement.classList.toggle("anim-paused", any); if (App.sky) App.sky.paused = any || !!App.notSetUp;
     };
     App.animPause = animPause;
     H.subscribe(`freekiosk/${H.kiosk()}/state`, (msg) => {  // FreeKiosk publishes this every ~20–30 s

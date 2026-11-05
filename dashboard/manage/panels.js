@@ -59,7 +59,7 @@
   const gone = (v) => v === false || v === "" || (Array.isArray(v) && !v.length) || v == null;
   // (v3.0.2) what a setting that isn't saved means — what the tabs show for it (and the panel does): put back to it, a
   // change leaves the list ("Celsius" and back to "Fahrenheit" on a panel that never had one is no change)
-  const DEF = { "units.temp": "F", "units.wind": "mph", ledStrip: false, arrangeOnPanel: false, homeAfter: 0, insideSensor: "panel", notifyLight: 0,
+  const DEF = { "units.temp": "F", "units.wind": "mph", ledStrip: false, arrangeOnPanel: false, pinSound: true, showVersion: true, homeAfter: 0, insideSensor: "panel", notifyLight: 0,
     alertBeeps: true, alertSilence: false, alertMinLevel: 1, quietLevel4: true, quietFrom: -1, quietTo: -1 };
   const isSaved = (k, v, saved) => (saved[k] == null ? (k in DEF ? same(v, DEF[k]) : v == null || v === "" || (Array.isArray(v) && !v.length)) : same(v, saved[k]));
   function dropPending() { pend = {}; pendPid = null; }
@@ -823,6 +823,11 @@
           select("homeAfter", HOME_AFTER.concat(HOME_AFTER.some(([v]) => v === ha) ? [] : [[ha, secs(ha)]]), ha, (v) => keep({ homeAfter: +v }), K.t("panels.gen.homeAfter"))),
         R(K.t("panels.gen.arrange"), K.t("panels.gen.arrangeHint"),
           swi("arrangeOnPanel", g.arrangeOnPanel === true, (on) => keep({ arrangeOnPanel: on }), K.t("panels.gen.arrange"))),
+        // (v3.0.3) a soft tick on the PIN pad's keys, the version in the corner (unset = on, as the panel reads them — settings.js)
+        R(K.t("panels.gen.pinSound"), K.t("panels.gen.pinSoundHint"),
+          swi("pinSound", g.pinSound !== false, (on) => keep({ pinSound: on }), K.t("panels.gen.pinSound"))),
+        R(K.t("panels.gen.showVersion"), K.t("panels.gen.showVersionHint"),
+          swi("showVersion", g.showVersion !== false, (on) => keep({ showVersion: on }), K.t("panels.gen.showVersion"))),
         R(K.t("panels.gen.goRtc"), K.t("panels.gen.goRtcHint"), text("cameras.go2rtc", g["cameras.go2rtc"], { max: 300, ph: K.t("panels.gen.goRtcPh"), label: K.t("panels.gen.goRtc") })),
       ], K.t("panels.gen.tabletFoot")),
       ...G(K.t("panels.gen.setUp"), [block(el("ol.pn-steps", {},

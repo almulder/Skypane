@@ -27,17 +27,39 @@
       return true;
     } catch (e) { if (e.message !== "login") toast(K.t("guest.unreachable"), true); return false; }
   }
-  // (v3.0.2: "Change password now" said nothing until a refresh — the console takes a few seconds; ask until it's done)
-  async function waitChanged(before) {
+  // (v3.0.2: "Change password now" said nothing until a refresh — the console takes a few seconds; ask until it's done.
+  // v3.0.3: the note from before the change — "press Change password now", a guest network still to be set up — isn't
+  // a failure of this change: it stopped the waiting after 6 s and showed it again, so it took a second press to clear)
+  async function waitChanged(before, beforeErr) {
     for (let i = 0; i < 20; i++) {
       await new Promise((ok) => setTimeout(ok, 2000));
       if (S.route().page !== "guest") return;
       const g = await api("/api/manage/guest-wifi").catch(() => null);
       if (!g) continue;
       if (g.changedAt && g.changedAt !== before) { toast(K.t("guest.newPw.done")); return render(); }
-      if (g.error && i >= 2) { toast(g.error, true); return render(); }
+      if (g.error && !g.needsSetup && g.error !== beforeErr && i >= 2) { toast(g.error, true); return render(); }
     }
     toast(K.t("guest.newPw.slow"), true); render();
+  }
+  // (v3.0.3: picking the guest network re-drew the page 1.2 s later from the status written before the pick — it jumped
+  // back to "Choose…". The pick stays shown, and the page asks every 2 s, up to 20 s, until service/guest_wifi.py has
+  // read the new setting (its status's settings.ssid), then shows what the console says about it)
+  async function pickNetwork(sel) {
+    const want = sel.value;
+    if (!want) return;
+    const row = sel.closest(".grp-row"), hint = row && row.querySelector("small");
+    const chooser = [...sel.options].find((o) => !o.value);
+    if (chooser) chooser.remove();   // (no way back to "Choose…" while the pick is being saved)
+    sel.disabled = true;
+    if (!(await send({ settings: { ssid: want } }, K.t("guest.savedCode"), true))) { sel.disabled = false; return render(); }
+    if (hint) hint.textContent = K.t("guest.unifi.picking");
+    for (let i = 0; i < 10; i++) {
+      await new Promise((ok) => setTimeout(ok, 2000));
+      if (S.route().page !== "guest") return;
+      const g = await api("/api/manage/guest-wifi").catch(() => null);
+      if (g && (g.settings || {}).ssid === want) return render();
+    }
+    render();
   }
   const seg = (label, opts, cur, pick, may = true) => el("div.seg", { role: "group", "aria-label": label }, opts.map(([v, n]) =>
     el("button" + (cur === v ? ".on" : ""), { type: "button", "aria-pressed": String(cur === v), disabled: !may, onclick: () => cur !== v && pick(v) }, n)));
@@ -53,10 +75,12 @@
   }
   function unifiNetwork() {
     const set = G.settings || {}, may = !phone();
+    // (v3.0.3: the console answered — only the guest network is still to be set up: Connected, the next step as its hint)
+    const bad = G.error && !G.needsSetup;
     const rows = [
-      K.row(K.t("guest.unifi.console"), G.error ? G.error : K.t("guest.unifi.connectedHint"), el("span.pill" + (G.error ? ".bad" : ""), {}, G.error ? K.t("guest.unifi.trouble") : K.t("guest.unifi.connected"))),
+      K.row(K.t("guest.unifi.console"), G.error ? G.error : K.t("guest.unifi.connectedHint"), el("span.pill" + (bad ? ".bad" : ""), {}, bad ? K.t("guest.unifi.trouble") : K.t("guest.unifi.connected"))),
       K.row(K.t("guest.unifi.network"), K.t("guest.unifi.networkHint"), (G.networks || []).length > 1 || !G.ssid
-        ? el("select", { "aria-label": K.t("guest.unifi.network"), disabled: !may, onchange: (e) => send({ settings: { ssid: e.target.value } }, K.t("guest.savedCode")) },
+        ? el("select", { "aria-label": K.t("guest.unifi.network"), disabled: !may, onchange: (e) => pickNetwork(e.target) },
           !G.ssid ? el("option", { value: "" }, K.t("guest.unifi.choose")) : null, (G.networks || []).map((n) => el("option", { value: n, selected: n === G.ssid }, n)))
         : el("b", {}, G.ssid)),
     ];
@@ -66,10 +90,10 @@
       K.row(K.t("guest.newPw.every"), K.t("guest.newPw.everyHint"), seg(K.t("guest.newPw.everyLabel"), [[0, K.t("guest.newPw.never")], ...[1, 3, 7, 14, 30].map((n) => [n, K.t("guest.newPw.days", { n })])], set.days || 0, (v) => send({ settings: { days: v } }, K.t("guest.saved")), may)),
       K.row(K.t("guest.newPw.lastChanged"), G.changedAt ? (G.why ? K.t("guest.newPw.changedWhy", { when: when(G.changedAt), why: G.why }) : when(G.changedAt)) : K.t("guest.newPw.notYet"),
         el("button.btn.sm", { type: "button", onclick: async (e) => {   // (v2.9.0: on a phone too — the server decides who may)
-          const b = e.currentTarget, before = G.changedAt;
+          const b = e.currentTarget, before = G.changedAt, beforeErr = G.error;
           if (!(await K.ask({ title: K.t("guest.newPw.ask"), yes: K.t("guest.newPw.askYes"), text: K.t("guest.newPw.askText") }))) return;
           b.disabled = true; b.replaceChildren(ic("refresh", 14), K.t("guest.newPw.busy"));
-          if (await send({ changeNow: true }, null, true)) waitChanged(before);
+          if (await send({ changeNow: true }, null, true)) waitChanged(before, beforeErr);
           else { b.disabled = false; b.replaceChildren(ic("refresh", 14), K.t("guest.newPw.changeNow")); }
         } }, ic("refresh", 14), K.t("guest.newPw.changeNow"))),
     ], G.nextChange ? (G.guestsHere ? K.t("guest.newPw.nextAfterGuests") : K.t("guest.newPw.nextAt", { when: when(G.nextChange) })) : null)];

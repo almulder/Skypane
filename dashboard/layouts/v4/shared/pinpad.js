@@ -31,8 +31,40 @@
       <div class="pp-keys">${"123456789".split("").map((k) => key(k)).join("")}${key("back", `<span aria-hidden="true">⌫</span><span class="sr-only">${esc(T("pin.back"))}</span>`, "fn")}${key("0")}${key("ok", esc(T("common.ok")), "ok")}</div>
       <button class="pp-cancel" ${c.busy ? "disabled" : ""}${Acts.on("pp.end", null)}>${esc(T("common.cancel"))}</button></div>` };
   }
-  // closed some other way (another popup, the alarm…): a confirm counts as "no", a PIN pad as cancelled
-  const show = () => UI.popup(body, () => { if (cur) { const c = cur; cur = null; c.resolve(c.kind === "confirm" ? false : null); } });
+  // ---------- (v3.0.3) everything on screen holds still while the PIN pad is open ----------
+  // so no tap lands on a moving frame: <html class="pin-open"> (theme.css: every CSS animation paused, the pad itself
+  // and a level 4–5 alert excepted), the app's animation gate (App.animPause(…, "pin"): html.anim-paused, which the room
+  // layouts and icon motions already obey, and the sky / weather canvas loop stops drawing), the photo cards stop
+  // turning (grid.js), and script animations (Element.animate) are paused here and played on again. Back to normal as
+  // soon as no PIN pad is open — OK, Cancel, ×, another pop-up, a time-out (the 1 s check below catches any other way).
+  let held = null;
+  const outside = (a) => { const el = a && a.effect && a.effect.target; return !(el && el.closest && el.closest(".popup-host, #alerts")); };
+  const hold = (on) => {
+    const root = document.documentElement;
+    if (on === root.classList.contains("pin-open")) return;
+    root.classList.toggle("pin-open", on);
+    if (window.App && App.animPause) { try { App.animPause(on, "pin"); } catch (e) { console.warn(e); } }
+    if (on) {
+      held = [];
+      try {
+        for (const a of document.getAnimations ? document.getAnimations() : []) {
+          if (a.playState !== "running" || (window.CSSAnimation && a instanceof CSSAnimation) || (window.CSSTransition && a instanceof CSSTransition) || !outside(a)) continue;
+          a.pause(); held.push(a);
+        }
+      } catch { /* (an old WebView without getAnimations: the CSS and the loops still hold) */ }
+    } else {
+      for (const a of held || []) { try { if (a.playState === "paused") a.play(); } catch {} }
+      held = null;
+    }
+  };
+  const sync = () => hold(!!(cur && cur.kind === "pin" && UI.isOpen()));
+  // closed some other way (another popup, the alarm…): a confirm counts as "no", a PIN pad as cancelled. Each close
+  // callback holds its own prompt and only acts while that one is still the open one — a second ask / confirm opened
+  // over this one (UI.popup runs the old callback first) must not cancel the new prompt.
+  const show = (c) => {
+    UI.popup(body, () => { if (cur === c) { cur = null; c.resolve(c.kind === "confirm" ? false : null); } sync(); });
+    sync();
+  };
 
   // a lock-out from the service (lockedFor: seconds left): counted down live under the dots, the keys wait meanwhile
   const left = (c) => (c && c.until ? Math.max(0, Math.ceil((c.until - Date.now()) / 1000)) : 0);
@@ -55,17 +87,23 @@
       return r.ok ? +(await r.json()).lockedFor || 0 : 0;
     } catch { return 0; }
   };
-  // a new prompt while one is open: the open one counts as cancelled (its promise always settles)
-  const drop = () => { if (cur) { const c = cur; cur = null; c.resolve(c.kind === "confirm" ? false : null); } };
+  // a new prompt while one is open: the open one counts as cancelled (its promise always settles). close: also take its
+  // pop-up away now (when no new pop-up follows at once — the unlock-window try below; otherwise the new prompt's
+  // UI.popup simply replaces it, without the screen resuming for a moment in between)
+  const drop = (close) => {
+    if (!cur) return;
+    const c = cur; cur = null; c.resolve(c.kind === "confirm" ? false : null);
+    if (close) UI.close();   // (its callback finds cur !== c: only sync() — the screen moves again until a pad opens)
+  };
   const PinPad = {
     confirm({ title, text, yes } = {}) {
-      drop();
-      return new Promise((resolve) => { cur = { kind: "confirm", title: title || T("common.areYouSure"), text, yes, resolve }; show(); });
+      drop(false);
+      return new Promise((resolve) => { const c = cur = { kind: "confirm", title: title || T("common.areYouSure"), text, yes, resolve }; show(c); });
     },
     async ask({ title, text, check, window: win, purpose = "general" } = {}) {
-      drop();
       // still inside this action's unlock window: the PIN entered a moment ago, without the pad
       const p0 = win === "alarm" ? PinPad.alarmUnlocked() : win === "general" ? PinPad.unlocked() : null;
+      drop(!!(p0 && check));
       let first = null;
       if (p0 && check) {
         try { first = await check(p0); } catch { first = null; }
@@ -76,7 +114,7 @@
         const c = cur = { kind: "pin", title: title || T("pin.title"), text, check, resolve, digits: "", msg: "", win };
         if (first && first.lockedFor) countdown(c, first.lockedFor);
         else if (check && purpose) lockedNow(purpose).then((s) => { if (s > 0 && cur === c && !c.busy && !left(c)) { countdown(c, s); UI.refreshPopup(); } });
-        show();
+        show(c);
       });
     },
     refusal(j, fallback) {
@@ -87,6 +125,8 @@
     },
     async _key(k) {
       const c = cur; if (!c || c.kind !== "pin" || c.busy || left(c)) return;
+      // (v3.0.3) the key tick — first, the same for every key, before anything depends on which one it was
+      if (window.Sound && Sound.pinTick) { try { Sound.pinTick(); } catch {} }
       if (k === "back") c.digits = c.digits.slice(0, -1);
       else if (k === "ok") {
         if (c.digits.length < 4) { c.msg = T("pin.badFormat"); UI.refreshPopup(); return; }
@@ -142,6 +182,7 @@
   setInterval(() => {
     if (session && !PinPad.unlocked()) PinPad.lock();
     if (alarm && !PinPad.alarmUnlocked()) alarm = null;
+    sync();   // (the screen holding still: never left on once no PIN pad is open)
   }, 1000);
   // its keys, Cancel / Yes (acts.js)
   Acts.add({ "pp.key": (k) => PinPad._key(k), "pp.end": (v) => PinPad._end(v) });

@@ -169,11 +169,43 @@ tablets).
   data folder isn't writable by user 99 — repeat the `chown` above, then restart the container
   (`docker restart skypane`, or `docker compose restart`). The restart matters: the built-in MQTT broker only starts
   again with it.
-- **Opening Skypane by a name** (e.g. `http://skypane.local:8088`) instead of the IP: add that name in **Manager →
-  Integrations → General → Extra names for this server (optional)** and press **Save and restart**. Otherwise Skypane shows a
-  page *Skypane doesn't know this address* — that protects it from other web pages.
+- **Opening Skypane by a name** (e.g. `http://skypane.local:8088`) instead of the IP: add the container variable
+  `ALLOWED_HOSTS` with that name (several separated by commas) and re-create the container
+  ([below](#setting-a-container-variable)). Otherwise Skypane shows a page *Skypane doesn't know this address* — that
+  protects it from other web pages. (A name saved in the Manager before v3.0.3 keeps working until you set the
+  container variable; `none` clears it.)
+- **A device shows on a panel but won't switch:** add the container variable `BRIDGE_ALLOW` with its Hubitat device
+  number (several separated by commas) and re-create the container ([below](#setting-a-container-variable)). `none`
+  clears a value saved in the Manager before v3.0.3.
 - **Keep it on your home network.** Don't port-forward Skypane to the internet.
 - **Secrets** (the Hubitat token, camera keys) are kept in the data folder's `private/`, never shown again and never
   logged. Back up the whole data folder.
 - **Forgot the owner password?** `docker exec -it skypane python service/reset_login.py` — only that password is
   cleared; type a new one there, or use the one-time code it prints ("I have a sign-in code" on the sign-in page).
+
+### Setting a container variable
+
+A new container variable only takes effect when the container is **re-created** — `docker restart` keeps the old
+ones. Your data folder isn't touched.
+
+- **Docker Compose:** add an `environment:` part under `skypane:` in `compose.yaml` (or add the line to the one you
+  have), then run `docker compose up -d` in that folder — it re-creates the container with the new value:
+
+  ```yaml
+      environment:
+        - ALLOWED_HOSTS=skypane.local
+  ```
+
+- **`docker run`:** remove the container and run it again with `-e`:
+
+  ```
+  docker rm -f skypane
+  docker run -d --name skypane --restart unless-stopped --network host \
+    -e ALLOWED_HOSTS=skypane.local \
+    -v /srv/skypane:/data ghcr.io/almulder/skypane:latest
+  ```
+
+- **Unraid:** Docker → Skypane → **Edit** → **Add another Path, Port, Variable** → Config Type **Variable**, Key
+  `ALLOWED_HOSTS`, Value `skypane.local` → **Add** → **Apply** (Unraid re-creates the container).
+
+The startup log says where each of these values comes from (the container variable, or a value saved before 3.0.3).

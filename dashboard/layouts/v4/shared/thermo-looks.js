@@ -8,7 +8,8 @@
 // once, when the finger lets go. Colours: the theme's CSS variables (thermo-looks.css).
 (function () {
   const H = Home, esc = (s) => UI.esc(s);
-  // [id, name in the builder, normal size in the old 12 × 8 grid (grid.js BASE: what "scale" grows from)]
+  // [id, name in the builder, normal size in the old 12 × 8 grid (v3.0.3: no longer used by grid.js — what's inside a card
+  // keeps its own size, theme.css caps each look's drawing)]
   const LOOKS = [
     ["halo", "Halo ring", [4, 5]], ["knob", "Arc with a knob", [4, 5]], ["slider", "Slider bar", [5, 4]],
     ["mercury", "Thermometer", [4, 5]], ["bignum", "Big number", [4, 5]], ["stepper", "Stepper chip", [3, 1]],

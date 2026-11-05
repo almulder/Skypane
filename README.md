@@ -65,7 +65,7 @@ and a few counts; what you type is sent as you typed it, so leave out private de
 Enjoying Skypane? It's built in the author's spare time — a coffee helps keep it going:
 [Buy me a coffee](https://buymeacoffee.com/almulder).
 
-## Licence
+## License
 
-All rights reserved during the tester phase — see [LICENSE](LICENSE). Third-party parts and their licences:
+All rights reserved during the tester phase — see [LICENSE](LICENSE). Third-party parts and their licenses:
 [CREDITS.md](CREDITS.md).

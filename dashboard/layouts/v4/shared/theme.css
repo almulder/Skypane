@@ -701,7 +701,41 @@ main.lay-custom.fine > .gc.j-l { margin-left: calc(var(--g-cw, 0px) * var(--jl, 
 .gc .twin > * { flex: 1; }
 .gc-clock .gc-in, .gc-people .gc-in, .gc-temps .gc-in, .gc-alerts .gc-in, .gc-text .gc-in, .gc-value .gc-in { padding: 14px 18px; }
 .gc-clock .gc-in { justify-content: center; }
-.gc .ic { zoom: var(--gic, 1); }
+/* (v3.0.3) every card keeps its pictures and its words apart: Style's "Text" sizes the words (the card's inside, above),
+   "Icons" only the pictures — line icons, drawings and own pictures, avatars, the weather's drawings, dials, rings, the
+   QR code (.gz-i: a picture the markup marks) — the words' zoom taken back off them. A picture inside a picture is
+   sized with it (not twice). Photos, pictures and cameras fill their card: media, not icons. */
+.gc { --gpic: calc(var(--gic, 1) / var(--gtx, 1)); }
+.gc :is(.ic, svg.wx, .gz-i, .avatar, .gc-up, .gc-art, .gc-disc, .fn-ic, .gc-bat, .gc-bin, .pl-art, .ag-ic, .status > .big, .clk-analog, .tl-badge, .tl-i, .alarm-badge) { zoom: var(--gpic); }
+/* (v3.0.2) guest, weather (grid.js SPLIT): their words carry the Text size themselves (.gz-t), not the whole card */
+.gc.gsz .gc-in { zoom: 1; }
+.gc.gsz .gz-t { zoom: var(--gtx, 1); }
+.gc.gsz :is(.ic, svg.wx, .gz-i, .avatar, .gc-up, .gc-art) { zoom: var(--gic, 1); }
+.gc.gsz .gz-t :is(.ic, svg.wx, .gz-i, .avatar, .gc-up, .gc-art) { zoom: calc(var(--gic, 1) / var(--gtx, 1)); }
+.gc :is(.ic, svg.wx, .gz-i, .avatar, .gc-up, .gc-art, .gc-disc, .fn-ic, .gc-bat, .gc-bin, .pl-art, .ag-ic, .status > .big, .clk-analog, .tl-badge, .tl-i, .alarm-badge) :is(.ic, svg.wx, .gz-i, .avatar, .gc-up, .gc-art, .tl-i),
+.gc.gsz .gz-t :is(.ic, svg.wx, .gz-i, .avatar, .gc-up, .gc-art) :is(.ic, svg.wx, .gz-i, .avatar, .gc-up, .gc-art) { zoom: 1; }
+/* (v3.0.3) the drawings that took all the room their card gave them — the thermostat's dial and its looks' rings, orb,
+   gauge and thermometer, a reading's gauge, the arc — have their own size now (× Icons: --gpic, the words' zoom taken
+   off); a smaller box still shrinks them (they are flex items), never a bigger one makes them grow */
+.gc .nest-in .nest-dial { width: min(calc(270px * var(--gpic)), 100cqw, 100cqh - var(--nest-ctl)); height: min(calc(270px * var(--gpic)), 100cqw, 100cqh - var(--nest-ctl)); }
+@container (max-height: 320px) and (min-width: 180px) {
+  .gc .nest-in .nest-dial { width: min(calc(270px * var(--gpic)), 100cqh - 36px, 100cqw - 124px); height: min(calc(270px * var(--gpic)), 100cqh - 36px, 100cqw - 124px); }
+}
+/* (the owner's own card: its pieces stand where, and as big as, the owner put them on its 24 × 24 grid — they fill their
+   piece; Icons doesn't zoom them past it) */
+.gc .bk-p :is(.ic, .gc-up, .gc-art) { zoom: 1; }
+/* (…down to about half their size: below that the box cuts into them, and Grid.fit draws the whole card smaller — a
+   short card no longer squeezes a dial to nothing beside full-size words) */
+.gc .nest-in .nest-dial { min-width: calc(110px * var(--gpic)); min-height: calc(110px * var(--gpic)); }
+.gc .tl-dial { max-height: calc(250px * var(--gpic)); min-height: calc(110px * var(--gpic)); margin-block: auto; }
+.gc .tl-orbbox { max-height: calc(230px * var(--gpic)); min-height: calc(100px * var(--gpic)); margin-block: auto; }
+.gc .tl-gbox { max-height: calc(180px * var(--gpic)); min-height: calc(80px * var(--gpic)); margin-block: auto; }
+.gc .tl-pair { min-height: calc(90px * var(--gpic)); }
+.gc .tl-rbox { max-height: calc(190px * var(--gpic)); }
+.gc .tl-tube { max-height: calc(280px * var(--gpic)); min-height: calc(120px * var(--gpic)); align-self: center; }
+.gc .gc-gauge { min-height: calc(60px * var(--gpic)); }
+.gc .gc-gauge svg { max-width: calc(220px * var(--gpic)); max-height: calc(128px * var(--gpic)); }
+.gc .ga { max-height: calc(220px * var(--gpic)); min-height: calc(90px * var(--gpic)); }
 .gc-t { font-size: 14px; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; margin-bottom: 6px; }
 .gc-dev { display: flex; align-items: center; gap: 14px; padding: 14px 18px; height: 100%; }
 .gc-dev .gc-n { font-size: 19px; font-weight: 600; }
@@ -786,6 +820,11 @@ main.lay-custom.fine > .gc.j-l { margin-left: calc(var(--g-cw, 0px) * var(--jl, 
 .gc[data-lscroll] .gc-in { overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
 /* (v3.0.2: .gc.fit[…] — ".gc.fit:not(.scroll) .gc-devs { overflow: hidden }" above outweighed it: the list didn't scroll) */
 .gc[data-lscroll] .gc-devs, .gc.fit[data-lscroll] .gc-devs { flex: none; overflow: visible; min-height: auto; }
+/* (v3.0.3: the other lists too — the calendar, the locks, a to-do list: the whole inside scrolls as one, as "Fit the width,
+   scroll" does) */
+.gc.fit[data-lscroll] .gc-in > :is(.card, section) { height: auto; min-height: 100%; overflow: visible; flex: none; }
+.gc.fit[data-lscroll] :is(.cal-body, .lock-list, .ls-list, .nt-board, .gc-text > div) { flex: none; overflow: visible; min-height: auto; }
+.gc.fit[data-lscroll] .card-head { position: sticky; top: 0; z-index: 2; background: var(--glass-strong); margin-top: -1px; }
 .gc[data-lscroll] .gc-t { position: sticky; top: 0; z-index: 2; background: var(--glass-strong); margin-top: -1px; }
 /* the Energy flow's title: in from the rounded corner like the other cards' titles */
 .gc-energy .gc-in > .gc-t { padding: 12px 16px 0; margin-bottom: 0; }
@@ -901,11 +940,12 @@ main.roomview.lay-custom { display: grid; gap: var(--g-gap, 14px); padding-top: 
 .sp-below, .sp-solo { flex-direction: column; justify-content: center; text-align: center; gap: 6px; }
 .sp-pic { flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .sp-pic small { color: var(--muted); font-size: 13px; }
-/* the picture grows with the card: a share of the card's own size (cq units; an older browser keeps the 60 px) */
+/* (v3.0.3) the picture has its own size — 120 px × Style's Icons (its zoom, --gpic) — and a smaller card shrinks it to a
+   share of the card (cq units, divided by its zoom, which multiplies them again); a bigger card no longer grows it */
 .gc-spot .gc-in { container-type: size; }
-.sp-beside .sp-pic > :is(svg.ic, .gc-art, .gc-up) { height: min(70cqh, 42cqw) !important; width: auto !important; max-width: 48cqw; }
-.sp-below .sp-pic > :is(svg.ic, .gc-art, .gc-up) { height: min(52cqh, 75cqw) !important; width: auto !important; max-width: 90cqw; }
-.sp-solo .sp-pic > :is(svg.ic, .gc-art, .gc-up) { height: min(72cqh, 85cqw) !important; width: auto !important; max-width: 90cqw; }
+.sp-beside .sp-pic > :is(svg.ic, .gc-art, .gc-up) { height: min(calc(70cqh / var(--gpic, 1)), calc(42cqw / var(--gpic, 1)), 120px) !important; width: auto !important; max-width: calc(48cqw / var(--gpic, 1)); }
+.sp-below .sp-pic > :is(svg.ic, .gc-art, .gc-up) { height: min(calc(52cqh / var(--gpic, 1)), calc(75cqw / var(--gpic, 1)), 120px) !important; width: auto !important; max-width: calc(90cqw / var(--gpic, 1)); }
+.sp-solo .sp-pic > :is(svg.ic, .gc-art, .gc-up) { height: min(calc(72cqh / var(--gpic, 1)), calc(85cqw / var(--gpic, 1)), 140px) !important; width: auto !important; max-width: calc(90cqw / var(--gpic, 1)); }
 .sp-pic > .gc-art { aspect-ratio: 1.6 / 1.85; } .sp-pic > .gc-up { aspect-ratio: 1; }
 .sp-side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .sp-below .sp-side { width: 100%; }
@@ -1067,6 +1107,13 @@ main.roomview.lay-custom { display: grid; gap: var(--g-gap, 14px); padding-top: 
 @keyframes efin { from { transform: translateX(100%); } to { transform: translateX(0); } }
 /* the version running, lower left (app.js versionTag) */
 #ver-tag { position: fixed; left: 10px; bottom: 6px; z-index: 40; font-size: 11px; letter-spacing: .03em; color: var(--text); opacity: .5; pointer-events: none; }
+/* (v3.0.3) a panel set not to show it (Manager → Panels → Setup → "Show the version on this panel") */
+html.no-ver-tag #ver-tag { display: none !important; }
+/* (v3.0.3) a PIN pad is open (pinpad.js html.pin-open): every animation on screen holds still, so no tap misses — the
+   pad itself and a level 4–5 alert excepted (the alert must still be seen) */
+html.pin-open *, html.pin-open *::before, html.pin-open *::after { animation-play-state: paused !important; }
+html.pin-open .popup-host, html.pin-open .popup-host *, html.pin-open .popup-host *::before, html.pin-open .popup-host *::after,
+html.pin-open #alerts *, html.pin-open #alerts *::before, html.pin-open #alerts *::after { animation-play-state: running !important; }
 /* "New version ready · Refresh" (app.js): top right, above the page, under pop-ups and full-screen cameras */
 .refresh-pill { position: fixed; top: 14px; right: 14px; z-index: 40; display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 14px; border-radius: 999px;
   color: var(--text); font-size: 15px; border: 1px solid var(--glass-line); animation: fade .4s ease-out; }

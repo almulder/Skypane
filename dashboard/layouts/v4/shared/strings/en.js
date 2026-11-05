@@ -392,7 +392,7 @@ window.PANEL_STRINGS.en = {
   "led.warning": "Hubitat warning — orange",
   "led.armed": "Armed — red",
   "led.disarmed": "Just disarmed — green (1 min)",
-  "led.normal": "Normal — theme colour",
+  "led.normal": "Normal — theme color",
 
   // Alerts from Hubitat
   "alert.lvl.5": "Life safety",
@@ -594,7 +594,7 @@ window.PANEL_STRINGS.en = {
   "wx.code.96": "Thunder & hail",
   "wx.code.99": "Thunder & hail",
   "wx.today": "Today",
-  "wx.unavailable": "Weather unavailable ({why})",
+  "wx.unavailableNow": "Weather isn't available right now — trying again soon",
   "wx.place": "Place",
 
   // Lists and notes
@@ -608,7 +608,7 @@ window.PANEL_STRINGS.en = {
   "ls.takeDown": "Take down",
   "ls.noNotes": "No notes",
   "ls.notePlaceholder": "Write a note…",
-  "ls.colour": "Colour",
+  "ls.colour": "Color",
   "ls.pin": "Pin it",
   "ls.c.yellow": "Yellow",
   "ls.c.pink": "Pink",
@@ -718,12 +718,12 @@ window.PANEL_STRINGS.en = {
   "set.mgr.thisPanel": "This panel: {id} · FreeKiosk name {kiosk}",
 
   // Settings: Look
-  "set.look.colours": "Colours",
+  "set.look.colours": "Colors",
   "set.look.theme": "Theme",
-  "set.look.hue": "Colour",
+  "set.look.hue": "Color",
   "set.look.background": "Background",
   "set.look.cardAlpha": "Card transparency",
-  "set.look.cardTint": "Card colour",
+  "set.look.cardTint": "Card color",
   "set.look.clock": "Clock",
   "set.look.style": "Style",
   "set.look.font": "Font",
@@ -937,6 +937,13 @@ window.PANEL_STRINGS.en = {
   "g.system": "System",
   "g.bridge": "Bridge",
   "g.panel": "Panel",
+  "g.st.live": "live",
+  "g.st.notConnected": "not connected",
+  "g.st.running": "running",
+  "g.st.waiting": "waiting",
+  "g.st.upToDate": "up to date",
+  "g.st.someMissing": "some places aren't loading",
+  "g.st.noPlaces": "no places added yet",
   "g.previous": "Previous",
   "g.pause": "Pause",
   "g.play": "Play",
@@ -949,7 +956,7 @@ window.PANEL_STRINGS.en = {
   "g.blue": "Blue",
   "lp.brightness": "Brightness",
   "lp.white": "Warm ↔ cool",
-  "lp.colour": "Colour",
+  "lp.colour": "Color",
   "lp.saturation": "Saturation",
   "g.tonight": "Tonight",
   "g.tomorrow": "Tomorrow",
@@ -1104,6 +1111,7 @@ window.PANEL_STRINGS.en = {
   "bn.why.fromManager": "it was stopped from the Manager",
   "bn.why.screenOff": "the screen went off",
   "bn.why.saver": "the screensaver came on",
+  "bn.why.pinOpen": "a PIN pad was opened",
   "bn.why.alertUp": "an alarm alert came up",
 
   // Room pages
@@ -1123,7 +1131,7 @@ window.PANEL_STRINGS.en = {
   "rg.purple": "Purple",
   "rg.magenta": "Magenta",
   "rg.pink": "Pink",
-  "rg.colour": "Colour",
+  "rg.colour": "Color",
   "rg.candle": "Candle",
   "rg.warmWhite": "Warm white",
   "rg.neutralWhite": "Neutral white",
@@ -1252,8 +1260,8 @@ window.PANEL_STRINGS.en = {
   "rg.light": "Light",
   "rg.fansAir": "Fans & air",
   "rg.appliances": "Appliances",
-  "rg.colourWhiteLight": "Colour & white light",
-  "rg.colourLight": "Colour light",
+  "rg.colourWhiteLight": "Color & white light",
+  "rg.colourLight": "Color light",
   "rg.tunableWhiteLight": "Tunable white light",
   "rg.dimmableLight": "Dimmable light",
   "rg.onOffLight": "On / off light",
@@ -1363,17 +1371,17 @@ window.PANEL_STRINGS.en = {
   "rg2.off": "OFF",
   "rg2.on": "ON",
   "rg2.white": "White",
-  "rg2.colour": "Colour",
+  "rg2.colour": "Color",
   "rg2.turnOn": "Turn on",
   "rg2.onOffOnly": "On / off only — tapping its orb switches it too.",
   "rg2.brightness": "Brightness",
   "rg2.onRelease": "sent on release",
   "rg2.warmCool": "Warm ↔ cool",
-  "rg2.wheel": "wheel: around = colour · in / out = strength",
+  "rg2.wheel": "wheel: around = color · in / out = strength",
   "rg2.tapLight": "Tap a light to switch it",
   "rg2.tapLightDim": "Tap a light to switch it · slide up / down on it to dim",
-  "rg2.tapLightMore": "Tap a light to switch it · tap its name for colour & more",
-  "rg2.tapLightDimMore": "Tap a light to switch it · slide up / down on it to dim · tap its name for colour & more",
+  "rg2.tapLightMore": "Tap a light to switch it · tap its name for color & more",
+  "rg2.tapLightDimMore": "Tap a light to switch it · slide up / down on it to dim · tap its name for color & more",
   "rg2.offLast": "Off · last {kind}",
   "rg2.speed": "Speed {n}",
   "rg2.purifying": "Purifying",
@@ -1389,7 +1397,7 @@ window.PANEL_STRINGS.en = {
   "rg2.alreadyLike": "{name}: already like that",
   "rg2.saveLights": "Save the room's lights as “{name}”?",
   "rg2.saveFans": "Save the room's fans as “{name}”?",
-  "rg2.storesLights": "Stores how each light is right now — {on} on, {off} off (with brightness and colour). Tapping “{name}” brings exactly that back.",
+  "rg2.storesLights": "Stores how each light is right now — {on} on, {off} off (with brightness and color). Tapping “{name}” brings exactly that back.",
   "rg2.storesFans": "Stores how each fan is right now — {on} on, {off} off (with speeds). Tapping “{name}” brings exactly that back.",
   "rg2.demoPageOnly": "Demo: kept on this page only.",
   "rg2.saved": "Saved “{name}”",
@@ -1431,6 +1439,7 @@ window.PANEL_STRINGS.en = {
 
   // Cards (your own layout)
   "g.nothingNew": "Nothing new",
+  "g.alertsHint": "No alert note now. When one is up, it shows here.",
 
   // Weather effects
   "perf.oneCamFull": "1 camera full screen: {name}",
@@ -1443,7 +1452,7 @@ window.PANEL_STRINGS.en = {
   "g.allOffBtn": "All off",
 
   // Room pages
-  "rg2.colourWord": "colour",
+  "rg2.colourWord": "color",
   "rg2.lock": "Lock",
 
   // Music
@@ -1459,6 +1468,7 @@ window.PANEL_STRINGS.en = {
 
   // Weather
   "wx.fromHubitat": "From your Hubitat weather",
+  "wx.fromHubitatAndOpenMeteo": "From your Hubitat weather and Open-Meteo",
   "wx.fromOpenMeteo": "From Open-Meteo",
   "wx.home": "Home",
   "wx.windUnit": "{n} {unit} wind",

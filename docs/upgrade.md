@@ -76,7 +76,7 @@ Run the previous version with the same data folder:
 - Set the image to the version you had, e.g. `ghcr.io/almulder/skypane:3.0.0` (Unraid: edit the container →
   **Repository**; Compose: the `image:` line), then start it again.
 - Rolling back to an older version can drop settings that only the newer one knows — for example a login's language,
-  display name or colour. Set them again after you update forward.
+  display name or color. Set them again after you update forward.
 - Within 3.0.x, every version reads the same data folder. If a release ever changes that, its notes will say so — and
   then restore the backup you made before updating.
 - **3.0.2 back to 3.0.1:** 3.0.1 doesn't know pairing. Its panels open again on any device, and its main panel comes

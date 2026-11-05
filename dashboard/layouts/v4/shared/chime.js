@@ -7,7 +7,7 @@
 //   alerts  – alarm / safety alert beeps
 // Note: Android WebView may block sound until the screen has been touched once after the page loads.
 (function () {
-  let ctx = null, bus = {};
+  let ctx = null, bus = {}, tickBuf = null;
   const audio = () => {
     if (!ctx) {
       ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -107,6 +107,26 @@
       else if (kind === "attention") { bell(NOTE["G#4"], t, { soft: true, decay: 1.6 }); bell(NOTE.E4, t + 0.45, { soft: true, decay: 2.0 }); }
     },
     key() { const a = audio(), o = a.createOscillator(), g = a.createGain(), t = a.currentTime; o.frequency.value = 1400; g.gain.setValueAtTime(0.12, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.08); o.connect(g); g.connect(bus.sounds); o.start(t); o.stop(t + 0.09); },
+    // (v3.0.3) the PIN pad's key tick: a few ms of soft, band-passed noise on the sounds volume — one fixed sound for
+    // every key (digits, ⌫ and OK alike), so it never tells which key was tapped. Off with the panel's "PIN pad sound"
+    // switch (Manager → Panels → Setup); silent where the sounds are (the builder, Open live without sound, volume 0).
+    // Never makes the audio context on the tap (that froze the page): until it runs, no tick.
+    pinTick() {
+      if (!ctx || ctx.state !== "running" || (window.Settings && Settings.v.pinSound === false)) return;
+      try {
+        if (!tickBuf) {
+          const n = Math.round(ctx.sampleRate * 0.025);
+          tickBuf = ctx.createBuffer(1, n, ctx.sampleRate);
+          const d = tickBuf.getChannelData(0);
+          let seed = 12345;   // (the same noise every time: a fixed little generator, not Math.random)
+          for (let i = 0; i < n; i++) { seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff; d[i] = (seed / 0x3fffffff - 1) * Math.exp(-i / (n / 6)); }
+        }
+        const t = ctx.currentTime, s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+        s.buffer = tickBuf; f.type = "bandpass"; f.frequency.value = 2600; f.Q.value = 1.2;
+        g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+        s.connect(f); f.connect(g); g.connect(bus.sounds); s.start(t); s.stop(t + 0.04);
+      } catch { /* (an old WebView without a part of Web Audio: no tick) */ }
+    },
     alertsOn(on) {
       if (on && !alertTimer && Settings.v.alertBeeps) { alertBeep(); alertTimer = setInterval(alertBeep, 2500); }
       if (!on || !Settings.v.alertBeeps) { clearInterval(alertTimer); alertTimer = null; }

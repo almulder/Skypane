@@ -19,7 +19,9 @@
     and its new password after guests (the only child with UNIFI_API_KEY).
   - A child that exits is restarted with backoff (1 s, 2 s, 4 s … 60 s; reset after it ran 60 s).
   - SIGTERM / SIGINT (docker stop) is passed on to the children; they get 8 s before they are killed.
-  - Every child output line goes to stdout with a "[server]" / "[bridge]" prefix. Values of settings are never logged.
+  - Every child output line goes to stdout with a "[server]" / "[bridge]" prefix. Secret settings (tokens, API keys,
+    passwords) are never logged, other settings only by name; the start-up "settings:" line shows the values of
+    ALLOWED_HOSTS / BRIDGE_ALLOW (host names and device numbers, not secrets) with where each comes from.
 
 Usage (in the container this is the CMD):  python -u service/run_all.py
 """
@@ -143,6 +145,26 @@ RESTART = threading.Event()   # the house settings changed (Manager page): stop 
 ORIG_ENV = dict(os.environ)   # the container's own environment: a restart starts from it, not from this run's changes
 
 
+def hidden_value(house_settings, key, env_val, saved):
+    """(v3.0.3) ALLOWED_HOSTS / BRIDGE_ALLOW are off the Manager page: the container variable sets them. Returns (the
+    value in effect, "" = none; where it comes from). A non-empty container value wins over one saved in settings.json
+    before 3.0.3 (checked like a save — an invalid one counts as not set); "none" = empty (clears an old saved value
+    without editing files); no container value = the old saved value keeps working."""
+    env_val = (env_val or "").strip()
+    if env_val.lower() == "none":
+        return "", 'container variable "none"' + (" — the value saved before 3.0.3 is not used" if saved else "")
+    if env_val:
+        try:
+            return house_settings.check(key, env_val), "container variable"
+        except house_settings.Invalid:
+            if saved:
+                return saved, "saved before 3.0.3 — the container variable isn't a valid value, ignored"
+            return "", "the container variable isn't a valid value — ignored"
+    if saved:
+        return saved, "saved before 3.0.3; set it as a container variable to change it"
+    return "", "no container variable"
+
+
 def apply_settings():
     """Stage 4: the house's settings live in DATA_DIR/private/settings.json (Manager page). The first start copies the
     template's values into it once; from then on the file decides — a template value is ignored (a setting cleared in
@@ -164,12 +186,23 @@ def apply_settings():
         return file_sig(hs.path)
     values = hs.load()
     leftover = [k for k in house_settings.FIELDS if (os.environ.get(k) or "").strip() and k not in values
-                and k != "TZ" and (os.environ.get(k) or "").strip() != house_settings.IMAGE_DEFAULTS.get(k)]   # (the image's own ENV: no template)
+                and k != "TZ" and k not in house_settings.HIDDEN
+                and (os.environ.get(k) or "").strip() != house_settings.IMAGE_DEFAULTS.get(k)]   # (the image's own ENV: no template)
+    where = []
     for k in house_settings.FIELDS:
-        if values.get(k):
+        if k in house_settings.HIDDEN:
+            val, src = hidden_value(house_settings, k, os.environ.get(k), values.get(k))
+            if val:
+                os.environ[k] = val
+            else:
+                os.environ.pop(k, None)
+            where.append(f"{k} {val} ({src})" if val else f"{k} not set ({src})")
+        elif values.get(k):
             os.environ[k] = values[k]
         elif k != "TZ":   # (no time zone set: the image's default stays)
             os.environ.pop(k, None)
+    # (host names / device numbers only — never a secret)
+    say("run_all", "settings: " + "; ".join(where))
     if leftover:
         say("run_all", f"settings: the container's settings still have {', '.join(leftover)} — ignored (the Manager page has "
                        "the settings: Integrations); you can remove them from the container's settings")

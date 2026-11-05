@@ -158,7 +158,7 @@ window.SKYPANE_HELP = {
       body: [
         "The **Overview** is the first page after signing in: the house at a glance, and everything that needs you. It updates itself every 20 seconds while it is on screen.",
         { list: [
-          "**Health** — the hub, the broker, camera video and the panels: working, needs a look, down, or not set up (grey). **Open Health** for the details ([[health]]).",
+          "**Health** — the hub, the broker, camera video and the panels: working, needs a look, down, or not set up (gray). **Open Health** for the details ([[health]]).",
           "The tiles — **panels online**, **alerts waiting**, **lights on** (with how many doors and windows are open, locks unlocked and devices offline) and **things to check**. Click one to go there.",
           "**Needs a look** — problems, panels that never checked in or went quiet, devices the hub can't reach and batteries under 15 %. **View** opens that device in Devices, **Open** opens that panel.",
           "**Alerts waiting** — the alerts from Hubitat that the panels show right now, the worst first, with where they show.",
@@ -230,7 +230,7 @@ window.SKYPANE_HELP = {
         "The **Panels** page has two views. The switch at the top right (or the V key) changes between them; your choice is remembered for your login.",
         { h: "Status: every panel at once" },
         { list: [
-          "Each panel is a tile with a **drawing of its Home page**: its cards as blocks in the panel's colour theme, and the room bar on its edge. It is drawn from the layout itself — not a screenshot — so it shows what you set up even when the tablet is off.",
+          "Each panel is a tile with a **drawing of its Home page**: its cards as blocks in the panel's color theme, and the room bar on its edge. It is drawn from the layout itself — not a screenshot — so it shows what you set up even when the tablet is off.",
           "The dot and the words under the name: **Online** (it checked in during the last 5 minutes), **Offline** (when it was last seen, and on which page), or **Never checked in** (the tablet hasn't opened its address yet).",
           "**Load** — how heavy its Home page is against what that tablet draws smoothly (the builder's load meter). With ≈ in front it is an estimate: the tablet hasn't been benchmarked yet.",
           "**Check-in**, **Screen** (the size the tablet reported) and **Version** (the Skypane version it runs).",
@@ -273,6 +273,8 @@ window.SKYPANE_HELP = {
           "**Inside temperature from** — this tablet's own sensors, a Hubitat sensor, or the thermostat's reading.",
           "**Back to Home after** — a room or camera page left alone goes back to Home after this long.",
           "**Arrange on the panel too** — lets people rearrange rooms and lights on the tablet (press and hold, panel PIN, drag).",
+          "**PIN pad sound** — a soft tick when a key on the PIN pad is tapped, the same for every key, at the panel's sounds volume.",
+          "**Show the version on this panel** — the small version tag in the lower-left corner, to check that the panel got an update. Off hides it.",
           "**Set up the tablet** — the exact start page and MQTT details for this panel ([[tablet-setup]]).",
         ] },
       ],
@@ -280,11 +282,11 @@ window.SKYPANE_HELP = {
     },
     {
       id: "look-layout", section: "panels", title: "Look & layout: theme, Home page, room pages", page: "panels", where: "Panels → Setup → (a panel) → Look & layout",
-      words: "theme colour color home layout classic calendar first two columns security minimal your own room pages tiles list cards orbs build one edit use it",
+      words: "theme colour colours color colors home layout classic calendar first two columns security minimal your own room pages tiles list cards orbs build one edit use it",
       body: [
         "Open **Panels** → **Setup** → the panel → **Look & layout**.",
-        { h: "Colour theme" },
-        "Tap a colour. The panel changes within seconds. (The tablet's own Settings → Look can change it too.)",
+        { h: "Color theme" },
+        "Tap a color. The panel changes within seconds. (The tablet's own Settings → Look can change it too.)",
         { h: "Home page" },
         "Pick a built-in layout: **Classic**, **Calendar first**, **Two columns**, **Security** or **Minimal**. The built-in layouts can't be changed, but each can be the start of your own.",
         { steps: [
@@ -301,13 +303,13 @@ window.SKYPANE_HELP = {
     },
     {
       id: "sky", section: "panels", title: "Background and sky", page: "panels", where: "Panels → Setup → (a panel) → Look & layout → Background & sky",
-      words: "background picture sky dropdown animated still no sky sky colours realistic weather effects in front behind mountains photo",
+      words: "background picture sky dropdown animated still no sky sky colour colours color colors realistic weather effects in front behind mountains photo",
       body: [
         "In **Look & layout**, the **Background & sky** card:",
         { list: [
           "Tap a built-in background, or one of your own pictures (add them on **Sidebar → Manage → Backgrounds**, see [[backgrounds]]).",
           "**Sky** (a dropdown): **Animated sky** — sun, moon, clouds and weather move above the background. **Still sky** — the same sky, redrawn once a minute (lighter for the tablet). **No sky** — your own picture fills the screen as it is (best for a photo with its own sky).",
-          "**Sky colours**: **The theme's** or **Realistic**.",
+          "**Sky colors**: **The theme's** or **Realistic**.",
           "**Weather effects on Home**: rain, snow and leaves **In front of the cards** or **Behind the cards**.",
         ] },
         { tip: "A tablet that stutters: try **Still sky**, or lower the effects ([[weather-effects]])." },
@@ -359,12 +361,12 @@ window.SKYPANE_HELP = {
     },
     {
       id: "people-calendars", section: "panels", title: "People & calendars on a panel", page: "panels", where: "Panels → Setup → (a panel) → People & calendars",
-      words: "who's home presence owntracks phone people face icon colour calendar per panel",
+      words: "who's home presence owntracks phone people face icon colour colours color colors calendar per panel",
       body: [
         "**Panels** → the panel → **People & calendars**.",
         { list: [
-          "**Who's home** — switch on the presence devices (OwnTracks, phones) this panel shows. Type a name, tap the circle for an icon or picture, tap the dot for a colour.",
-          "**Calendars on this panel** — switch a house calendar off here, or give it this panel's own colour or icon.",
+          "**Who's home** — switch on the presence devices (OwnTracks, phones) this panel shows. Type a name, tap the circle for an icon or picture, tap the dot for a color.",
+          "**Calendars on this panel** — switch a house calendar off here, or give it this panel's own color or icon.",
         ] },
         "The calendars themselves are added by the admin on **Integrations** ([[calendars]]).",
       ],
@@ -459,7 +461,7 @@ window.SKYPANE_HELP = {
       words: "add card drag drop move resize corner remove delete bin find a card snap to grid spacing allow overlap join touching bring to front",
       body: [
         { steps: [
-          "**Add**: drag a card from the list on the left onto the screen, or click it (it goes in the first free spot). **Find a card…** searches every card.",
+          "**Add**: drag a card from the list on the left onto the screen, or click it (it goes in the first free spot). A new card starts small, so it always finds room — then drag its corner to make it as big as you need. **Find a card…** searches every card.",
           "**Move**: drag the card.",
           "**Resize**: drag its bottom-right corner.",
           "**Remove**: drag it onto the bin, press **Remove**, or click it on the screen and press Delete.",
@@ -511,8 +513,8 @@ window.SKYPANE_HELP = {
       body: [
         "Tap a card. Its settings open on the right (hover a dotted name for a short note).",
         { list: [
-          "**Shows** — its device, reading, text, room, camera or picture; title, icon, and what happens when it's resized.",
-          "**Style** — presets (**Glass**, **Flat**, **Raised**, **Square**, **No card**), corners, how raised, see-through, border, icon and text size, colour.",
+          "**Shows** — its device, reading, text, room, camera or picture; title and icon. The words and icons keep the size Style gives them (**Icons**, **Text**); a bigger card only gives them room. **Grow and shrink with the card** (off at first): switched on, they grow and shrink with the card from its size at that moment; switched off, they keep the size they have then. **When it doesn't fit**: *Make it smaller* or *Fit the width, scroll*.",
+          "**Style** — presets (**Glass**, **Flat**, **Raised**, **Square**, **No card**), corners, how raised, see-through, border, icon and text size, color.",
           "**What it does** — tap, press and hold, double tap: switch a device, lock, unlock (panel PIN), send a command, open a room, page or camera.",
           "**Press and hold: the wheel** — up to 8 actions picked from what the device can do.",
           "**Only show it when** / **Highlight it when** — up to 4 rules (device, reading, is / is not / above / below, value).",
@@ -575,7 +577,7 @@ window.SKYPANE_HELP = {
           "**Slider bar** — a wide card. **Thermometer** — a tall, narrow spot.",
           "**Big number** — readable across the room. **Stepper chip** and **One line** — thin strips.",
           "**Heat–cool range** — both set points in Auto. **Today's run** — when it heated or cooled today.",
-          "**Glass orb** — its colour is the state. **Gauge + outside** — inside and outside together. **Twin rings** — set point and humidity.",
+          "**Glass orb** — its color is the state. **Gauge + outside** — inside and outside together. **Twin rings** — set point and humidity.",
         ] },
         "Every look works the same: − / + (or drag), the mode buttons you ticked, the PIN where it applies.",
       ],
@@ -614,7 +616,7 @@ window.SKYPANE_HELP = {
     // ---------------- Devices, rooms and the house ----------------
     {
       id: "devices", section: "house", title: "Devices: the Basic view", page: "devices", where: "Devices → Basic",
-      words: "device shows as type room panel pin picture switching light type colour command fan type back to automatic find a device filter chips room: type: state: rule: battery: driver: tiles list by room status low battery offline unlocked open drawer",
+      words: "device shows as type room panel pin picture switching light type colour colours color colors command fan type back to automatic find a device filter chips room: type: state: rule: battery: driver: tiles list by room status low battery offline unlocked open drawer",
       body: [
         "**Devices** lists every Hubitat device. It has two views — **Basic** and **Detailed** (the switch at the top right, or press **V**). The Manager remembers the one you used last for your login; the filters and the device you have open stay the same when you switch.",
         { h: "Find a device" },
@@ -627,7 +629,7 @@ window.SKYPANE_HELP = {
         { steps: [
           "Click a device. Its settings open in a panel on the right (over the list on a smaller window). Every change saves at once and applies to every panel.",
           "**Shows as** — what the panels make of it (light, fan, outlet, lock, hidden…). **Room** — where the panels show it. **Picture** → **Choose…** — its icon on the panels.",
-          "Lights: **Light type** and **Colour command** (if colours come out wrong, try the other way). Fans: **Fan type**. A freezer sensor: **Show as a warning above** (no sound — alerts come from Hubitat rules, [[alerts-hubitat]]).",
+          "Lights: **Light type** and **Color command** (if colors come out wrong, try the other way). Fans: **Fan type**. A freezer sensor: **Show as a warning above** (no sound — alerts come from Hubitat rules, [[alerts-hubitat]]).",
           "Safety: **Ask for the panel PIN**, **May be unlocked from the panels** (locks), **The panels may switch it** (off makes it view only everywhere; the admin only).",
           "**Back to automatic** undoes your changes. **Esc** or ✕ closes the panel.",
         ] },
@@ -637,9 +639,9 @@ window.SKYPANE_HELP = {
     },
     {
       id: "switch-devices", section: "house", title: "Switching devices from the Manager", page: "devices", where: "Devices → a device → Control",
-      words: "switch turn on off light lamp outlet dim brightness open close lock garage valve control remote phone pin thermostat heat cool setpoint fan speed colour color white temperature music sonos play pause volume scene button purifier",
+      words: "switch turn on off light lamp outlet dim brightness open close lock garage valve control remote phone pin thermostat heat cool setpoint fan speed colour colours color colors white temperature music sonos play pause volume scene button purifier",
       body: [
-        "A device's editor — the sheet on a phone, the side panel on a computer — has a **Control** section when your login may switch it, with what the panels can do with that device: **On** / **Off**, **Brightness**, **Open** / **Close**, **Lock**; a thermostat's **Mode**, **Heat to** / **Cool to** (− and +, sent a moment after the last press) and **Fan**; a light's **White** (colour temperature) and **Colour**; a fan's speeds; the air purifier; a media player's **Play**, **Pause**, **Next**, **Volume**; scene buttons.",
+        "A device's editor — the sheet on a phone, the side panel on a computer — has a **Control** section when your login may switch it, with what the panels can do with that device: **On** / **Off**, **Brightness**, **Open** / **Close**, **Lock**; a thermostat's **Mode**, **Heat to** / **Cool to** (− and +, sent a moment after the last press) and **Fan**; a light's **White** (color temperature) and **Color**; a fan's speeds; the air purifier; a media player's **Play**, **Pause**, **Next**, **Volume**; scene buttons.",
         { list: [
           "Admins may always switch. Anyone else needs **Switch devices** ticked in Accounts (off until an admin ticks it), and then only what their panel shows.",
           "Only devices the panels may switch: a device made view only (Devices → \"The panels may switch it\": No) can't be switched from the Manager either.",
@@ -787,7 +789,7 @@ window.SKYPANE_HELP = {
         { steps: [
           "Copy the calendar's iCal link (**Where do I find the link?** on the card explains Google, Outlook, iCloud and others).",
           "**Sidebar** → **Admin** → **Integrations** → the **Calendars** card.",
-          "Type a name, paste the link, pick a colour, press **Add**.",
+          "Type a name, paste the link, pick a color, press **Add**.",
           "A few seconds later the card shows how many events it found — or what went wrong.",
           "Per panel: [[people-calendars]].",
         ] },
@@ -815,12 +817,12 @@ window.SKYPANE_HELP = {
       id: "icons", section: "house", title: "Icons and pictures for devices", page: "icons", where: "Sidebar → Manage → Icons",
       words: "icon picture device type upload drawing line icon gallery list show them on used by use for a device credits",
       body: [
-        "**Icons** shows every picture a device can have: the built-in **line icons** (they follow each panel's theme), the animated **drawings** for big cards, and your own **uploads** (they keep their own colours). **Gallery** or **List**, a filter and a search; **Show them on** draws them as a switched-on device.",
+        "**Icons** shows every picture a device can have: the built-in **line icons** (they follow each panel's theme), the animated **drawings** for big cards, and your own **uploads** (they keep their own colors). **Gallery** or **List**, a filter and a search; **Show them on** draws them as a switched-on device.",
         { steps: [
           "**Upload** (top right): choose the kind and the file, give it a name, **pick the device types it fits**, press **Upload**.",
           "**Use for a device…** on its card gives it to a device — or **Devices** → the device → **Picture**, or in the layout builder a card's **Icon**.",
         ] },
-        "**Used by** lists the devices using it (a click opens the device). Each built-in set shows who made it and its licence.",
+        "**Used by** lists the devices using it (a click opens the device). Each built-in set shows who made it and its license.",
       ],
       see: ["devices", "backgrounds"],
     },
@@ -898,7 +900,9 @@ window.SKYPANE_HELP = {
         "The side card **Connections** shows each part's state; **Check now** runs every check at once. There is no test button per field on purpose: save, and the checks tell you.",
         "The **Login for devices** (the built-in broker) is for FreeKiosk and other MQTT devices: use **Copy user** and **Copy password** — never type it by hand.",
         "Address fields take a bare IP too (192.168.1.10): http:// is added for you.",
-        "Two **General** fields are usually left empty: **Extra names for this server (optional)** — only if you open Skypane by a name like skypane.local (not by its IP); **Extra devices the panels may control (optional)** — only for a device that shows on a panel but won't switch: type its Hubitat device number.",
+        "Open Skypane by its IP address (for example http://192.168.1.20:8088/). A name like skypane.local only works when it is set in the container variable ALLOWED_HOSTS.",
+        "A device shows on a panel but won't switch: set the container variable BRIDGE_ALLOW to its Hubitat device number. In either one, \"none\" clears a value saved in the Manager before v3.0.3.",
+        "**Setting a container variable:** a restart isn't enough — the container has to be re-created (your data stays). **Unraid:** **Docker** → Skypane → **Edit** → **Add another Path, Port, Variable** → Config Type **Variable**, Key ALLOWED_HOSTS (or BRIDGE_ALLOW), Value skypane.local → **Add** → **Apply**. **Docker Compose:** add the line - ALLOWED_HOSTS=skypane.local under environment: in compose.yaml, then run docker compose up -d. **docker run:** docker rm -f skypane, then the same docker run again with -e ALLOWED_HOSTS=skypane.local added. The container's start-up log says where each value comes from.",
         "**Camera video server** with a login (http://user:password@host:1984): the Manager's pictures use the login, but the panels get the address without it — they can't keep a password secret. Let the panels in without one on that go2rtc (for example its allow-list of addresses), or leave this empty and use the built-in camera video.",
       ],
       see: ["calendars", "tablet-setup", "health"],
@@ -1014,17 +1018,17 @@ window.SKYPANE_HELP = {
     },
     {
       id: "my-account", section: "people", title: "Your account: password, sign-ins, look and language", page: "account", where: "Your avatar (top right) → Your account",
-      words: "change password forgot password reset colours colors theme light dark night skypane appearance sidebar pin default views avatar colour name shown language sign out everywhere other browsers recent sign-ins log out signed out 30 minutes",
+      words: "change password forgot password reset colour colours color colors theme light dark night skypane appearance sidebar pin default views avatar colour name shown language sign out everywhere other browsers recent sign-ins log out signed out 30 minutes",
       body: [
         { steps: [
           "Your avatar (top right) → **Your account** (or **Change password**, which takes you straight to it).",
-          "**Profile**: the **Name shown** in the avatar menu and the **Avatar colour**. Your sign-in name only an admin can change.",
+          "**Profile**: the **Name shown** in the avatar menu and the **Avatar color**. Your sign-in name only an admin can change.",
           "**Password**: type the current one and the new one twice, press **Change password**. Your other browsers are signed out.",
           "**Sign out on every other browser**: if you signed in somewhere you shouldn't stay signed in. This browser stays signed in.",
           "**Language**: yours only — every login picks its own. English for now; more languages are on the way.",
           "**Theme**, **Keep the sidebar open** and **Default views** (which view each page opens in).",
         ] },
-        "The side card shows this browser and **Your recent sign-ins**, wrong passwords on your name included. Something you don't recognise? Change your password, then sign out the others.",
+        "The side card shows this browser and **Your recent sign-ins**, wrong passwords on your name included. Something you don't recognize? Change your password, then sign out the others.",
         { tip: "Your look and language are kept for your login on the server — the same on every computer you sign in on." },
         { h: "Forgot it?" },
         "Ask an admin for a sign-in code (Accounts → your name → **Make a sign-in code…**), then on the sign-in page press **I have a sign-in code**. The owner uses the reset command on the server instead. More: [[admins-owner]].",
@@ -1038,12 +1042,12 @@ window.SKYPANE_HELP = {
       body: [
         "Skypane checks every 30 seconds what it needs: the Hubitat bridge and hub, the message broker, camera video, UniFi Protect, your UniFi console and every panel.",
         { steps: [
-          "The health pill in the top bar has a dot for the hub, the broker, the cameras and the panels (green: fine; amber or red: a problem; grey: not set up) and a number for problems you haven't looked at yet.",
+          "The health pill in the top bar has a dot for the hub, the broker, the cameras and the panels (green: fine; amber or red: a problem; gray: not set up) and a number for problems you haven't looked at yet.",
           "Click it to see the last ones. Click one, or **Open Health**, to open the **Health** page.",
-          "The Health page starts with four cards — **Hub**, **Broker**, **Camera video** and **Panels**: is it working, since when, and what to do. A part this house doesn't use is grey, “Not set up”.",
+          "The Health page starts with four cards — **Hub**, **Broker**, **Camera video** and **Panels**: is it working, since when, and what to do. A part this house doesn't use is gray, “Not set up”.",
           "Under them, **Needs a look** lists every problem up now (**Open** goes to that panel), then the **Log** of what went wrong and when it was fixed, and the panels with when each last checked in.",
         ] },
-        "Each card has a small bar per hour of the last day: green fine, amber trouble, red down, grey not checked that hour. Admins can press **Check now** to run every check at once.",
+        "Each card has a small bar per hour of the last day: green fine, amber trouble, red down, gray not checked that hour. Admins can press **Check now** to run every check at once.",
         "A panel that says “Never checked in — set up its tablet” has no tablet showing it yet.",
         "On a tablet, problems show as a small “⚠ Issues detected” bar. Tap it for the list.",
       ],
@@ -1090,7 +1094,7 @@ window.SKYPANE_HELP = {
       body: [
         "Every panel has a small settings gear. It asks for the panel PIN (once a PIN is set).",
         { list: [
-          "**Look** — colours, clock, text size.",
+          "**Look** — colors, clock, text size.",
           "**Sound** — volumes and the clock chime.",
           "**Panel** — LED strip, **Child lock**, **Panel PIN** (change it with the old PIN), screen.",
           "**Guest mode**, **Weather effects**, **Test** (test alerts and events).",
@@ -1114,6 +1118,7 @@ window.SKYPANE_HELP = {
         "The gear → **Panel** → **Panel PIN** → **Change PIN**: the old PIN first, then the new one twice.",
         "After a correct PIN the panel stays unlocked for a short while: 30 seconds for the alarm and level 4–5 alerts, a minute after the last touch for everything else (the admin sets both: [[panel-safety]]).",
         "Too many wrong PINs lock the PIN pad for a while; it counts down (“Try again in 0:24”). Settings and the rest: 5 wrong → 5 minutes. Dismissing a level 4–5 alert and disarming: 30 seconds, then 1, 2, 5 minutes (forgotten after 15 minutes without a wrong PIN). At most 30 wrong PINs an hour on one panel, all together. A PIN pad opened during a lock-out counts down at once.",
+        "The screen holds still while the PIN pad is open: nothing behind it moves or jumps while you type.",
         "The alarm (HSM) codes stay in Hubitat.",
         { tip: "Forgot the PIN? The admin sets a new one in the Manager (above) — it needs only the admin's own Manager password, and it ends any PIN lock-out too." },
       ],
@@ -1187,7 +1192,7 @@ window.SKYPANE_HELP = {
           "**Effects stutter** — run the benchmark, or lower the effects ([[weather-effects]]). Try **Still sky** ([[sky]]).",
           "**Screen on / off, volume or spoken alerts don't reach a tablet** — the MQTT settings in FreeKiosk: broker address, login, and the device name must match the panel's ([[tablet-setup]]).",
           "**The layout builder won't save** — it selects the card that isn't finished and says what's missing ([[undo-save]]).",
-          "**A light shows the wrong colours** — **Devices** → the light → **Colour command** → try the other way ([[devices]]).",
+          "**A light shows the wrong colors** — **Devices** → the light → **Color command** → try the other way ([[devices]]).",
           "**Calendar shows sample events** — no calendar is added yet ([[calendars]]).",
         ] },
         { tip: "Something else? Skypane is a work in progress — send feedback from the Manager ([[feedback]])." },

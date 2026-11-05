@@ -37,6 +37,7 @@
     const id = parts.map((p, n) => (n ? p.charAt(0).toUpperCase() + p.slice(1) : p.charAt(0).toLowerCase() + p.slice(1))).join("").replace(/\d/g, "");   // (keys: letters only — "quietLevel4" → "quietLevel")
     return /^[a-zA-Z]+$/.test(id) ? K.tOr(`timeline.key.${id}`, s) : s; };
   const keyWords = (keys, max) => [...new Set((keys || []).slice(0, max || 40).map(keyWord))].join(", ");
+  M.keyWords = keyWords;   // (v3.0.3: Integrations → Recent names the settings the same way — never "UNIFI_API_KEY")
   const SAY = {
     "signin.ok": (e) => [K.t("timeline.say.signinOk", { who: name(e.who) }), ""],
     "signin.wrong": (e) => [e.data && e.data.what === "confirm" ? K.t("timeline.say.signinWrongConfirm", { name: e.target }) : K.t("timeline.say.signinWrong", { name: e.target }), ""],

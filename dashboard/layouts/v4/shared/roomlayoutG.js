@@ -1611,7 +1611,7 @@
     txt(K(sh, "ctv"), `${Kv} K · ${ctName(Kv)}`);
     if (ctSl) { prop(ctSl, "--v", clamp((Kv - 2000) / 4500, 0, 1).toFixed(3)); prop(ctSl, "--tc", k2rgb(Kv).join(",")); }
     sh.querySelectorAll("[data-k2]").forEach((b) => cls(b, "cur", !L.colour && Math.abs(+b.dataset.k2 - Kv) < 150));
-    txt(K(sh, "cv"), L.colour ? `${hueName(L.hue)} · ${Math.round(L.sat)}%` : "white now — pick a colour");
+    txt(K(sh, "cv"), L.colour ? `${hueName(L.hue)} · ${Math.round(L.sat)}%` : "white now — pick a color");
     const hs = sh.querySelector(`[data-sl="hue"]`);
     if (hs) { prop(hs, "--v", (clamp(L.hue, 0, 100) / 100).toFixed(3)); prop(hs, "--tc", colourOf(L.hue, 100).join(",")); }
     if (sh._wt) {

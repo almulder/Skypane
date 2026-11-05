@@ -276,7 +276,7 @@
   // ---------- weather location tabs ----------
   // a grid weather card's own tabs (cw = Weather.forCard(…) + its key): its places, its selected one, no + / ×
   UI.locTabs = (cw) => cw ? `<div class="loc">${cw.places.map((l) => `<button class="loc-t ${l.id === cw.sel ? "sel" : ""}" ${Acts.on("wx.cardSelect", cw.key, l.id)}>${esc(l.name)}</button>`).join("")}</div>`
-    : `<div class="loc">${Weather.tabs().map((l) => `<button class="loc-t ${l.id === (Weather.selected || (l.hub ? l.id : "")) ? "sel" : ""}" ${Acts.on("wx.select", l.id)}>${esc(l.name)}
+    : `<div class="loc">${Weather.tabs().map((l) => `<button class="loc-t ${l.id === Weather.shownId() ? "sel" : ""}" ${Acts.on("wx.select", l.id)}>${esc(l.name)}
       ${Weather.isCustom(l.id) ? `<span class="loc-x" role="button" aria-label="${esc(T("wx.removePlace", { name: l.name }))}"${Acts.on("wx.remove", l.id)}>${icon("x", 14)}</span>` : ""}</button>`).join("")}
     ${Weather.canAdd() ? `<button class="loc-t add" aria-label="${esc(T("wx.addPlaceAria"))}"${Acts.on("ui.addPlace")}>${icon("plus", 16)}</button>` : ""}</div>`;
 

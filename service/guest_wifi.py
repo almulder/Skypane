@@ -209,8 +209,9 @@ class UniFi:
                 raw = r.read(4_000_000)
         except urllib.error.HTTPError as e:
             if e.code in (401, 403):
-                raise Fail(f"UniFi refused the API key (HTTP {e.code}). Check the UniFi API key (Manager → Integrations); changing the guest password "
-                           "needs a key from an admin with full UniFi Network management.") from None
+                # (v3.0.3: shown on Integrations itself — it no longer sends people to the page they're on)
+                raise Fail(f"UniFi refused the API key (HTTP {e.code}). Check that the UniFi Network API key is right and complete; changing the guest "
+                           "password needs a key from an admin with full UniFi Network management.") from None
             if e.code == 404:
                 raise Fail("UniFi Network has no Wi-Fi API here (HTTP 404) — it needs UniFi Network 10 or newer "
                            "on the console, and the UniFi console address (Manager → Integrations) must be the console.") from None
@@ -374,7 +375,9 @@ class GuestWifi:
         if s["ssid"]:
             self.net = next((n for n in wifi if n["name"] == s["ssid"]), None)
             if not self.net:
-                self.error = f'The network "{s["ssid"]}" isn\'t on the UniFi console any more — choose the guest network again'
+                # (v3.0.3 review) a chosen network that's gone (renamed / deleted) is a real problem: Trouble + a
+                # health problem, not "still to be set up"
+                self.error = f'The guest network "{s["ssid"]}" isn\'t on the UniFi console any more — pick it again'
         else:   # not chosen yet: the one with "guest" in its name, if there's exactly one
             g = [n for n in wifi if "guest" in n["name"].lower()]
             self.net = g[0] if len(g) == 1 else None
@@ -460,7 +463,8 @@ class GuestWifi:
             except OSError:
                 pass
             if req.get("changeNow"):
-                self.change("changed from the panel")
+                # (v3.0.3: the Manager's "Change password now" writes "from": "manager" — the log said "from the panel")
+                self.change("changed from the Manager" if req.get("from") == "manager" else "changed from the panel")
 
         if known or no_modes:
             if known:
@@ -518,11 +522,15 @@ class GuestWifi:
                 self.last_qr_key = False
         problem = self.error
         if not problem and not self.net:
-            problem = "Choose the guest network (Account ▾ → Guest Wi-Fi settings)"
+            problem = "Choose the guest network (Manager → Integrations → Guest Wi-Fi)"
         elif not problem and not qr_ok:
-            problem = "UniFi doesn't show this network's password — press \"Change now\" once, then the code follows"
+            problem = "UniFi doesn't show this network's password — press \"Change password now\" once, then the code follows"
         status = {
             "ok": qr_ok and not self.error, "ssid": self.net["name"] if self.net else None,
+            # (v3.0.3) the console answered with this key, only the guest network isn't set up yet (none chosen, its
+            # password unknown until "Change password now"): the Manager says Connected + "Open → set up", not Trouble.
+            # Any error (the console not answering, the chosen network gone from it) is Trouble.
+            "needsSetup": not qr_ok and not self.error,
             # for Settings → Guest Wi-Fi (to see it changed; anyone who scans the code has it anyway).
             # The home-screen card never shows it.
             "password": pw if qr_ok and pw else None,

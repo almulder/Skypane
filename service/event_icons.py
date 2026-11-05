@@ -161,7 +161,7 @@ def clean_icons(icons, avail):
             raise Invalid(f"icon {n}: not an icon the panels have")
         color = x.get("color")
         if not isinstance(color, str) or not COLOR_RE.fullmatch(color.lower()):
-            raise Invalid(f"icon {n}: the colour must be #rrggbb")
+            raise Invalid(f"icon {n}: the color must be #rrggbb")
         words = x.get("words", [])
         if not isinstance(words, list):
             raise Invalid(f"icon {n}: words must be a list")

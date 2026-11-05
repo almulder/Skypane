@@ -27,6 +27,27 @@
         padding: 4px 12px; border-radius: 8px; background: rgba(244,63,94,.92); color: #fff; font: 700 15px/1.2 system-ui, sans-serif; letter-spacing: 2px; }
       .gw-txt { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
       .gw-ssid { font-size: 26px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      /* (v3.0.2: on a layout card narrowing the card first takes the empty space beside the words; then a name longer than
+         20 characters wraps, keeping 20 of them a line (in its own type: ch), a shorter one stays whole on one line, the
+         password and the hint wrap; only past that does the card scale down (Grid.fit). The code is as tall as the card
+         allows, at most 190 px × Style's "Icons" (zoom: theme.css .gc.gsz .gz-i) — it never shrinks for the words) */
+      .gc .gw-qr { width: auto; height: min(190px, 100%); aspect-ratio: 1; }
+      .gc .gw-txt { flex: 0 1 auto; min-width: auto; }
+      .gc .gw-ssid { line-height: 1.15; overflow: visible; text-overflow: clip; }
+      .gc .gw-long { white-space: normal; overflow-wrap: anywhere; min-width: 20ch; }
+      .gc .gw-pass, .gc .gw-hint { overflow-wrap: anywhere; }
+      /* (v3.0.3) drawn much smaller than its own size (grid.js: g-small — a narrow or portrait screen): a long name keeps
+         12 characters a line instead of 20, at most 3 lines (then "…"), and nothing runs out of the card */
+      .gc.g-small .gw-card .gw-long { min-width: 12ch; }
+      .gc.g-small .gw-card .gw-txt { overflow: hidden; }
+      .gc.g-small .gw-card .gw-ssid { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+      /* (v3.0.3) a card taller than wide, or about square (grid.js: gw-tall): the code above the words, both centered;
+         the code is its own size (190 px + its white edge, × "Icons") and gets smaller with the card; the name wraps in
+         the card's width */
+      .gc.gw-tall .gw-card { flex-direction: column !important; justify-content: center; gap: 12px; }
+      .gc.gw-tall .gw-card .gw-qr { box-sizing: border-box; height: auto; width: 214px; max-width: 100%; }
+      .gc.gw-tall .gw-card .gw-txt { flex: none; align-items: center; text-align: center; max-width: 100%; min-width: 0; }
+      .gc.gw-tall .gw-card .gw-long { min-width: 0; }
       .gw-pass { font-size: 20px; color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: .5px; word-break: break-all; }
       .gw-pass small { display: block; font-size: 12px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
       .gw-hint { font-size: 14px; color: var(--muted); }
@@ -64,6 +85,8 @@
   }
 
   const esc = (s) => (window.UI && UI.esc ? UI.esc(s) : String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`));
+  // (v3.0.2) a layout card's name: up to 20 characters it stays on one line; longer, it wraps at 20 (css: .gc .gw-long)
+  const ssidW = (name) => (Array.from(String(name || "")).length > 20 ? "gw-long" : "gw-short");
 
   // ---------- the service's guest Wi-Fi (a UniFi console) ----------
   let st = null, stText = "";     // the last status from /api/guest-wifi (its password: Settings only, never the card)
@@ -172,10 +195,10 @@
       const pass = sample ? SAMPLE.password : g.security === "nopass" ? "" : g.password;
       const sec = sample ? "WPA" : g.security;
       return `<section class="card glass gw-card">
-        <div class="gw-qr ${sample ? "gw-sample" : ""}">${qrSvg(payload(ssid, pass, sec))}</div>
-        <div class="gw-txt">
+        <div class="gw-qr gz-i ${sample ? "gw-sample" : ""}">${qrSvg(payload(ssid, pass, sec))}</div>
+        <div class="gw-txt gz-t">
           <span class="label">${esc(T("gw.title"))}${g.guestMode ? `<span class="gw-badge">${esc(T("gw.badgeGuestMode"))}</span>` : ""}</span>
-          <div class="gw-ssid">${esc(ssid)}</div>
+          <div class="gw-ssid ${ssidW(ssid)}">${esc(ssid)}</div>
           ${pass ? `<div class="gw-pass"><small>${esc(T("gw.password"))}</small>${g.hidePassword && !sample ? "••••••••" : esc(pass)}</div>`
                  : `<div class="gw-pass"><small>${esc(T("gw.password"))}</small>${esc(T("gw.openNet"))}</div>`}
           <div class="gw-hint">${esc(T(sample ? "gw.sampleHint" : "gw.pointPhone"))}</div>
@@ -187,10 +210,10 @@
       const s = st || {}, here = guestsHere();
       const code = s.qr ? `<img src="/api/guest-wifi/qr.svg?v=${encodeURIComponent(s.qr)}" alt="${esc(T("gw.qrAlt"))}">` : esc(T("gw.beingSetUp"));
       return `<section class="card glass gw-card">
-        <div class="gw-qr ${s.qr ? "" : "gw-wait"}">${code}</div>
-        <div class="gw-txt">
+        <div class="gw-qr gz-i ${s.qr ? "" : "gw-wait"}">${code}</div>
+        <div class="gw-txt gz-t">
           <span class="label">${esc(T("gw.title"))}${here ? `<span class="gw-badge">${esc(T("gw.badgeGuests"))}</span>` : ""}</span>
-          <div class="gw-ssid">${esc(s.ssid || T("gw.title"))}</div>
+          <div class="gw-ssid ${ssidW(s.ssid || T("gw.title"))}">${esc(s.ssid || T("gw.title"))}</div>
           <div class="gw-hint">${esc(T(s.qr ? (s.open ? "gw.scanOpen" : "gw.scan") : "gw.seeSettings"))}</div>
         </div></section>`;
     },

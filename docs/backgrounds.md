@@ -20,7 +20,7 @@ panel (Panels → Look & layout) so it doesn't run unseen.
 - **The sky:** fully transparent (not half). A soft edge of a few pixels where the sky meets the land looks natural.
 - **The land:** fully opaque. Keep the horizon in the lower half or two-thirds, so the sun and moon have room to rise
   and set above it.
-- **Colours:** a little darker than a daytime photo reads best behind the cards, day and night.
+- **Colors:** a little darker than a daytime photo reads best behind the cards, day and night.
 
 The Manager turns the picture into a WebP of at most 2560 px a side before it's uploaded (up to 740 KB), which also
 removes the photo's hidden data such as where it was taken. The server draws it again before it's kept.

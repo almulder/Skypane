@@ -44,18 +44,20 @@
   const WORDS = {
     GO2RTC_URL: [K.t("integrations.field.videoServer"), K.t("integrations.field.videoServerHint")],
     TILE_MEDIUM_MODELS: [K.t("integrations.field.tileModels"), K.t("integrations.field.tileModelsHint")],
-    BRIDGE_ALLOW: [K.t("integrations.field.bridgeAllow"), K.t("integrations.field.bridgeAllowHint")],
-    ALLOWED_HOSTS: [K.t("integrations.field.allowedHosts"), K.t("integrations.field.allowedHostsHint")],
     MQTT_HOST: [K.t("integrations.field.mqttHost"), K.t("integrations.field.mqttHostHint")],
     TZ: [K.t("integrations.field.tz"), K.t("integrations.field.tzHint")],
   };
   const labelOf = (f) => (WORDS[f.key] || [f.label, f.help]);
   // (v3.0.2: "waiting" — set up, but no answer since the last save yet: never "Working" before the hub / console really answered)
   const tone = (st) => (st.state === "problem" ? ".bad" : st.state === "off" ? ".idle" : st.state === "waiting" ? ".warn" : "");
-  const pill = (st) => (!st ? null : el("span.pill" + tone(st), {}, el("span.dot" + tone(st), { "aria-hidden": "true" }),
+  // (v3.0.3: the UniFi console says "Connected" whether or not its guest network is set up yet — the Guest Wi-Fi page
+  // says Connected too; "Working" one moment and "Connected" the next read as two different states)
+  const pill = (st, name) => (!st ? null : el("span.pill" + tone(st), {}, el("span.dot" + tone(st), { "aria-hidden": "true" }),
     st.state === "problem" ? K.t("integrations.pill.trouble") : st.state === "off" ? K.t("integrations.pill.notSetUp")
-      : st.state === "waiting" ? K.t("integrations.pill.checking") : K.t("integrations.pill.working")));
-  const fineWords = (st, short) => (st.state === "waiting" ? K.t("integrations.status.waiting") : short ? K.t("integrations.status.fineShort") : K.t("integrations.status.fine"));
+      : st.state === "waiting" ? K.t("integrations.pill.checking") : st.needsSetup || name === "Guest Wi-Fi" ? K.t("guest.unifi.connected") : K.t("integrations.pill.working")));   // i18n-ok (status name)
+  const fineWords = (st, short) => (st.state === "waiting" ? K.t("integrations.status.waiting")
+    : st.needsSetup ? (short ? K.t("integrations.status.needsSetupShort") : K.t("integrations.status.needsSetup"))   // (v3.0.3: connected, the guest network still to set up)
+      : short ? K.t("integrations.status.fineShort") : K.t("integrations.status.fine"));
 
   // ---------- the save bar ----------
   const marker = el("input.sr-hide", { type: "text", tabindex: "-1", "aria-hidden": "true", value: "" });   // (the unsaved guard reads it)
@@ -191,8 +193,8 @@
   // (data-st: refresh() draws it again in place — the fields around it are never touched)
   function statusRow(name, label) {
     const st = stateOf(name);
-    return st ? K.row(label || K.t("integrations.shared.status"), st.state === "problem" ? (st.since ? K.t("integrations.status.since", { words: st.words, ago: ago(st.since) }) : st.words)
-      : st.state === "off" ? K.t("integrations.status.off") : fineWords(st), pill(st), { "data-st": name, "data-stl": label || "" }) : null;
+    return st ? K.row(label || K.t("integrations.shared.status"), st.state === "problem" ? (st.since ? K.t("integrations.status.since", { words: String(st.words || "").replace(/[.!]\s*$/, ""), ago: ago(st.since) }) : st.words)
+      : st.state === "off" ? K.t("integrations.status.off") : fineWords(st), pill(st, name), { "data-st": name, "data-stl": label || "" }) : null;
   }
   function lastAlertRow() {
     if (!stateOf("Hubitat") || stateOf("Hubitat").state === "off") return null;
@@ -218,8 +220,15 @@
       const s = { groups, statusName, kind: null, node: null };
       s.node = connectRow(s); slots.push(s); rows.push(s.node);
     }
-    if (LINKS[id]) rows.push(K.row(LINKS[id][0], LINKS[id][1], el("button.btn.sm", { type: "button", onclick: () => M.go(LINKS[id][2]) }, K.t("control.open"), ic("arrowR", 13))));
+    if (LINKS[id]) rows.push(linkRow(id, statusName));
     return el("section.in-group", { "aria-label": TITLE[id] }, el("div.gh", {}, ic(icon, 15), ` ${TITLE[id]}`), el("div.grp", {}, rows), el("p.gf", {}, WHAT[id]));
+  }
+  // (v3.0.3) the "Open →" row of a section; "Open → set up" in orange while its status says something is still to be set
+  // up there (Guest Wi-Fi: connected, but no guest network / password yet). data-lk: refresh() draws it again in place
+  function linkRow(id, statusName) {
+    const setup = [].concat(statusName).some((n) => { const st = stateOf(n); return !!(st && st.needsSetup); });
+    return K.row(LINKS[id][0], LINKS[id][1], el("button.btn.sm" + (setup ? ".in-setup" : ""), { type: "button", onclick: () => M.go(LINKS[id][2]) },
+      K.t("control.open"), ic("arrowR", 13), setup ? K.t("integrations.link.setUp") : null), { "data-lk": id });
   }
   function connectBtn(groups, kind) {
     if (kind === "connect") return el("button.btn.sm.pri", { type: "button", onclick: () => connect(groups) }, ic("link", 14), K.t("integrations.connect.now"));
@@ -228,8 +237,8 @@
       b.disabled = true;
       const r = await api("/api/manage/health", { action: "check" }).catch(() => ({}));
       if (b.isConnected) b.disabled = false;
-      if (!r.ok) return toast(r.error || K.t("integrations.notChecked"), true);
-      refresh();
+      if (!r.ok) toast(r.error || K.t("integrations.notChecked"), true);
+      refresh();   // (v3.0.3: also after a refused check — what is known now still shows)
     } }, ic("refresh", 14), K.t("integrations.connect.again"));
     return b;
   }
@@ -242,16 +251,17 @@
         : st.reason === "no-data" ? K.t("weather.side.noData") : st.reason === "waiting" ? K.t("weather.side.waiting")
           : K.t("weather.side.ok", { name: st.device || K.t("weather.thisDevice"), ago: st.updatedAt ? ago(st.updatedAt) : "—" })) : null;
       return el("div.nl", {}, el("span.ni" + (st && st.state === "problem" ? ".bad" : st && (st.state === "off" || st.state === "waiting") ? "" : ".ok"), {}, ic(i, 16)),
-        el("div", {}, el("b", {}, n), el("small", {}, !st ? "" : wx || (st.state === "problem" ? st.words : st.state === "off" ? K.t("integrations.pill.notSetUp") : fineWords(st, true)))), pill(st));
+        el("div", {}, el("b", {}, n), el("small", {}, !st ? "" : wx || (st.state === "problem" ? st.words : st.state === "off" ? K.t("integrations.pill.notSetUp") : fineWords(st, true)))), pill(st, k));
     });
     const check = el("button.btn.sm", { type: "button", onclick: async () => {
       check.disabled = true;
       const r = await api("/api/manage/health", { action: "check" }).catch(() => ({}));
       check.disabled = false;
-      if (!r.ok) return toast(r.error || K.t("integrations.notChecked"), true);
-      toast(K.t("integrations.checkedNow")); refresh();
+      if (!r.ok) toast(r.error || K.t("integrations.notChecked"), true);
+      else toast(K.t("integrations.checkedNow"));
+      refresh();   // (v3.0.3: also after a refused check — what is known now still shows)
     } }, ic("refresh", 14), K.t("integrations.checkNow"));
-    const words = { "settings.change": (e) => (e.data && e.data.keys ? K.t("integrations.recent.changedKeys", { keys: e.data.keys.join(", ") }) : K.t("integrations.recent.changed")),
+    const words = { "settings.change": (e) => (e.data && e.data.keys ? K.t("integrations.recent.changedKeys", { keys: M.keyWords ? M.keyWords(e.data.keys) : e.data.keys.join(", ") }) : K.t("integrations.recent.changed")),
       "settings.check": () => K.t("integrations.recent.checked"), "settings.guest": () => K.t("integrations.recent.guest"),
       "settings.guest-now": () => K.t("integrations.recent.guestNow"), "settings.lockdown": () => K.t("integrations.recent.lockdown"),
       "settings.weather": () => K.t("integrations.recent.weather"), "settings.event-icons": () => K.t("integrations.recent.eventIcons") };
@@ -299,19 +309,21 @@
   }
   // the states, read again and drawn in place: the status rows, Hubitat's last alert, the Connect rows and the side card —
   // never the fields, the calendars or the event icons (what's being typed there stays as it is)
-  let busy = false;
+  let busy = false, again = false;
   async function refresh() {
-    if (busy || !DATA || S.route().page !== "integrations" || !M.$main.querySelector(".in-main")) return;
+    if (!DATA || S.route().page !== "integrations" || !M.$main.querySelector(".in-main")) return;
+    if (busy) { again = true; return; }   // (v3.0.3: asked while one is under way — e.g. a calendar just added: once more after it)
     busy = true;
     try {
       const d = await api("/api/manage/settings");
       const r = await api("/api/manage/activity?kinds=settings&limit=5").catch(() => ({}));
       if (!d || !Array.isArray(d.fields) || S.route().page !== "integrations") return;
       DATA = d; if (Array.isArray(r.events)) recent = r.events;
-    } catch (e) { return; } finally { busy = false; }
+    } catch (e) { return; } finally { busy = false; if (again) { again = false; setTimeout(refresh, 0); } }
     const root = M.$main;
     for (const n of root.querySelectorAll(".in-main [data-st]")) { const x = statusRow(n.dataset.st, n.dataset.stl || null); if (x) n.replaceWith(x); }
     for (const n of root.querySelectorAll(".in-main [data-la]")) n.replaceWith(lastAlertRow() || el("div.grp-row", { "data-la": "", hidden: true }));
+    for (const n of root.querySelectorAll(".in-main [data-lk]")) { const g = GROUPS.find((x) => x[0] === n.dataset.lk); if (g) n.replaceWith(linkRow(g[0], g[3])); }
     drawConnects();
     const sd = root.querySelector(".in-side");
     if (sd) M.swap(sd, ...side().childNodes);   // (swap: a focused "Check now" keeps the focus)
@@ -338,4 +350,7 @@
   S.page("integrations", { title: K.t("integrations.title"), group: "admin", icon: "link", allowed: () => M.isAdmin(), words: "settings hubitat protect unifi mqtt calendars music time zone token",
     render: () => { retries = 0; render(); } });
   M.renderSettings = () => { if (S.route().page === "integrations") render(); };
+  // (v3.0.3) the statuses read again and drawn in place (never the fields): calendars.js after a calendar is added,
+  // changed or removed — its row said "Not set up" until the page was reloaded
+  M.refreshIntegrations = () => { if (S.route().page === "integrations") refresh(); };
 })();

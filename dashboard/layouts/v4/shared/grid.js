@@ -517,11 +517,15 @@
     },
     // the panel's own health: Hubitat, the bridge, the weather service, this page's version
     status(c) {
-      const hub = H.hub.live, bridge = H.hub.bridge !== "offline", wx = window.Weather && !!Weather.current() && !Weather.error;
+      const hub = H.hub.live, bridge = H.hub.bridge !== "offline";
+      // (v3.0.3: the weather counts every place with data — the panel's or a card's — and says which in plain words)
+      const st = window.Weather && Weather.status ? Weather.status() : { ok: false, places: 0, failing: 0, error: null };
+      const wx = st.ok && !st.failing;
+      const wxText = wx ? T("g.st.upToDate") : st.ok ? T("g.st.someMissing") : st.error || (st.places ? T("common.loading") : T("g.st.noPlaces"));
       const row = (ok, name, text) => `<div class="st-row"><i class="${ok ? "ok" : "bad"}"></i><b>${name}</b><small>${esc(text)}</small></div>`;
       const ver = (window.PANEL_CONFIG && PANEL_CONFIG.version) || "dev";
-      return { html: `${head(c.o.title || T("g.system"))}<div class="gc-st">${row(hub, "Hubitat", hub ? "live" : "not connected")}${row(bridge && hub, T("g.bridge"), hub ? "running" : "waiting")}`
-        + `${row(wx, T("wx.title"), wx ? "up to date" : (window.Weather && Weather.error) || "loading")}${row(true, T("g.panel"), ver)}</div>` };
+      return { html: `${head(c.o.title || T("g.system"))}<div class="gc-st">${row(hub, "Hubitat", hub ? T("g.st.live") : T("g.st.notConnected"))}${row(bridge && hub, T("g.bridge"), hub ? T("g.st.running") : T("g.st.waiting"))}`
+        + `${row(wx, T("wx.title"), wxText)}${row(true, T("g.panel"), ver)}</div>` };
     },
     // a slideshow of your pictures (they cross-fade every few seconds; a ticker below — no redraw)
     photos(c) {
@@ -793,6 +797,13 @@
     return box;
   }
   // (data-cond: T("g.hiddenNow") — the builder's canvas: a card whose "Only show it when…" doesn't match now)
+  // (v3.0.2) the cards whose markup marks its pictures (.ic, svg.wx, .gz-i) and its words (.gz-t): Style's "Icons" and
+  // "Text" size each on its own (theme.css .gc.gsz) — the rest still zoom the whole card with "Text"
+  const SPLIT = new Set(["guest", "weather"]);
+  // (v3.0.3) "Grow and shrink with the card": the box (in the grid's cells) when it was switched on, else null
+  const growRef = (s) => { const r = s && s.grow; if (!r || typeof r !== "object") return null;
+    const w = int(r.w, 1, 256, 0), h = int(r.h, 1, 256, 0); return w && h ? { w, h } : null; };
+  Grid.growRef = growRef;
   Grid.cards = (g, parts, room) => {
     Grid.cur = g; Grid.room = room || null; Grid.byId = new Map(g.cards.map((c) => [c.i, c]));
     const joined = joins(g);
@@ -820,11 +831,14 @@
         if (room && (ROOM_CARDS.has(c.t) ? /class="gc-empty"/.test(body.html)
           : c.t === "people" && !H.people().some((p) => !Array.isArray(o.ids) || !o.ids.length || o.ids.includes(p.id)))) empty.add(c.i);
       }
-      // what's inside follows the card's size (Grid.fit): "scale" (the fine grid's default), "scroll", or the old shrink
-      // (an old 12 × 8 grid's card with no choice shrinks to fit too: on a smaller screen it was cut off — a 1024 × 768 or
-      // portrait tablet showed "3:2…" and a dial wider than its card)
-      const fm = s.fit === "scroll" ? "fit scroll" : s.fit === "scale" || (g.v === 2 && s.fit == null) ? "fit scale" : s.fit === true || (g.v !== 2 && s.fit == null) ? "fit" : "";
-      const base = ["gc", `gc-${String(c.t).replace(/[^a-z0-9-]/g, "-")}`, `e${int(s.e, 0, 3, 1)}`, s.b === false ? "nb" : "", fm,
+      // (v3.0.3) what's inside keeps its own size (Style's Icon / Text size) and only gets smaller once the card would cut
+      // into it (Grid.fit); "scroll" (and the old false): fitted to the width, lists scroll. The old "scale" (grow with the
+      // card) and true (shrink to fit) are that default now. "grow" ({w, h}: the box when "Grow and shrink with the card"
+      // was switched on): the content follows the box from that size on
+      const fm = s.fit === "scroll" || s.fit === false ? "fit scroll" : "fit", grow = growRef(s) ? "grow" : "";
+      // (gsz: the card keeps its pictures and its words apart — Style's "Icons" sizes only the pictures, "Text" only the
+      // words, theme.css; the others still scale everything with "Text")
+      const base = ["gc", `gc-${String(c.t).replace(/[^a-z0-9-]/g, "-")}`, `e${int(s.e, 0, 3, 1)}`, s.b === false ? "nb" : "", fm, grow, SPLIT.has(c.t) ? "gsz" : "",
         c.tap || c.hold || c.dbl || defTap(c) ? "act" : ""].filter(Boolean).join(" ");
       const jn = joined.get(c.i), jc = jn ? Object.keys(jn).map((k) => `j-${k}`).join(" ") : "";
       const jv = jn ? Object.entries(jn).filter(([, d]) => d > 0).map(([k, d]) => `--j${k}:${d}`).join(";") : "";
@@ -855,17 +869,15 @@
     if (window.UserCards && g.cards.some((c) => /^card:/.test(c.t))) setTimeout(() => UserCards.push(), 0);
     return out;
   };
-  // What's inside a card follows its size (--gfit, theme.css; measured after each redraw):
-  //   "scale"  the card's type has a normal size (BASE, in the old 12 × 8 grid's cells); a card twice that wide and
-  //            high draws everything twice as big — the dial, icons and text — and smaller below it; then smaller still
-  //            until it all fits (the content reflows into the box a smaller scale gives, so a few rounds settle it)
-  //   "scroll" made smaller only when the card is narrower than normal (to fit the width); lists scroll, the title stays put
-  //   (old) "shrink to fit": only smaller, until it fits
-  const BASE = { clock: [4, 2], weather: [4, 3], calendar: [4, 5], thermostat: [4, 4], locks: [4, 2], openings: [4, 1], people: [4, 1], temps: [4, 1],
-    guest: [4, 2], alerts: [4, 1], device: [3, 1], group: [3, 3], value: [2, 2], button: [2, 2], room: [2, 2], text: [4, 2], alarm: [4, 2], lock: [3, 2],
-    garage: [3, 2], spot: [4, 3], todo: [4, 4], notes: [5, 3], fan: [4, 2], energy: [5, 4], player: [5, 2], status: [3, 2], photos: [4, 3], batteries: [4, 3], power: [4, 3],
-    scenes: [6, 2], modes: [6, 2], safety: [4, 1], notices: [4, 3], countdown: [3, 2], bins: [4, 1], timer: [4, 3], camera: [4, 3], picture: [3, 3], blank: [4, 3],
-    roomhead: [12, 1], roomdevs: [6, 4], roomopen: [4, 3], roomcams: [6, 4], roomthings: [4, 3] };
+  // What's inside a card keeps its own size (--gfit, theme.css; measured after each redraw) — v3.0.3, the owner's rule:
+  //   words and icons never grow with the box: their size is Style's Text size / Icon size (theme.css). A bigger card
+  //   only gives them room; a smaller one first takes the empty space and wraps the words; only once the box would cut
+  //   into them is everything drawn smaller (the rounds below: the largest scale ≤ 1 that fits), or a list scrolls.
+  //   "scroll": drawn smaller only to fit the width; lists scroll up and down, the title stays put
+  //   "grow" (the card's "Grow and shrink with the card", s.grow = its box then): from that box on, the content follows
+  //   the box — twice as wide and high, twice as big — and still gets smaller until it fits
+  // (the old "scale" grew everything from a normal size per card type — BASE, gone: a big card had huge words, and
+  // narrowing the clock shrank its digits long before the box reached them)
   const over = (n) => Math.max(n.scrollHeight / Math.max(1, n.clientHeight), n.scrollWidth / Math.max(1, n.clientWidth));
   // (the calendar's day and "Coming up" lists clip on their own: measured too, or a grown card cuts an event in half)
   const need = (inn) => Math.max(over(inn), ...[...inn.querySelectorAll(".card, .cal-body, .cal-body > .ag, .lock-list, .gc-devs, .wx-days, .gc-text, .gc-text > div")].map(over));
@@ -879,51 +891,56 @@
     }
     for (const cell of main.querySelectorAll(".gc.fit")) {
       const inn = cell.firstElementChild; if (!inn) continue;
+      // (v3.0.3: a Guest Wi-Fi card taller than wide — or about square: the code, as tall as the card, would leave the
+      // words no room beside it — puts its code above the words, guestwifi.js .gw-tall)
+      if (cell.classList.contains("gc-guest")) cell.classList.toggle("gw-tall", cs.display !== "flex" && cell.clientWidth < cell.clientHeight * 1.6);
+      // (its own size: 1 — the words and icons as Style's Text / Icon size make them)
       let s = 1;
-      if (cell.classList.contains("scale") || cell.classList.contains("scroll")) {
-        // (a thermostat look has its own normal size: a strip is 1 high — thermo-looks.js)
-        const c = Grid.byId && Grid.byId.get(cell.dataset.gi), b = (c && c.t === "thermostat" && window.ThermoLooks && ThermoLooks.base((c.o || {}).look)) || (c && BASE[c.t]) || [3, 2];
-        const kw = cell.clientWidth / Math.max(1, (b[0] / 12) * mw), kh = cell.clientHeight / Math.max(1, (b[1] / 8) * mh);
-        // (scroll: only ever smaller, to fit the width — the height goes to the list, which scrolls)
-        // (a one-row card — a device, people — in a box taller than its row: its words wrap, so it starts from between the
-        // two and the rounds below make it fit — not drawn at the narrow width's scale in a mostly empty card)
-        // (not "Doors & windows": its two chips are a row, not words — grown that way the words wrapped one per line in
-        // huge type, "1 / window / open"; at its width's scale it looks as on the built-in layouts, the chips centred)
-        const k = b[1] === 1 && kh > kw && !(c && c.t === "openings") ? Math.sqrt(kw * kh) : Math.min(kw, kh);
-        // (a phone, the cards stacked full width — theme.css: never drawn bigger than normal; measured against the whole
-        // screen's width a card was 2.2 × — "DOOR / LOCKS", "Lock / all" on two lines each)
-        const stacked = cs.display === "flex";
-        s = Math.max(0.4, cell.classList.contains("scroll") ? Math.min(1, kw) : Math.min(stacked ? 1 : 2.2, k));
-        // (v3.0.2: a room's devices keep their own size — tiles / rows / orbs reflow into the card, leaving free space; only
-        // once they no longer fit do they get smaller (the rounds below), then scroll. Drawn at the card's scale, a big card
-        // had huge tiles and shrinking it shrank them long before its edges came near)
-        if (c && c.t === "roomdevs") s = 1;
+      const c = Grid.byId && Grid.byId.get(cell.dataset.gi), ref = c && cell.classList.contains("grow") ? growRef(c.s) : null;
+      // (a phone, the cards stacked full width — theme.css: never drawn bigger than its own size, "grow" or not)
+      const stacked = cs.display === "flex", scroll = cell.classList.contains("scroll");
+      if (ref && !stacked) {
+        // ("grow": the box against the box it had when the option was switched on — nothing jumps then; scroll: its width)
+        const kw = int(c.w, 1, 256, 1) / ref.w, kh = int(c.h, 1, 256, 1) / ref.h;
+        s = Math.max(0.4, Math.min(4, scroll ? kw : Math.min(kw, kh)));
       }
       if (cell.dataset.lscroll) delete cell.dataset.lscroll;
       cell.style.setProperty("--gfit", s.toFixed(3));
-      // (much smaller than its normal size: a card may leave out its extras — thermo-looks.css)
-      cell.classList.toggle("g-small", s < 0.72);
-      if (cell.classList.contains("scroll")) continue;   // (lists scroll)
+      if (scroll) {
+        // (lists scroll up and down: only what's too wide makes it smaller — the largest scale that fits the width)
+        const wide = () => Math.max(inn.scrollWidth / Math.max(1, inn.clientWidth), ...[...inn.querySelectorAll(".card, .gc-devs, .wx-days")].map((n) => n.scrollWidth / Math.max(1, n.clientWidth)));
+        for (let i = 0; i < 4 && s > 0.4; i++) { const r = wide(); if (r <= 1.01) break; s = Math.max(0.4, s / r); cell.style.setProperty("--gfit", s.toFixed(3)); }
+        cell.classList.toggle("g-small", s < 0.72);
+        continue;
+      }
       const s0 = s;
       // too big: smaller until it fits, then back up halfway a few times — the largest size that fits (a part that
       // takes the rest of the card, like the weather's days, doesn't shrink in step: s / r alone overshoots to tiny)
       const fits = (v) => { cell.style.setProperty("--gfit", v.toFixed(3)); return need(inn) <= 1.01; };
-      let hi = null;
-      for (let i = 0; i < 5 && s > 0.35; i++) {
-        const r = need(inn);
-        if (r <= 1.01) break;
-        hi = s; s = Math.max(0.35, s / r);
-        cell.style.setProperty("--gfit", s.toFixed(3));
-      }
-      if (hi != null && need(inn) <= 1.01) {
-        for (let i = 0; i < 5 && hi - s > 0.01; i++) { const m = (s + hi) / 2; if (fits(m)) s = m; else hi = m; }
-        cell.style.setProperty("--gfit", s.toFixed(3));
-      }
-      // a long list (a room's 58 lights): rather readable and scrolling than squeezed into 3 px text
-      // (a room's devices: down to 0.7 of their size at most, then scroll at that size)
-      const own = cell.classList.contains("gc-roomdevs"), lo = own ? 0.7 : 0.6;
-      if (s < lo && inn.querySelector(".gc-devs")) {
-        s = own ? lo : Math.max(0.6, Math.min(1, s0));
+      const settle = () => {
+        let hi = null;
+        s = s0; cell.style.setProperty("--gfit", s.toFixed(3));
+        for (let i = 0; i < 5 && s > 0.35; i++) {
+          const r = need(inn);
+          if (r <= 1.01) break;
+          hi = s; s = Math.max(0.35, s / r);
+          cell.style.setProperty("--gfit", s.toFixed(3));
+        }
+        if (hi != null && need(inn) <= 1.01) {
+          for (let i = 0; i < 5 && hi - s > 0.01; i++) { const m = (s + hi) / 2; if (fits(m)) s = m; else hi = m; }
+          cell.style.setProperty("--gfit", s.toFixed(3));
+        }
+      };
+      cell.classList.remove("g-small");
+      settle();
+      // (much smaller than its own size: a card may leave out its extras — thermo-looks.css — and fits again with them gone)
+      if (s < 0.72) { cell.classList.add("g-small"); settle(); }
+      // a long list (a room's 58 lights, a week of events, the locks, a to-do list): rather readable and scrolling than
+      // squeezed into 3 px text — down to 0.7 of its own size at most, then it scrolls at that size (v3.0.3: every list,
+      // not only the devices' — the calendar went down to a third of its size)
+      const lo = 0.7;
+      if (s < lo && inn.querySelector(".gc-devs, .cal-body, .lock-list, .ls-list, .nt-board")) {
+        s = Math.min(lo, s0);
         cell.dataset.lscroll = "1";
         cell.style.setProperty("--gfit", s.toFixed(3));
       }
@@ -1253,7 +1270,7 @@
 
   // the photo cards: the next picture every few seconds (only the classes change — the grid isn't redrawn)
   setInterval(() => {
-    if (document.hidden) return;
+    if (document.hidden || document.documentElement.classList.contains("pin-open")) return;   // (v3.0.3: held while a PIN pad is open)
     const now = Date.now();
     for (const box of document.querySelectorAll(".gc-ph")) {
       const every = (+box.dataset.every || 10) * 1000;

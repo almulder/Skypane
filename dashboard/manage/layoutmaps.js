@@ -17,8 +17,18 @@
     const cards = (g.cards || []).map((c) => {
       let w = Math.max(1, Math.min(FC, Math.round(c.w * fx))), h = Math.max(1, Math.min(FR, Math.round(c.h * fy)));
       let x = Math.min(FC - w, Math.round(c.x * fx)), y = Math.min(FR - h, Math.round(c.y * fy));
-      if (k && w > 2 * k + 1) { x += k; w -= 2 * k; }
-      if (k && h > 2 * k + 1) { y += k; h -= 2 * k; }
+      const tw = k && w > 2 * k + 1, th = k && h > 2 * k + 1;
+      if (tw) { x += k; w -= 2 * k; }
+      if (th) { y += k; h -= 2 * k; }
+      // (v3.0.3: "Grow and shrink with the card" keeps the box it had then, in the same cells — scaled with it, and
+      // trimmed by the same inset as the card, or the content would jump the moment an older layout is opened)
+      const r = c.s && c.s.grow;
+      if (r && typeof r === "object" && r.w > 0 && r.h > 0) {
+        let gw = Math.max(1, Math.min(FC, Math.round(r.w * fx))), gh = Math.max(1, Math.min(FR, Math.round(r.h * fy)));
+        if (tw) gw = Math.max(1, gw - 2 * k);
+        if (th) gh = Math.max(1, gh - 2 * k);
+        return { ...c, x, y, w, h, s: { ...c.s, grow: { w: gw, h: gh } } };
+      }
       return { ...c, x, y, w, h };
     });
     return { ...g, v: 2, cols: FC, rows: FR, sp: true, cards };

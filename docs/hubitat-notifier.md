@@ -145,7 +145,7 @@ light for tablets without the LED strip. Which panels get an alert at all is the
 
 LED strip (only a tablet with a Skypane-controlled LED strip): a level 4–5 on screen → flashing red; a level 3 or higher up (on screen or in the
 list) → orange; HSM armed → red;
-just disarmed → green for a minute; otherwise the theme colour.
+just disarmed → green for a minute; otherwise the theme color.
 
 Try it without a rule: on the panel, Settings → Test → *Test alert — level 1…5* (on that panel only; Hubitat never
 hears of these).

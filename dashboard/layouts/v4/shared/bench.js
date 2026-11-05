@@ -203,7 +203,9 @@
     const step = (key, text, pct, n = 0, fxId = null) => { Object.assign(P, { step: key, text, pct, n, fps: null, fx: fxId }); say(text, pct); report({ state: "running", ...P }); };
     const live = (r) => { if (r && r.mean) { P.fps = Math.round(1000 / r.mean); report({ state: "running", ...P }); } return r; };
     // why it can't go on ("" = it can): any of these and nothing is saved — the Manager says to run it again
-    const gone = () => (B.stop ? T("bn.why.fromManager") : document.hidden ? T("bn.why.screenOff") : App.sky && App.sky.paused ? T("bn.why.saver")
+    const gone = () => (B.stop ? T("bn.why.fromManager") : document.hidden ? T("bn.why.screenOff")
+      // (v3.0.3: the sky also pauses while a PIN pad is open — that is not the screensaver)
+      : document.documentElement.classList.contains("pin-open") ? T("bn.why.pinOpen") : App.sky && App.sky.paused ? T("bn.why.saver")
       : Alarm.alerts.length ? T("bn.why.alertUp") : "");
     let stopWhy = "";
     const check = (r) => { const g = gone(); if (g || !r) { stopWhy = g || T("bn.why.screenStopped"); throw new Error("stopped"); } return live(r); };

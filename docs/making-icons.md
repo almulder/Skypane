@@ -6,7 +6,7 @@ anyone drawing their own, or turning someone else's icons into a set Skypane can
 ## 1. Pictures you upload (Manager → Icons → Add an icon picture)
 
 The quickest way: any PNG, WebP or GIF. Every upload is drawn again by the server before it is kept (so nothing hidden
-inside the file comes along), and it is used exactly as it looks — the theme doesn't recolour it.
+inside the file comes along), and it is used exactly as it looks — the theme doesn't recolor it.
 
 | Style | Size | Notes |
 |---|---|---|
@@ -20,12 +20,12 @@ transparent background — a white box looks wrong on the dark panels.
 
 ## 2. Line icons that follow the theme
 
-Skypane's own line icons (`dashboard/layouts/v4/shared/icons.js`) take the colour of the panel's theme, so one icon
+Skypane's own line icons (`dashboard/layouts/v4/shared/icons.js`) take the color of the panel's theme, so one icon
 works on every theme. To draw one that behaves the same:
 
 - a **24 × 24** `viewBox`, drawn with **strokes**, not fills: `fill="none" stroke="currentColor" stroke-width="1.8"`,
   rounded line caps and joins;
-- **no fixed colours** inside — `currentColor` is what lets the theme (or a card's own colour) paint it;
+- **no fixed colors** inside — `currentColor` is what lets the theme (or a card's own color) paint it;
 - simple shapes only: `path`, `circle`, `rect`, `line`, `polyline`, `polygon`, `ellipse`, `g`.
 
 ## 3. Animated drawings (the appliance drawings)
@@ -39,7 +39,7 @@ run on a wall tablet over an animated sky, all day, so they have to be cheap to 
 - **still while off:** put the animation under a class that's only there while the device runs;
 - glows: a soft gradient layer whose opacity changes, not a blur filter;
 - a `viewBox` of about **200 × 240**, the drawing in the middle with a small shadow under it;
-- **colours that suit a dark purple panel**: mid greys tinted a little purple (pure white or light grey glares at night).
+- **colors that suit a dark purple panel**: mid grays tinted a little purple (pure white or light gray glares at night).
 
 ## When a credited author releases new drawings
 
@@ -53,7 +53,7 @@ ones aren't installed automatically. Instead, ask Claude (or do it by hand) to *
 2. **Render** each drawing to plain SVG in a sandbox (Node's `vm`, with only the author's helper functions loaded).
 3. **Convert** it into `art-extra.js`: unused gradients dropped, ids written `ID-…`, class names prefixed `xa-<short>-`,
    blur filters removed, dash "flows" turned into dot chases (`chase()`), the LCD given a fixed sample value, one
-   "on" state chosen, and our greys applied by `tint()`.
+   "on" state chosen, and our grays applied by `tint()`.
 4. **Animate** with CSS under `.xa-on` (transform / opacity only — see section 3), add a `META` line (name + the
    device types it fits), and preview every drawing off and on against the dark panel.
 5. **Record** it: the repo's "adapted from" time in `service/art_sources.py` (so the check starts counting from
@@ -70,4 +70,4 @@ the drawing's own gradients), outside pictures or fonts, `<foreignObject>`, and 
 - Built-in line icons: `dashboard/layouts/v4/shared/icons.js`
 - Animated drawings: `dashboard/layouts/v4/shared/roomlayoutG.js` (Skypane's) and `art-extra.js` (adapted from
   skyrotter's MIT-licensed cards — see CREDITS.md)
-- Icon motions (the round coloured chips): `motions.js`, `motions.css`
+- Icon motions (the round colored chips): `motions.js`, `motions.css`

@@ -188,8 +188,9 @@
       const b = e.currentTarget; b.disabled = true;
       const r = await M.api("/api/manage/health", { action: "check" }).catch(() => ({}));
       b.disabled = false;
-      if (!r.ok) return M.toast(r.error || K.t("integrations.notChecked"), true);
-      M.toast(K.t("integrations.checkedNow")); if (viewNow() === "timeline") M.renderTimeline(); else load(true);
+      if (!r.ok) M.toast(r.error || K.t("integrations.notChecked"), true);   // (v3.0.3: the page is drawn again either way)
+      else M.toast(K.t("integrations.checkedNow"));
+      if (viewNow() === "timeline") M.renderTimeline(); else load(true);
     } }, ic("refresh", 16), K.t("integrations.checkNow")) : el("button.btn", { type: "button", onclick: () => (viewNow() === "timeline" ? M.renderTimeline() : load()) }, ic("refresh", 16), K.t("health.refresh"))),
     el("span.vr"), S.viewSwitch("health"));   // (a phone too: the Timeline is worth reaching there)
   // a bar per hour (the last 24): green fine, amber trouble, red down, grey not checked that hour

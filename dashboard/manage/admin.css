@@ -77,11 +77,13 @@ code.ac-name { font: 500 13px var(--mono); padding: 3px 8px; border-radius: 6px;
 .ac-side .nl > div, .in-side .nl > div { flex: 1; min-width: 0; }
 .ac-side .nl b, .in-side .nl b { display: block; font-weight: 500; font-size: 13px; }
 .ac-side .nl small, .in-side .nl small { display: block; color: var(--t3); font-size: 12px; }
+.in-side .nl small { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }   /* (v3.0.3: "Connected · guest netw…" was cut off) */
 .ac-side kbd { font: 500 11.5px var(--mono); padding: 1px 6px; border: 1px solid var(--line-2); border-radius: 5px; background: var(--kbd); }
 
 /* ---------- Integrations ---------- */
 .in-main { min-width: 0; }
 .in-group .gh .i, .gw-main .gh .i { color: var(--t3); }
+.btn.in-setup { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }   /* (v3.0.3: "Open → set up") */
 .in-secret { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .in-secret code, .in-mq code { font: 500 12.5px var(--mono); padding: 2px 7px; border-radius: 6px; background: var(--surface-2); }
 .in-mq { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }

@@ -10,10 +10,10 @@ Until you add one, the panels show sample events (the Manager says so).
 
 1. Find the calendar's iCal link (below) and copy it.
 2. Open the Manager → **Settings** → under *Admin settings*, the **Calendars** card (only the admin sees it).
-3. Type a name (e.g. *Jane*, *School*), paste the link, pick a colour, and press **Add**.
+3. Type a name (e.g. *Jane*, *School*), paste the link, pick a color, and press **Add**.
 4. A few seconds later the card shows "✓ 42 events …" — or what went wrong, in plain words.
 5. Each panel shows every house calendar to begin with. To choose per panel: Manager → **Panels** → the panel →
-   **People & calendars** — switch a calendar off there, or give it this panel's own colour or icon.
+   **People & calendars** — switch a calendar off there, or give it this panel's own color or icon.
 
 The panels check for changes every few minutes; the server reads each link every 10 minutes (**Check for changes every**
 5 / 10 / 15 / 30 min, under the list; Google's own feed can take a few hours to show a change either way). **Check now**
@@ -70,9 +70,9 @@ Look for **Subscribe**, **iCal**, **ICS**, **Add to calendar** or **Export** —
 ## What's shown
 
 - Events from yesterday to two months ahead: title, time (or *All day*), the calendar's name and the place. The icon
-  comes from words in the title (docs/calendar-keywords.md); the colour bar is the calendar's colour.
+  comes from words in the title (docs/calendar-keywords.md); the color bar is the calendar's color.
 - Repeating events (daily, weekly, monthly, yearly), skipped and moved single dates, all-day and multi-day events,
-  and time zones are understood. Cancelled events are left out.
+  and time zones are understood. Canceled events are left out.
 
 ## When something's wrong
 

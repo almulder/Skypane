@@ -250,6 +250,8 @@ PATHS = {
     "roomOrder": _room_order,                     # the room buttons' order (room ids)
     "arrangeOnPanel": _bool,                      # also press-and-hold arranging on the panel itself
     "ledStrip": _bool,                            # the tablet has our LED strip (panel agent)
+    "pinSound": _bool,                            # (v3.0.3) a soft tick on each PIN pad key (unset = on; the same for every key)
+    "showVersion": _bool,                         # (v3.0.3) the version tag in the panel's corner (unset = shown)
     "look.theme": _one_of(*THEMES, "custom"),
     "look.hue": _int(0, 359),                     # (v3.0.2) theme "custom"'s colour on the colour wheel
     "look.background": _pattern(r"mountains|lake|desert|forest|coast|city|hills|peaks|canyon|tropical|dunes|up:[0-9a-f]{16}", "a background"),
@@ -324,8 +326,9 @@ PANEL_LOCKED = tuple(p for p in PATHS if p not in ("guest.show", "hiddenDevices"
 # what each setting is called on the Manager's pages (refusals name it like this, never by its id)
 LABELS = {"panelName": "Name", "language": "Language", "kioskName": "FreeKiosk device name", "hiddenRooms": "Hidden rooms", "hiddenDevices": "Hidden devices",
           "extraDevices": "Devices from other rooms", "deviceOrder": "Device order", "roomOrder": "Room order",
-          "arrangeOnPanel": "Arrange on the panel", "ledStrip": "LED strip", "look.theme": "Theme", "look.hue": "Custom colour", "look.background": "Background",
-          "look.sky": "Animated sky", "look.skyColors": "Sky colours", "effects.place": "Weather effects", "homeLayout": "Home layout",
+          "arrangeOnPanel": "Arrange on the panel", "ledStrip": "LED strip", "pinSound": "PIN pad sound",
+          "showVersion": "Show the version on this panel", "look.theme": "Theme", "look.hue": "Custom color", "look.background": "Background",
+          "look.sky": "Animated sky", "look.skyColors": "Sky colors", "effects.place": "Weather effects", "homeLayout": "Home layout",
           "homeGrid": "Home layout", "roomLayout": "Room layout", "roomGrids": "Room layouts", "roomLayouts": "Room layouts",
           "dockAt": "Room bar", "dockOff": "Room bar hidden", "dockStyle": "Room bar style",
           "dockLabels": "Room bar names", "dockAutoHide": "Room bar auto-hide", "homeAfter": "Back to Home after", "insideSensor": "Inside temperature from", "people": "People",

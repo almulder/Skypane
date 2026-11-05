@@ -39,6 +39,8 @@
     pinGeneralSeconds: 60,   // the panel PIN stays unlocked this long after the last touch (pinpad.js; 0 = never relocks)
     pinAlarmSeconds: 30,     // … for arm / disarm / dismissing a level 4–5: this long after the PIN (0 = never relocks)
     arrangeOnPanel: false,   // press and hold on the panel to arrange rooms / devices (else only on the Manager page)
+    pinSound: true,          // (v3.0.3) a soft tick on each PIN pad key — the same for every key (chime.js Sound.pinTick)
+    showVersion: true,       // (v3.0.3) the version tag in the corner (app.js versionTag; html.no-ver-tag hides it)
     roomOrder: [],
            // this panel's order of the room buttons (room ids; rooms not listed follow in Hubitat's order)
     roomLayout: "G",         // room pages: a RoomLayouts key (only loaded ones count; "classic" = the original room(), "list")
@@ -87,7 +89,8 @@
   // path = the setting that changed (the store then merges only that part with other screens' edits);
   // none = the whole settings object
   const save = (path) => { if (window.PanelStore) PanelStore.set("settings", structuredClone(pending ? { ...St.v, look: pending.prev } : St.v), path ? [path] : undefined); };
-  const applyAll = () => { St.applyLook(); window.Sound && Sound.applyVolumes(); window.Alarm && Alarm.updateLed(); window.App && App.settingsChanged("all"); };
+  // (v3.0.3: new units from the Manager → the weather is fetched again in them at once — Weather.unitsCheck)
+  const applyAll = () => { St.applyLook(); window.Sound && Sound.applyVolumes(); window.Alarm && Alarm.updateLed(); window.Weather && Weather.unitsCheck && Weather.unitsCheck(); window.App && App.settingsChanged("all"); };
   // the service's copy arrived, or another screen changed this panel's settings: take it (unless a look preview is
   // running here — keeping/reverting it takes the store's copy then). While a text field in Settings has focus the
   // page isn't redrawn under the user's fingers: that waits until the field is left.

@@ -3233,7 +3233,7 @@ ${lcd(38, 48, 20, 9, "22°", "xa-lcdo")}
     "diesel-heater": ["Diesel heater", ["heater", "switch", "other"]],
     "gas-boiler": ["Gas boiler", ["heater", "switch", "other"]],
     "hot-tub": ["Hot tub", ["pool", "pump", "heater", "switch", "other"]],
-    "color-bulb": ["Colour bulb", ["light", "switch"]],
+    "color-bulb": ["Color bulb", ["light", "switch"]],
     "filament-bulb": ["Filament bulb", ["light", "switch", "outlet"]],
     "pendant-cluster": ["Pendant cluster", ["light", "switch"]],
     "chandelier": ["Chandelier", ["light", "switch"]],

@@ -30,16 +30,25 @@
       const r = await api("/api/manage/calendars", body);
       if (!r.ok) { toast(r.error || K.t("calendars.notSaved"), true); return false; }
       list = r.calendars; keepTiming(r); draw(); if (okText) toast(okText);
-      if (body.action === "add" || body.link || body.action === "refresh") pollSoon();
+      if (M.refreshIntegrations) M.refreshIntegrations();   // (v3.0.3: the Calendars status follows at once, not after a reload)
+      if (body.action === "add" || body.link || body.action === "refresh" || body.action === "remove") pollSoon();
       return true;
     } catch (e) { if (e.message !== "login") toast(K.t("calendars.unreachable"), true); return false; }
   }
-  // (the server fetches in the background: look again in a moment)
+  // (the server fetches in the background: look again in a moment. v3.0.3: and again until no calendar is still
+  // "waiting" for its first fetch — up to a minute — so a broken new link can't stay "Checking…" or "Working" until a
+  // reload; the Integrations status is drawn with it)
   function pollSoon() {
     polls.forEach(clearTimeout);
-    polls = [3000, 9000, 20000].map((ms) => setTimeout(async () => {
-      if (!box || !box.isConnected) return;
-      try { const r = await api("/api/manage/calendars"); if (r.calendars) { list = r.calendars; keepTiming(r); drawSoon(); } } catch {}
+    const at = [2000, 5000, 9000, 15000, 22000, 30000, 45000, 60000];
+    polls = at.map((ms, i) => setTimeout(async () => {
+      if (!box || !box.isConnected) return polls.forEach(clearTimeout);
+      try {
+        const r = await api("/api/manage/calendars");
+        if (!r.calendars) return;
+        list = r.calendars; keepTiming(r); drawSoon(); if (M.refreshIntegrations) M.refreshIntegrations();
+        if (i >= 1 && !list.some((c) => (c.status || {}).state === "waiting")) polls.forEach(clearTimeout);   // (all fetched: done)
+      } catch {}
     }, ms));
   }
 
@@ -104,8 +113,9 @@
         statusLine(c)),
       linkBox,
       el("button.ghost.small", { type: "button", title: K.t("calendars.checkTip"), onclick: () => change({ action: "refresh", id: c.id }, K.t("calendars.checking")) }, K.t("calendars.checkNow")),
-      el("button.ghost.small", { type: "button", onclick: () => {
-        if (confirm(K.t("calendars.removeAsk", { name: c.name }))) change({ action: "remove", id: c.id }, K.t("calendars.removed"));
+      el("button.ghost.small", { type: "button", onclick: async () => {   // (v3.0.3: the Manager's own dialog, as Guest Wi-Fi)
+        if (await K.ask({ title: K.t("calendars.removeTitle", { name: c.name }), text: K.t("calendars.removeText"), yes: K.t("calendars.remove"), danger: true }))
+          change({ action: "remove", id: c.id }, K.t("calendars.removed"));
       } }, K.t("calendars.remove")));
   }
 

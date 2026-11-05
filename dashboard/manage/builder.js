@@ -365,7 +365,9 @@
   // ---------- unsaved: by what's on screen, not by what was done — a change taken back (Undo, or by hand) is none ----------
   // orig: each layout (the page, or a room key) as it was when it was first shown, or last saved — as text, without the
   // empty wheel lists the settings fill in when a card is selected (no change of its own)
-  const norm = (g) => JSON.stringify(g, (k, v) => (k === "wheel" && Array.isArray(v) && !v.length ? undefined : v));
+  // (v3.0.3: nor the screen it's shown on — the Screen list only previews a size; it's saved along with a real change)
+  const norm = (g) => JSON.stringify(g && typeof g === "object" && !Array.isArray(g) ? { ...g, scr: undefined } : g,
+    (k, v) => (k === "wheel" && Array.isArray(v) && !v.length ? undefined : v));
   function remember() { const k = st.ctx.room ? st.key : "home"; if (!st.orig.has(k)) st.orig.set(k, norm(st.g)); }
   // a room key's layout now (the one on screen as edited) is not what it was ("" = every room's again: only if it had its own)
   const roomNow = (k) => (k === st.key && st.touched ? st.g : st.grids[k]);
@@ -470,7 +472,13 @@
     setSw(q(".bld-ov .sw"), !!g.ov);
     setSw(q(".bld-join .sw"), !!g.join);
     if (q(".bld-gap select")) q(".bld-gap select").value = String(g.gap);
-    if (q(".bld-scr select") && g.scr) q(".bld-scr select").value = `${g.scr.w}x${g.scr.h}`;
+    // (the screen: also back to a layout saved without one — drawn at 1280 × 800 then, fit(); a size not in the list added)
+    const ss = q(".bld-scr select");
+    if (ss) {
+      const v = g.scr ? `${g.scr.w}x${g.scr.h}` : "1280x800";
+      if (![...ss.options].some((o) => o.value === v)) ss.append(el("option", { value: v }, v.replace("x", " × ")));
+      ss.value = v;
+    }
   }
   const $ = (sel) => document.querySelector(sel);
 
@@ -1042,7 +1050,7 @@
     e.preventDefault();
     // (inside a blank card the page's cards can't be seen: a page card added there would land out of sight)
     if (st.inner) return toast(Kit.t("builder.drag.insideBlank"), true);
-    const type = b.dataset.type, [w, h] = sizeOf(type);
+    const type = b.dataset.type, [w, h] = newSize(type);
     const s0 = { px: e.clientX, py: e.clientY };
     let moved = false, ghost = null, spot = null, rect = null;
     const over = $(".bld-over");
@@ -1153,6 +1161,23 @@
     const t = tdef(type);
     return [Math.min(fz(t[4]), g.cols), Math.min(fz(t[5]), g.rows)];
   };
+  // (v3.0.3) a newly added card starts small — half a single-device card (a valve: 3 × 1 → 24 × 8 fine cells),
+  // (a few types a little bigger: NEW_START), so it always finds room; it's then grown as needed. A room's header strip
+  // stays full width.
+  // (A duplicate keeps the size of the card it copies; a saved card — tpl:… — and a card people made — card:… — keep
+  // their own size: only plain new types start small.)
+  const NEW_W = T.device[4] / 2, NEW_H = T.device[5] / 2;
+  // (v3.0.3) a few types don't read at that size (the clock's time, a title with buttons, a hint of two lines): their own
+  // small start — still small, just readable. In the old grid's cells, like the types' sizes (× 16 → fine cells).
+  const NEW_START = { clock: [2, 1], status: [2, 1], spot: [2, 0.75], energy: [2, 0.75], locks: [2, 0.75],
+    calendar: [2.5, 1], alerts: [2, 0.5], room: [1.5, 0.75] };
+  const newSize = (type) => {
+    const g = st.g;
+    if (tplOf(type) || userCard(type) || tdef(type)[0] === "roomhead") return sizeOf(type);
+    const stp = g.v === 2 ? SNAP : 1, r = (n) => Math.max(stp, Math.round(fz(n) / stp) * stp);
+    const [w0, h0] = NEW_START[type] || [NEW_W, NEW_H];
+    return [Math.min(r(w0), g.cols), Math.min(r(h0), g.rows)];
+  };
   const newId = () => { let n = 1; while (st.g.cards.some((c) => c.i === `c${n}`)) n++; return `c${n}`; };
   // a new card: at = where it was dropped; none = the first free place
   function add(type, at) {
@@ -1161,11 +1186,11 @@
     let w, h;
     if (at) ({ w, h } = at);
     else {
-      // its own size where that fits, else the nearest smaller one that does — its shape kept as well as it can be,
-      // never under half its width or height (a thermostat 1 row high is no use to anyone)
-      const [W, H] = sizeOf(type), sizes = [], stp = st.g.v === 2 ? SNAP : 1;
+      // the small starting size where that fits, else ever smaller (its shape kept as well as it can be),
+      // down to the smallest a card may be
+      const [W, H] = newSize(type), sizes = [], stp = st.g.v === 2 ? SNAP : 1;
       w = W; h = H;
-      for (let a = W; a >= Math.max(Math.min(stp, W), W / 2); a -= stp) for (let b = H; b >= Math.max(Math.min(stp, H), H / 2); b -= stp) sizes.push([a, b]);
+      for (let a = W; a >= Math.min(stp, W); a -= stp) for (let b = H; b >= Math.min(stp, H); b -= stp) sizes.push([a, b]);
       const kept = (p) => Math.min(p[0] / W, p[1] / H);
       sizes.sort((p, q) => kept(q) - kept(p) || q[0] * q[1] - p[0] * p[1]);
       for (const [a, b] of sizes) { at = freeSpot(a, b); if (at) { w = a; h = b; break; } }
@@ -1485,7 +1510,7 @@
     const box = $(".bld-pal-scroll"); if (!box || !st) return;
     if (st.ptab === "layers") return box.replaceChildren(...layers());
     const btn = (k, n, ic, d) => {
-      const [w, h] = sizeOf(k);
+      const [w, h] = newSize(k);
       return el("div.bld-add", { title: Kit.t("builder.pal.addTip", { what: d }), "data-type": k, "gs-w": String(w), "gs-h": String(h) }, iconEl(ic, 18), el("span", {}, n));
     };
     box.replaceChildren(
@@ -1931,9 +1956,12 @@
     }
     // what's inside follows the card's size: scaled to fit, or (lists) fitted to the width and scrolling up and down —
     // on top, where it's seen (it was hidden under Style)
-    if (c.t !== "blank") { const fitNow = s.fit === "scroll" || s.fit === false ? "scroll" : "scale";
-      what.unshift(tipRow(Kit.t("builder.resize.label"), Kit.t("builder.resize.tip"), seg([["scale", Kit.t("builder.resize.scale")], ["scroll", Kit.t("builder.resize.scroll")]], fitNow, (v) => { sty("fit", v === "scale" ? null : "scroll"); side(); })),
-        el("small.muted", {}, fitNow === "scale" ? Kit.t("builder.resize.scaleNote")
+    // (v3.0.3) the words and icons keep their own size (Style's Icon / Text size); "Grow and shrink with the card" (off by
+    // default) makes them follow the box from the size it has when it's switched on
+    if (c.t !== "blank") { const fitNow = s.fit === "scroll" || s.fit === false ? "scroll" : "scale", growOn = !!(s.grow && s.grow.w && s.grow.h);
+      what.unshift(tipRow(Kit.t("builder.grow.label"), Kit.t("builder.grow.tip"), el("label.switch", {}, el("input", { type: "checkbox", checked: growOn, onchange: (e) => { setGrow(c, e.target.checked); side(); } }), el("span"))),
+        tipRow(Kit.t("builder.resize.label"), Kit.t("builder.resize.tip"), seg([["scale", Kit.t("builder.resize.scale")], ["scroll", Kit.t("builder.resize.scroll")]], fitNow, (v) => { sty("fit", v === "scale" ? null : "scroll"); side(); })),
+        el("small.muted", {}, growOn ? Kit.t("builder.grow.onNote") : fitNow === "scale" ? Kit.t("builder.resize.scaleNote")
           : Kit.t("builder.resize.scrollNote"))); }
     if (what.length) parts.push(sec("shows", u ? Kit.t("builder.sec.devicesSettings") : Kit.t("builder.f.shows"), "", ...what));
     if (["device", "button"].includes(c.t) && o.id) {
@@ -1980,6 +2008,27 @@
       el("button.ghost", { type: "button", title: Kit.t("builder.card.saveTip"), onclick: () => saveTpl(c) }, Kit.t("builder.card.save")),
       el("button.ghost.bad", { type: "button", onclick: () => remove(c) }, Kit.t("builder.pal.remove"))));
     return el("div.card.bld-insp", {}, ...parts);
+  }
+
+  // (v3.0.3) "Grow and shrink with the card". On: the card's box now (in the grid's cells) is where its content is its own
+  // size — from there on it follows the box, so nothing jumps. Off: how much it grew (or shrank) with the box since then
+  // (the box against the box it had when switched on — grid.js Grid.fit's "grow" ratio) goes into its Icon and Text size,
+  // so it looks the same; from then on the box only gives it room. Only that ratio: the canvas's --gfit also holds the
+  // "doesn't fit" shrink, which the card does again on its own — baking that in would shrink it for good.
+  function setGrow(c, on) {
+    const s = c.s || (c.s = {});
+    if (on) { s.grow = { w: c.w, h: c.h }; return changed(false); }
+    let k = 1;
+    const ref = s.grow && typeof s.grow === "object" && s.grow.w > 0 && s.grow.h > 0 ? s.grow : null;
+    if (ref && c.w > 0 && c.h > 0) {
+      const kw = c.w / ref.w, kh = c.h / ref.h, scroll = s.fit === "scroll" || s.fit === false;
+      k = Math.max(0.4, Math.min(4, scroll ? kw : Math.min(kw, kh)));
+    }
+    // (the Style sliders' range, 50–250 %; 100 % is no setting at all)
+    const bake = (key) => { const n = Math.max(50, Math.min(250, Math.round((s[key] ?? 100) * k))); if (n === 100) delete s[key]; else s[key] = n; };
+    if (Math.abs(k - 1) > 0.005) { bake("ic"); bake("tx"); }
+    delete s.grow;
+    changed(false);
   }
 
   // keep a card as set up (its look, devices, actions, rules) under a name: Your cards → Saved cards

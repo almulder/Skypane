@@ -25,8 +25,11 @@ First places to look:
 - **Nothing answers:** is the container running? Is the address right (Docker: port `8088`, e.g.
   `http://192.168.1.20:8088/`)? On Unraid with br0, the Unraid server itself can't reach a container's br0 address by
   default — try from another device.
-- **"Skypane doesn't know this address":** you opened Skypane by a name instead of its IP. Add that name in
-  **Integrations → General → Extra names for this server (optional)** and press **Save and restart**, or use the IP.
+- **"Skypane doesn't know this address":** you opened Skypane by a name instead of its IP. Use the IP, or add the
+  container variable `ALLOWED_HOSTS` with that name and **re-create** the container — a restart keeps the old
+  variables. Docker Compose: add `- ALLOWED_HOSTS=skypane.local` under `environment:` and run `docker compose up -d`;
+  `docker run`: `docker rm -f skypane`, then run it again with `-e ALLOWED_HOSTS=skypane.local`; Unraid: Edit → add
+  the variable → Apply. See [Setting a container variable](install-docker.md#setting-a-container-variable).
 - **"Skypane can't save to its data folder"** on the sign-in page: see [the next section](#the-data-folder-isnt-writable).
 - **The page says "Restarting — back in a few seconds" for longer than a minute:** look at the container's log for a
   line from `[run_all]` or `[server]` that says what's wrong, then reload the page.
@@ -73,7 +76,7 @@ Since 3.0.2 each panel works only on the tablet approved for it ([panel-pairing.
 - **The code doesn't work:**
   - The code renews every 10 minutes (*New code in …*). Type the one the tablet shows now.
   - *That isn't the code on the tablet — 2 tries left*: check for look-alikes — codes never use 0, O, 1 or I.
-  - *Too many wrong codes — the request was cancelled*: 5 wrong codes end a request (and raise a notice). The tablet
+  - *Too many wrong codes — the request was canceled*: 5 wrong codes end a request (and raise a notice). The tablet
     starts a new one with a new code.
 - **The tablet isn't under New panel requests, or "This tablet has left the pairing screen":** a request lasts only
   while the pairing screen is open. A tablet that went to sleep or opened another page drops out. Wake it and reload
