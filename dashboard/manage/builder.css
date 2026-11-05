@@ -130,5 +130,142 @@ label.bld-pck input { width: 16px; height: 16px; accent-color: var(--acc); }
 .bld.focus.peek-insp .bld-side { right: 12px; }
 :root[data-theme=night] .bld.focus.peek-pal .bld-pal-col, :root[data-theme=night] .bld.focus.peek-insp .bld-side { background: rgba(37, 24, 91, .97); }
 .bld-pl > .sw { flex: none; }
+/* (v3.0.4) the room bar's section: the 4-way edge picker (a side of a little screen per edge), its rooms (builder.js dockSec) */
+.bld-dedge > span small { display: block; color: var(--t3); font-size: 12px; }
+.bld-edges { position: relative; flex: none; width: 96px; height: 66px; }
+.bld-edges button { position: absolute; min-width: 0; min-height: 0; padding: 0; border-radius: 4px; background: var(--input); border: 1px solid var(--line-2); box-shadow: none; }
+.bld-edges button:hover { background: var(--acc-soft); }
+.bld-edges button[aria-checked=true] { background: var(--acc); border-color: var(--acc); }
+.bld-edges .e-top { top: 0; left: 16px; right: 16px; height: 12px; } .bld-edges .e-bottom { bottom: 0; left: 16px; right: 16px; height: 12px; }
+.bld-edges .e-left { left: 0; top: 16px; bottom: 16px; width: 12px; } .bld-edges .e-right { right: 0; top: 16px; bottom: 16px; width: 12px; }
+.bld-edges .c { position: absolute; inset: 16px; border-radius: 4px; border: 1px dashed var(--line-2); pointer-events: none; }
+.bld-dnote { margin: -2px 0 2px; color: var(--t3); font-size: 12px; }
+.bld-drooms { display: flex; flex-direction: column; gap: 2px; }
+.bld-dgh { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; margin: 4px 0 2px; } .bld-dgh small { color: var(--t3); }
+.bld-droom { display: flex; align-items: center; gap: 4px; min-height: 34px; font-size: 13px; }
+.bld-droom .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bld-droom.off .nm { color: var(--t3); text-decoration: line-through; }
+button.bld-dmv { width: 28px; height: 28px; min-height: 0; padding: 0; display: grid; place-items: center; border: 0; border-radius: 7px; background: none; box-shadow: none; color: var(--t2); }
+button.bld-dmv:hover:not(:disabled) { background: var(--hover); color: var(--text); } button.bld-dmv:disabled { opacity: .3; background: none; }
+.bld-droom .sw { flex: none; margin-left: 4px; }
 /* a narrow window (800 × 1280): the top bar wraps in two tidy rows — no separators left hanging at a row's end */
 @media (max-width: 1099px) { .bld-top .vr { display: none; } .bld-top select { max-width: 210px; } .bld-crumb span { max-width: 90px; } .bld-top { column-gap: 6px; } }
+
+/* ---------- (v3.0.4) a Devices card's items (builder.js dvCard / dvItem; the pop-ups: devedit.js) ---------- */
+.dve-items { display: flex; flex-direction: column; gap: 3px; }
+.dve-li { display: flex; align-items: center; gap: 4px; }
+.dve-li .grip { flex: none; }
+.dve-lib { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; justify-content: flex-start; text-align: left; }
+.dve-lib > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dve-li.cur .dve-lib { border-color: #fbbf24; }
+.dve-add { flex-wrap: wrap; } .dve-add .dve-cbx { flex: 1 1 180px; }
+.dve-old { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 8px 10px; border-radius: 10px; border: 1px dashed var(--line); }
+/* the combobox buttons: what's picked (icon, name, room · kind) — a click opens its search-on-top list */
+.dve-cbx { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; padding: 7px 10px; border-radius: 10px; text-align: left; border: 1px solid var(--line); background: var(--field, transparent); color: inherit; cursor: pointer; }
+.dve-cbx:hover { border-color: var(--acc); } .dve-cbx:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+.dve-ci { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--acc-soft); color: var(--acc); }
+.dve-cbx.none .dve-ci { background: transparent; color: var(--t3); }
+.dve-ct { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.dve-ct b, .dve-ct small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .dve-ct small { color: var(--t3); }
+.dve-chev { flex: none; color: var(--t3); }
+/* one item: its preview (it stays in sight while the tabs scroll), its tabs */
+.dve-ed { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--glass-line); padding-top: 10px; margin-top: 4px; }
+.dve-pv { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px; border-radius: 12px; background: rgba(0, 0, 0, .18); position: sticky; top: 0; z-index: 2; }
+.dve-pvit { display: flex; align-items: center; gap: 10px; min-width: 150px; max-width: 100%; padding: 10px 14px; border-radius: 12px; border: 0; background: rgba(255, 255, 255, .06); color: inherit; cursor: pointer; }
+.dve-pvit.tp-right { flex-direction: row; text-align: left; } .dve-pvit.tp-left { flex-direction: row-reverse; text-align: right; }
+.dve-pvit.tp-bottom { flex-direction: column; text-align: center; } .dve-pvit.tp-top { flex-direction: column-reverse; text-align: center; }
+.dve-pvic { display: grid; place-items: center; padding: 8px; border-radius: 50%; background: rgba(255, 255, 255, .1); }
+.dve-pvit.on { box-shadow: inset 0 0 0 1px var(--dc, var(--acc)); }
+.dve-pvit.on .dve-pvic { background: var(--dc, var(--acc)); color: #fff; }
+.dve-pvit.bg-none .dve-pvic { background: none; } .dve-pvit.bg-none.on .dve-pvic { color: var(--dc, var(--acc)); filter: drop-shadow(0 0 6px var(--dc, var(--acc))); }
+.dve-pvtx { display: flex; flex-direction: column; min-width: 0; font-size: calc(14px * var(--tz, 1)); }
+.dve-pvtx small { color: var(--t3); font-size: .85em; }
+.dve-tabs { display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: rgba(0, 0, 0, .18); }
+.dve-tabs button { flex: 1; min-width: 0; padding: 6px 4px; font-size: 12.5px; border: 0; border-radius: 8px; background: none; color: var(--t2); cursor: pointer; }
+.dve-tabs button.cur { background: var(--acc); color: #fff; }
+.dve-panel { display: flex; flex-direction: column; gap: 7px; }
+.dve-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.dve-chips .chip { padding: 4px 9px; font-size: 12px; border-radius: 99px; border: 1px solid var(--line); background: none; color: inherit; cursor: pointer; }
+.dve-chips .chip.on { background: var(--acc); border-color: var(--acc); color: #fff; }
+.dve-ticks { display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow: auto; overscroll-behavior: contain; }
+.dve-fly { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dve-tk { display: flex; align-items: center; gap: 7px; padding: 3px 4px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+.dve-tk > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dve-tk:has(input:disabled) { opacity: .5; cursor: default; }
+.dve-mini { flex-wrap: wrap; gap: 6px; }
+.dve-colbtn { display: inline-flex; align-items: center; gap: 8px; }
+.dve-colsw { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line); background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red); }
+.dve-xywh { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.dve-num { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--t2); } .dve-num input, .dve-num select { width: 100%; min-width: 0; }
+/* on the screen: the open card's items — no borders; the picked one dashed; the cursor says move or resize */
+.dve-area { position: absolute; }
+.dve-it { position: absolute; box-sizing: border-box; border-radius: 10px; touch-action: none; user-select: none; cursor: move; }
+.dve-it:hover { background: color-mix(in srgb, var(--accent, #8b5cf6) 10%, transparent); }
+.dve-it.sel { outline: 2px dashed #fbbf24; outline-offset: 1px; background: rgba(251, 191, 36, .06); z-index: 5; }
+.dve-it.todo { outline: 2px dashed #fb923c; }
+.dve-line { position: absolute; z-index: 9; background: #fbbf24; border-radius: 2px; pointer-events: none; box-shadow: 0 0 0 2px rgba(0, 0, 0, .35); }
+/* the pop-ups: only they scroll; the page behind is inert and still */
+html.dve-lock, html.dve-lock body { overflow: hidden !important; overscroll-behavior: none; }
+.dve-shade { position: fixed; inset: 0; z-index: calc(var(--z-drawer, 50) + 40); background: rgba(6, 4, 18, .25); }
+.dve-pop { position: fixed; display: flex; flex-direction: column; gap: 6px; padding: 8px; overflow: auto; overscroll-behavior: contain; border-radius: 14px;
+  border: 1px solid var(--line); background: var(--pop, var(--surface, #1a1238)); color: var(--text); box-shadow: var(--shadow-lg, 0 16px 40px rgba(0, 0, 0, .5)); }
+.dve-picker { overflow: hidden; } .dve-picker .dve-lb, .dve-picker .dve-icons { overflow: auto; overscroll-behavior: contain; min-height: 0; flex: 1; }
+.dve-q { width: 100%; height: 36px; padding: 0 10px; border-radius: 9px; font-size: 14px; flex: none; }
+.dve-gh { position: sticky; top: 0; padding: 6px 8px 3px; font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--t3); background: var(--pop, var(--surface, #1a1238)); }
+.dve-opt { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; cursor: pointer; }
+.dve-opt.act { background: color-mix(in srgb, var(--acc, #8b5cf6) 22%, transparent); }
+.dve-opt.cur .dve-ot b { color: var(--acc); }
+.dve-oi { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .07); }
+.dve-ot { display: flex; flex-direction: column; min-width: 0; } .dve-ot small { color: var(--t3); }
+.dve-more { align-self: flex-start; margin: 4px 8px; }
+.dve-none:empty, .dve-inote:empty { display: none; }
+.dve-icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(48px, 1fr)); gap: 4px; align-content: start; }
+.dve-ic { height: 48px; display: grid; place-items: center; border-radius: 9px; border: 1px solid transparent; background: rgba(255, 255, 255, .04); color: inherit; cursor: pointer; overflow: hidden; }
+.dve-ic:hover, .dve-ic:focus-visible { border-color: var(--acc); } .dve-ic.cur { border-color: #fbbf24; }
+.dve-auto { font-size: 10.5px; padding: 0 2px; text-align: center; }
+.dve-colorpop { gap: 8px; }
+.dve-chead { display: flex; align-items: center; gap: 10px; } .dve-cprev { width: 34px; height: 34px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .6); flex: none; }
+.dve-cauto { align-self: flex-start; }
+.dve-sws { display: flex; flex-wrap: wrap; gap: 6px; } .dve-sw { width: 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .25); cursor: pointer; }
+.dve-crow { display: grid; grid-template-columns: 84px minmax(0, 1fr); align-items: center; gap: 8px; font-size: 12.5px; }
+.dve-rng { -webkit-appearance: none; appearance: none; width: 100%; height: 14px; border-radius: 7px; }
+.dve-rng::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #fff; border: 2px solid rgba(0, 0, 0, .4); }
+.dve-hex { height: 32px; padding: 0 8px; border-radius: 8px; font-family: ui-monospace, monospace; } .dve-hex.bad { border-color: #f87171; }
+.dve-cdone { align-self: flex-end; }
+/* (v3.0.4) a blank card's pieces, edited where the card is: around it dimmed a little, a quiet hint on top; the pieces
+   have no borders (dashed only while selected, faint on hover) and no marks — the cursor says move or resize */
+.bld-over.bld-inner.bld-inplace { box-shadow: 0 0 0 4000px rgba(6, 4, 18, .45); outline: 1.5px solid rgba(179, 157, 255, .55); outline-offset: 2px; border-radius: 10px; }
+.bld-screen.inplace .bld-inmask { cursor: default; }
+.bk-hint { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 30; display: none; align-items: center; gap: 8px; height: 28px; padding: 0 12px;
+  border-radius: 14px; font-size: 12.5px; white-space: nowrap; pointer-events: none; color: var(--t2, #d6d0f0); background: rgba(20, 12, 56, .82); border: 1px solid rgba(179, 157, 255, .3); }
+.bk-hint i { width: 7px; height: 7px; border-radius: 50%; background: var(--acc, #a78bfa); box-shadow: 0 0 8px var(--acc, #a78bfa); }
+.bld-screen.inplace .bk-hint { display: inline-flex; }
+.bk-ed-it { position: absolute; box-sizing: border-box; border-radius: 10px; cursor: move; touch-action: none; user-select: none; }
+.bk-ed-it:hover:not(.sel) { outline: 1px dashed rgba(179, 157, 255, .45); outline-offset: 2px; }
+.bk-ed-it.sel { outline: 1.5px dashed #fbbf24; outline-offset: 2px; }
+.bk-ed-it.todo:not(.sel) { outline: 1.5px dashed #fb923c; outline-offset: 2px; }
+.bk-guides { position: absolute; inset: 0; pointer-events: none; z-index: 60; }
+.bk-guides i { position: absolute; background: #f472b6; opacity: .7; }
+.bk-guides i.v { width: 1px; } .bk-guides i.h { height: 1px; }
+.bk-place { display: flex; flex-direction: column; gap: 6px; }
+.bk-order { display: flex; gap: 6px; } .bk-order button { flex: 1; }
+.bk-gsw { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; margin-top: 6px; }
+.bld-cpos { display: flex; flex-direction: column; gap: 4px; margin: 2px 0 6px; }
+/* (v3.0.4) Bins / Trash and Countdown & timers (builder.js trashEditor / timersEditor): chips, the 10 bin colors */
+.bld-sub { margin: 14px 0 4px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.bld-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.bld-chips button.cur { background: var(--acc-soft); color: var(--acc-text); border-color: color-mix(in srgb, var(--acc) 40%, transparent); }
+.bld-sws { display: flex; flex-wrap: wrap; gap: 5px; }
+.bld-sw { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; padding: 0; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+.bld-sw.cur { border-color: var(--acc); box-shadow: 0 0 0 2px var(--bg, #fff) inset; }
+.bld-chk { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
+/* (v3.0.4) the Network section: Protect storage isn't there yet (a dashed note, only here); a card's colors; the map's
+   "Arrange the parts" lets the drag through to the panel's card */
+.bld-soon { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 9px 12px; border-radius: 12px; border: 1.5px dashed var(--line-2, var(--line)); color: var(--muted); }
+.bld-soon b { display: block; font-size: 13px; color: var(--text); } .bld-soon small { display: block; font-size: 12px; line-height: 1.35; }
+.bld-netcols { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 10px; margin: 6px 0 8px; }
+.bld-netcols label { display: flex; align-items: center; gap: 8px; font-size: 12px; min-width: 0; }
+.bld-netcols input[type="color"] { flex: none; width: 30px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; cursor: pointer; }
+.bld-netcols span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bld-over.bld-pass, .bld-over.bld-pass * { pointer-events: none !important; }
+.bld-screen:has(.bld-over.bld-pass) .bld-frame { pointer-events: auto; }   /* (the drag reaches the panel's map: Arrange the parts) */

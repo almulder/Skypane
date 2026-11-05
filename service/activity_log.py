@@ -60,7 +60,7 @@ KINDS = {
     "account.admin": "accounts", "account.user": "accounts", "account.owner": "accounts", "account.password": "accounts",
     "account.password-set": "accounts", "account.code": "accounts", "account.code-dead": "accounts", "account.unlock": "accounts", "account.reset-command": "accounts",
     "settings.change": "settings", "settings.guest": "settings", "settings.guest-now": "settings", "settings.guest-mode": "settings",
-    "settings.lockdown": "settings", "settings.check": "settings", "settings.weather": "settings", "settings.event-icons": "settings",
+    "settings.lockdown": "settings", "settings.check": "settings", "settings.weather": "settings", "settings.event-icons": "settings", "settings.display": "settings",
     "weather.alert": "alerts", "weather.clear": "alerts",   # (v3.0.0: a weather device's warnings — the event name, never its text)
     "panel.add": "panels", "panel.remove": "panels", "panel.setup": "panels", "panel.layout": "panels", "panel.pin": "panels",
     "panel.pin-locked": "panels", "panel.live": "panels", "panel.ack": "alerts",

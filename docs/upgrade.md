@@ -10,6 +10,14 @@ stay (3.0.2 removes the old main panel — see below). Panels reload by themselv
 you want to decide when to update. The Manager shows the version under the Skypane name in the sidebar (e.g.
 `v3.0.0 · sha-1234567`), and each panel shows it in its lower-left corner.
 
+## 3.0.3 → 3.0.4: cards replaced, a notice for admins
+
+Nothing to do before or after: update as usual. At the first start, old cards become their newer versions by
+themselves (Device, Value, Button, Lock, Fan and Scene buttons → Devices; Bin day → Bins / Trash; Countdown and
+Timers → Countdown & timers), each panel backed up first in `backups/`. Each admin sees **What changed in 3.0.4**
+once on the Overview. Weather cards keep the source they showed. The room bar is now only moved in the Manager. The
+full list: [CHANGELOG.md](../CHANGELOG.md) → 3.0.4 → Upgrading.
+
 ## 3.0.1 → 3.0.2: panel pairing
 
 From 3.0.2 on, a panel only works on the tablet the admin approved for it ([panel-pairing.md](panel-pairing.md)).

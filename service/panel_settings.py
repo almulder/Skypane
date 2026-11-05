@@ -248,7 +248,6 @@ PATHS = {
     "deviceOrder": _device_order,                 # {room id: [device ids]}: the order on that room's page
 
     "roomOrder": _room_order,                     # the room buttons' order (room ids)
-    "arrangeOnPanel": _bool,                      # also press-and-hold arranging on the panel itself
     "ledStrip": _bool,                            # the tablet has our LED strip (panel agent)
     "pinSound": _bool,                            # (v3.0.3) a soft tick on each PIN pad key (unset = on; the same for every key)
     "showVersion": _bool,                         # (v3.0.3) the version tag in the panel's corner (unset = shown)
@@ -298,13 +297,17 @@ PATHS = {
     "music.url": _url,
     "cameras.go2rtc": _url,
     "effects.maxLoad": _one_of(0, 1, 2, 3, 4),   # the heaviest weather effect (0 = auto, measured on the tablet)
-    "units.temp": _one_of("F", "C"),              # (v3.0.0) how this panel shows temperatures (unset: °F)
-    "units.wind": _one_of("mph", "km/h"),         # … and wind speeds (unset: mph)
+    # (v3.0.0) how this panel shows temperatures and wind speeds — (v3.0.4) its own, "this panel only": unset or ""
+    # follows the house (Manager → Display settings, house_settings.DISPLAY)
+    "units.temp": _one_of("", "F", "C"),
+    "units.wind": _one_of("", "mph", "km/h", "kn", "m/s"),
+    "weather.src": _one_of("auto", "om", "hub", "owm"),   # (v3.0.4) the built-in layouts' weather: its source (unset: auto)
 }
 
 
 # settings that no longer exist (a panel's old save may still have them): never read, never an error
-OLD_KEYS = ("alertsShow", "alertLevel5", "alertsOff", "freezerMax", "pinUnlockSeconds")
+OLD_KEYS = ("alertsShow", "alertLevel5", "alertsOff", "freezerMax", "pinUnlockSeconds",
+            "arrangeOnPanel")   # (v3.0.4: the room bar and a room's devices are arranged in the Manager only)
 
 # every alert setting of a panel and its PIN windows: only the admin, in the Manager — a panel's
 # own save never sets them (not even before they're set: the panel's defaults apply), a non-admin login neither
@@ -315,7 +318,7 @@ ADMIN_ONLY = ("alertMinLevel", "quietFrom", "quietTo", "quietModes", "quietLevel
 # the ones a panel's own save may not change once set (server.py _patch): all but the guest card's show / hide, which
 # a house without a UniFi console still sets on the panel itself
 # (the room page hides devices too; the weather effects stay the panel's own too)
-# (the order of rooms / devices too: the panel can still arrange on the wall)
+# (the order of rooms / devices too: an older panel's own save still carries them)
 PANEL_LOCKED = tuple(p for p in PATHS if p not in ("guest.show", "hiddenDevices", "effects.maxLoad", "deviceOrder", "roomOrder",
                                                    "look.theme", "look.hue", "roomLayout", "look.background", "look.sky", "look.skyColors",
                                                    "effects.place", "homeAfter"))   # (the panel's own Settings set these too)
@@ -326,7 +329,7 @@ PANEL_LOCKED = tuple(p for p in PATHS if p not in ("guest.show", "hiddenDevices"
 # what each setting is called on the Manager's pages (refusals name it like this, never by its id)
 LABELS = {"panelName": "Name", "language": "Language", "kioskName": "FreeKiosk device name", "hiddenRooms": "Hidden rooms", "hiddenDevices": "Hidden devices",
           "extraDevices": "Devices from other rooms", "deviceOrder": "Device order", "roomOrder": "Room order",
-          "arrangeOnPanel": "Arrange on the panel", "ledStrip": "LED strip", "pinSound": "PIN pad sound",
+          "ledStrip": "LED strip", "pinSound": "PIN pad sound",
           "showVersion": "Show the version on this panel", "look.theme": "Theme", "look.hue": "Custom color", "look.background": "Background",
           "look.sky": "Animated sky", "look.skyColors": "Sky colors", "effects.place": "Weather effects", "homeLayout": "Home layout",
           "homeGrid": "Home layout", "roomLayout": "Room layout", "roomGrids": "Room layouts", "roomLayouts": "Room layouts",
@@ -440,6 +443,15 @@ def migrate_pin_window(settings):
     if "pinGeneralSeconds" not in s and isinstance(old, int) and not isinstance(old, bool) and 0 <= old <= 3600:
         s["pinGeneralSeconds"] = old or 15
     return s
+
+
+def migrate_room_bar(settings):
+    """(v3.0.4) The room bar is moved and arranged in the Manager only: the old "arrange on the panel too" switch
+    (arrangeOnPanel) goes. The bar keeps its edge, style and rooms as they were (dockAt unset is the bottom, as before).
+    The settings without it, or None when there's nothing to move."""
+    if not isinstance(settings, dict) or "arrangeOnPanel" not in settings:
+        return None
+    return {k: v for k, v in settings.items() if k != "arrangeOnPanel"}
 
 
 def managed(settings):

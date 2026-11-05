@@ -23,6 +23,9 @@ Skypane is built on the work of these people and projects. Thank you!
     pellet boiler, pool robot, water and industrial pumps, robot mower, sauna, shutters and blinds, underfloor heating,
     UPS, ground-source heat pump), re-coloured and with the
     animation reworked to transform/opacity only.
+  - [ha-poubelle-card](https://github.com/skyrotter/ha-poubelle-card) by **skyrotter** (MIT): the Bins / Trash card's
+    animated styles in `dashboard/layouts/v4/shared/trash.js` (a bin that fills day by day, flies when it's full, shakes
+    the evening before, hops on pickup morning, sparkles once emptied; its 10 colors), our own drawings.
   - Their licences: `dashboard/vendor/anim/*/LICENSE`.
 - **Icon motions** on device cards (a fan turns, a washer shakes, a kettle steams, sonar rings for motion…) and
   "running above N watts" for appliances on smart plugs: the idea comes from

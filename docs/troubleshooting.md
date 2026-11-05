@@ -148,6 +148,26 @@ Forgot your Manager password as well? Reset that first ([above](#i-forgot-the-ow
 
 Set **Integrations → General → Time zone** (e.g. `America/Chicago`) and **Save and restart**.
 
+## The UniFi cards don't show on a panel
+
+The Network cards stay hidden while UniFi Network isn't connected (the builder's canvas says why). Set the UniFi
+console address and its UniFi Network API key (UniFi Network 10 or newer, an admin with full Network management)
+under **Integrations → Guest Wi-Fi console**, **Save and restart**, then check **Integrations → UniFi Network**: it
+says Connected, or what went wrong. Recordings & NVR isn't there yet: it needs a Protect login.
+
+## A weather card shows a different weather than before
+
+Since 3.0.4 each weather card picks its own source (**Weather from** in its settings). The upgrade gave each card the
+source it showed, so nothing should change; on **Automatic** it's the Hubitat device if it's connected, else
+OpenWeatherMap with your key, else Open-Meteo. A source that isn't connected is grayed out in the builder.
+
+## "Timer up" doesn't sound on the house speakers
+
+Only a Hubitat speaker whose driver has a `speak` command (SpeechSynthesis) can be picked, and the Hubitat bridge must
+be running. Check the speaker is ticked in Maker API and not on the never-switch list. The container log says
+`timers: Timer up on N of N house speaker(s)` and the bridge `Timer up: speak on device … sent` (or why not). A timer
+that ran out while Skypane was stopped isn't spoken later.
+
 ## Send feedback says it can't reach the feedback service
 
 Your Skypane server needs internet access to send a report. Press **Copy report** and send the text another way.

@@ -1,5 +1,177 @@
 # Changelog
 
+## 3.0.4
+
+### Devices card
+- **One Devices card** replaces Device, Devices, Value, Button, Lock, Fan and Scene buttons: lights, switches,
+  readings, buttons, locks, fans and scenes as a List, Tiles, Freeform or one Single big item.
+- **Each item has its own settings,** with a live preview on top and four tabs: Device · Actions · Look · Advanced.
+  Click an item (or double-click the card) to pick it.
+- **What a press does:** on / off when the device can switch (the Dyson: Fan on / Fan off), else one of its own
+  commands in plain words (Auto, Speed 1–10…). Another device, a room or a page is under "Something else…". **Hold**
+  opens a fly-out: tick which of its options show (up to 8). A double-tap is optional.
+- **Ask before doing it** (Advanced): "Turn on Desk fan?" Yes / Cancel first. A garage door always asks, then the PIN.
+- **Look:** an icon picker with its search on top (all icons, drawings, your own pictures; Animated), a motion while
+  the device is on, a round background or none, Color when on (Automatic or any color), Icon size and Text size, and
+  the text on any side.
+- **Freeform:** drag an item anywhere and resize it from any edge or corner; X / Y / W / H follow; the arrow keys move
+  it (Shift: 10 at a time). **Tiles:** drag a tile's right or bottom edge to span more tiles. **List and Tiles:** drag
+  an item to a new place.
+- **Single big item with several items:** swipe left or right on the panel; dots show where you are.
+- **The air purifier in Auto shows its speed:** "Auto · Speed 4", else "Auto".
+- Fixed: "Switch a device on and off" no longer asks for another device, and the Dyson is no longer left out.
+
+### Builder
+- **Device pickers:** the search is the list's first row. Type any words (name, room or kind, in any order); ↑ ↓ and
+  Enter pick. Grouped by room, each with its kind's icon.
+- **Cards resize from all four corners and all four edges.** A selected card's settings start with its X / Y / W / H,
+  in cells of the panel's 192 × 128 grid; they follow a drag and move the card as you type.
+- **Pop-ups** (device, icon and color pickers) scroll on their own; Esc or a click outside closes them.
+- **The blank card is edited where it is:** a double-click (or "Edit pieces") no longer zooms; the rest dims a little
+  and "Editing pieces — Esc to finish" shows on top.
+- **Its pieces go anywhere:** no grid; drag and resize from any edge or corner; X / Y / W / H in % of the card; the
+  arrow keys move 1 % (Shift: 10 %); Bring forward / Send back; Undo / Redo for every move. **Alignment guides** show
+  when an edge or a middle lines up — nothing snaps.
+
+### Garage doors
+- **Garage door sets, Single to Quad:** a Picture & values card's garage (and a blank card's garage piece) takes 1–4
+  doors, each Single or Double-wide, each with its own open and close times. Each door is tapped on its own (asked
+  first, then the PIN).
+- **A vibration or tilt sensor on a door (optional):** "Closing…" while it shakes, "Opening…" when it shakes again with
+  no "closed" (the safety eye sent it back up), "Partly open" when it stops. With or without one, the close time
+  running out with no "closed" shows "Not closed", in amber. The contact saying closed always wins.
+
+### Bins / Trash
+- **Bins / Trash** (replaces Bin day): wheelie, recycling and inside bins, bags and bulky items on one card, each drawn
+  a little fuller every day until pickup day. Name each one; 10 colors, whole bin or lid only; Still or Animated
+  ("Calm" for old tablets); or your own picture. The line on top: "Tomorrow is trash day" / "Trash day today" / the
+  next pickup.
+- **Schedules:** weekly, every N weeks, even / odd weeks, the 1st–4th or last weekday of the month, seasonal; the time
+  the truck comes. **Holidays** (one list for the house): per bin, nothing / next day / next work day / same day next
+  week / the rest of that week a day later / no pickup.
+- **The reminder:** from a set time each due bin is a Reminder with its button (Taken out, Emptied or At the curb);
+  pressing it clears that bin on every panel. An optional alarm chimes and says "Don't forget the bins".
+- The animated bins are after skyrotter's Poubelle Card (MIT) — our own drawings; see CREDITS.md.
+
+### Countdown & timers
+- **Countdown & timers** (replaces Countdown and Timers): countdowns to a date and time, and timers (one per kid, say)
+  that start from the house's presets with +1 min, Pause / Resume and Stop. Any mix of Days · HH · MM · SS.
+- **A timer on several panels:** Linked (on that panel's card too, or runs with its own timer of the same name) or
+  Notification only (it counts down there). It goes off on both.
+- **"Timer up"** fills the screen in the timer's color with its chime or its words, and closes itself after its
+  seconds. It looks like a level 5 but isn't one: no PIN, no alert level.
+- **PIN-protect timers on this panel:** +1 min, Pause, Resume and Stop ask for the panel PIN; "Presets still start
+  without the PIN" is on unless you switch it off. A lock shows next to the card's title.
+- **Lights that flash on "Timer up"** (up to 4): on and off twice, then back as they were — only lights this panel may
+  switch without the PIN, through the same checks as a tap.
+- **House speakers on "Timer up"** (up to 3): Hubitat speakers with a `speak` command (SpeechSynthesis) say the timer's
+  words. The Skypane service sends it, not the panel, through the bridge's usual checks (the allowlist and never
+  list); the bridge sends `speak` only from this feature and only to a device that has it. A volume only for a speaker
+  with setVolume.
+- **"Timer:" from a Hubitat rule:** send the Skypane Notifier "Timer: Emma, Free time" (a preset) or
+  "Timer: Pizza, 0d00:20" (days, hours:minutes) and every timer with that name starts. It isn't shown as an alert —
+  the bridge clears it on the hub. No driver update needed.
+
+### UniFi
+- **Nine Network cards** in the builder, each with a Style (A / B / C) and its own colors: Internet, Network map,
+  Status tabs, Clients & gateway, UniFi devices, PoE power, Clients, Client log and Network values. Hidden on the
+  panels while UniFi Network isn't connected (the builder's canvas says why).
+- **Setup:** the console address and UniFi Network API key under Integrations → Guest Wi-Fi console;
+  **Integrations → UniFi Network** says Connected, or Trouble in plain words.
+- **Reads your UniFi console only while someone looks:** a panel with a Network card or the Manager in the last 2
+  minutes, then every 30 seconds. No API key, IP address, MAC address or serial number goes to a panel or the Manager.
+- **Internet lines** by the name UniFi gives each one (WAN 1 / WAN 2 underneath); rename a line and pick its type;
+  ISP, speed, latency, a 24-hour graph and uptime bars.
+- **The gateway, switches, access points and the UPS:** model, online, CPU and memory, temperature, PoE watts and
+  budget, the busiest PoE ports, firmware up to date.
+- **Network map:** which device plugs into which; drag the parts where you want them in the builder. The UNVR and the
+  cameras are on the map, never in the Clients list.
+- **Clients** with UniFi's own names, network, Wi-Fi, signal and an icon by type. **Client log** (joined, left, moved)
+  also in Health → Timeline → Network. **A new device** is a small notice on the panels — not one of the 1–5 alerts.
+- **UniFi Network settings** (admins): line names and types, the new-device notice and its panels, guests on the
+  panels, the PoE warning (50–100 %), the client log and how long it's kept. Saved at once, no restart.
+- **Network values** anywhere: Internet, the active line, ping, the gateway, PoE watts, clients, UniFi devices online.
+- Not yet: Recordings & NVR (Protect's API key can't read the recorder's storage); UniFi values inside a Devices
+  card's value picker (the Network values card does that for now).
+
+### Weather
+- **Your own OpenWeatherMap key (optional),** in Integrations → Weather: One Call 3.0, fetched once for the house every
+  15 minutes and shared by every panel, at most 800 calls a day. The key is shown only as set or not set, never sent
+  to a panel, never logged.
+- **14 days:** what OpenWeatherMap or the Hubitat device doesn't have comes from Open-Meteo (a small blue dot).
+- **Each weather card picks its source** ("Weather from"): Automatic, Built-in (Open-Meteo), Hubitat device or
+  OpenWeatherMap. Automatic works as before. A source that isn't connected is grayed out, with a link to connect it.
+  The built-in layouts' weather has the same choice (`weather.src`).
+- **"Use it for the weather card" is gone** from Integrations; its saved value is what Automatic follows.
+- **7 or 14 days** on a weather card; 14 show as two rows of 7.
+- **Tap a day for its hours,** hour by hour in a row to scroll; fetched only when tapped. Can be switched off per card.
+- **OpenWeatherMap's warnings in the panels' alerts,** like the weather device's: the same levels, panels and
+  dismissing. A warning both report shows once.
+
+### Display settings
+- **Units and date formats for the whole house:** Manager → Display settings (the admin). Temperature, distance and
+  speed, pressure, rain, the date and time format, the first day of the week, and the decimals.
+- **Every panel follows it** (clock, calendar, events, alerts, logs, weather, thermostats, room temperatures) within a
+  few seconds. A panel can still keep its own temperature and wind units. Health → Timeline uses it for every login.
+
+### Cameras
+- **Choose what each camera's label shows:** Cameras → a camera → Label. Name, room, your own text, any mix, or
+  nothing. The same on a tile, the Cameras page and full screen. A camera button card shows it too.
+
+### Room bar
+- **Move it in the layout builder:** point at it and drag it by its dots to any edge; Esc puts it back. Saved with the
+  layout; Undo takes it back. With no card selected, its settings sit on the right.
+- **A Room bar tab in Panels:** show or hide it, its edge, style, names, auto-hide and the rooms on this panel (moved
+  here from Rooms & devices and Look & layout).
+- Every bar style is checked on all four edges.
+
+### Manager
+- **"What changed in 3.0.4" on the Overview** (admins, once each): every card the upgrade replaced, panel by panel.
+- **The version** ("v3.0.4") faintly in the lower-right corner of every page, on the sign-in page and on the panels;
+  point at it in the Manager for the exact build.
+- **Drag to reorder** wherever there's ▲ ▼ (Rooms & devices, Camera views, Event icons): a ⠿ grip for mouse or finger;
+  Esc cancels, Undo puts it back; Alt+↑ ↓ or Space on the keyboard.
+
+### Upgrading
+- **Old cards become their newer versions by themselves** at the first start, each panel backed up first (in
+  `backups/`; the saved cards in `house/card-templates.v303.json`): Device, Devices, Value, Button, Lock, Fan and Scene
+  buttons → Devices; Bin day → Bins / Trash (its bins and schedules, Still, no alarm); Countdown → Countdown & timers
+  (its date); a Timers card → one timer with its minute buttons as presets. Each keeps its place, size and settings,
+  and a moved Devices card keeps its old look until you press "Use the new look".
+- **The notice:** each admin sees "What changed in 3.0.4" once on the Overview — old → new, which screen, the card's
+  name, a link to each panel's layout, the saved cards, and anything that couldn't move (it still works). "Got it"
+  hides it; Quick links → "What changed in 3.0.4" shows it again. The panels show nothing new — only their version.
+- **Weather cards keep their source:** each one (on every panel, the built-in layouts and your saved cards) gets the
+  source it showed — "Hubitat device" where "Use it for the weather card" was on, "Built-in (Open-Meteo)" where it was
+  off.
+- **The house's units** start as the ones most panels showed; a panel that showed others keeps them as its own. The
+  date format starts on Automatic.
+- **The room bar can no longer be moved on the tablet:** the "Arrange on the panel too" switch is gone (also for a
+  room's devices). Every panel keeps its edge.
+- A blank card from before keeps its look: its pieces move from the old 24 × 24 grid as it's opened or saved.
+- **The Skypane Helper app is not in this release.**
+- The Hubitat driver is unchanged: no driver update.
+
+### Defaults we chose (tell us if you want them different)
+- Devices card: the item kinds keep their names (Value, Switch, Button, Lock, Fan, Scene); a new fly-out gets a short
+  set (the Dyson: Auto, 2, 4, 6, 8, 10, Off); a click in the builder only picks an item; a hold never unlocks;
+  X / Y / W / H in % of the card; a tile spans up to 4 × 4; an animated icon moves the whole time the device is on.
+- Blank card: guides on (remembered in this browser); pieces in % of the card, whole cards in grid cells; cards keep
+  snapping to the grid (Alt for free); a piece always stays inside its card.
+- Timers: no lights and no house speakers on "Timer up"; the speakers' volume left as it is; up to 4 lights and 3
+  speakers; "Presets still start without the PIN" on.
+- Bins / Trash: the reminder from 19:30 the evening before; the alarm off (21:00 when on).
+- UniFi: no ISP speed-test button; the graph covers 24 h; client log kept 7 days; the new-device notice on every panel;
+  guests hidden on wall panels; PoE warning at 80 %; PoE ports named by the device plugged in; cameras not in the
+  UniFi devices list.
+- UniFi cards: Style A everywhere; the graph starts Combined with latency on; all side-panel pieces; the map left to
+  right, orbs follow the traffic, glow 60 %, snap to grid off, ports shown on a tap, Protect gear on with a camera
+  bubble per switch; Network values show Internet, the active line, ping, Wi-Fi clients and UniFi devices; the
+  Protect tab opens the cameras page.
+- Weather: a new card on Automatic; "Tap a day for its hours" on.
+- Room bar: each panel keeps its own edge (not one for all panels); the Rail style fills the whole side on the left
+  or right.
+
 ## 3.0.3
 
 ### Weather

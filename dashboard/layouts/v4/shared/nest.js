@@ -5,7 +5,11 @@
 // t = { temp, heat, cool, mode: heat|cool|fan|off }
 // "fan" = thermostat off + fan circulating (Hubitat: setThermostatMode off + setThermostatFanMode circulate).
 (function () {
-  const MIN = 50, MAX = 90, START = 120, SWEEP = 300; // degrees; 0° = 3 o'clock, clockwise
+  let MIN = 50, MAX = 90; const START = 120, SWEEP = 300; // degrees; 0° = 3 o'clock, clockwise
+  // (v3.0.4) the ring's range is in the hub's unit (Fmt.hubRange: set points go back as they are); the numbers on it are
+  // in the panel's (Fmt.hubTemp)
+  const range = () => { if (window.Fmt) ({ lo: MIN, hi: MAX } = Fmt.hubRange()); };
+  const deg = (v) => (window.Fmt ? Fmt.hubTemp(v) ?? "—" : Math.round(v));
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
   const target = (t) => (t.mode === "heat" ? "heat" : t.mode === "cool" ? "cool" : null);
@@ -14,6 +18,7 @@
   const pt = (a, r) => [150 + r * Math.cos((a * Math.PI) / 180), 150 + r * Math.sin((a * Math.PI) / 180)];
 
   function tempAt(x, y) {
+    range();
     const dx = x - 150, dy = y - 150;
     if (Math.hypot(dx, dy) < 75) return null;
     let a = (Math.atan2(dy, dx) * 180) / Math.PI;
@@ -35,7 +40,7 @@
     }
     const ca = ang(t.temp), [mx0, my0] = pt(ca, 130), [mx1, my1] = pt(ca, 106), [lx, ly] = pt(ca, 92);
     s += `<line x1="${mx0}" y1="${my0}" x2="${mx1}" y2="${my1}" stroke="#fff" stroke-width="4" stroke-linecap="round"/>`;
-    s += `<text x="${lx}" y="${ly + 5}" text-anchor="middle" font-size="15" fill="#fff" opacity=".9">${Math.round(t.temp)}</text>`;
+    s += `<text x="${lx}" y="${ly + 5}" text-anchor="middle" font-size="15" fill="#fff" opacity=".9">${deg(t.temp)}</text>`;   // (the panel's unit, as the dial center)
     if (set != null) { const [hx, hy] = pt(ang(set), 120); s += `<circle cx="${hx}" cy="${hy}" r="11" fill="${glow}" stroke="#fff" stroke-width="3"/>`; }
     return s;
   }
@@ -57,9 +62,10 @@
     const sides = !auto ? "" : ["heat", "cool"].map((s, i) => `<g data-side="${s}" style="cursor:pointer">
         <rect x="${i ? 150 : 74}" y="85" width="76" height="44" fill="transparent"/>
         <rect x="${i ? 152 : 76}" y="93" width="72" height="28" rx="14" fill="${s === "heat" ? "#ff7a2f" : "#3b9bff"}" fill-opacity="${t.mode === s ? 0.45 : 0}" stroke="#fff" stroke-opacity="${t.mode === s ? 0.5 : 0.2}"/>
-        <text x="${i ? 188 : 112}" y="112" text-anchor="middle" font-size="13" letter-spacing="1" fill="#fff" opacity="${t.mode === s ? 1 : 0.6}">${esc(T("nest.side", { mode: T(`nest.${s}`), t: Math.round(t[s]) }))}</text></g>`).join("");
+        <text x="${i ? 188 : 112}" y="112" text-anchor="middle" font-size="13" letter-spacing="1" fill="#fff" opacity="${t.mode === s ? 1 : 0.6}">${esc(T("nest.side", { mode: T(`nest.${s}`), t: deg(t[s]) }))}</text></g>`).join("");
     const tgt = target(t);
-    const big = tgt ? t[tgt] : esc(T(t.mode === "fan" ? "nest.fan" : "nest.off"));
+    range();
+    const big = tgt ? deg(t[tgt]) : esc(T(t.mode === "fan" ? "nest.fan" : "nest.off"));
     return `<svg viewBox="0 0 300 300" font-family="'Segoe UI', system-ui, sans-serif"><defs>
         <radialGradient id="${id}f" cx=".5" cy=".38" r=".7"><stop offset="0" stop-color="#1a1530"/><stop offset="1" stop-color="#05040b"/></radialGradient>
         <filter id="${id}g" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="7"/></filter></defs>
@@ -69,6 +75,6 @@
       <text x="150" y="112" text-anchor="middle" font-size="14" letter-spacing="2.5" fill="#fff" opacity=".75">${label}</text>
       <g class="nest-set" style="cursor:pointer"><circle cx="150" cy="152" r="60" fill="transparent"/>
         <text x="150" y="172" text-anchor="middle" font-size="62" font-weight="200" fill="#fff">${big}</text></g>${sides}
-      <text x="150" y="208" text-anchor="middle" font-size="15" fill="#fff" opacity=".7">${esc(T(auto && (o === "heating" || o === "cooling") ? (o === "heating" ? "thermo.heatingInside" : "thermo.coolingInside") : "thermo.inside", { t: Math.round(t.temp) }))}</text></svg>`;
+      <text x="150" y="208" text-anchor="middle" font-size="15" fill="#fff" opacity=".7">${esc(T(auto && (o === "heating" || o === "cooling") ? (o === "heating" ? "thermo.heatingInside" : "thermo.coolingInside") : "thermo.inside", { t: deg(t.temp) }))}</text></svg>`;
   };
 })();

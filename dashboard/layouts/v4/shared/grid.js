@@ -30,6 +30,9 @@
     const n = typeof v === "number" ? v : parseFloat(v);
     return Number.isFinite(n) && String(v).trim() !== "" && /^-?[\d.]+$/.test(String(v).trim()) ? n.toFixed(dec ?? (Number.isInteger(n) ? 0 : 1)) : String(v);
   };
+  // (v3.0.4) a Hubitat temperature in the panel's unit (Fmt): the hub reports in its own scale (Display settings "Your
+  // hub reports temperatures in" — never the house's display unit) and is converted; without Fmt, rounded as before
+  const degs = (v) => (window.Fmt ? Fmt.hubTemp(v) : Math.round(v));
   // {{123.temperature}} · {{123.name}} · {{time}} · {{date}} · {{greeting}} — every value escaped
   const fill = (text) => esc(text).replace(/\{\{\s*(?:(\d{1,9})\.([A-Za-z][A-Za-z0-9_]{0,39})|(time|date|greeting))\s*\}\}/g, (m, id, at, word) => {
     if (word) return esc(word === "time" ? `${H.time()} ${H.ampm()}` : word === "date" ? H.date() : H.greeting());
@@ -47,7 +50,17 @@
   };
   // what a device is right now: [state text, active?, icon]
   const KIND_ICON = { light: "bulb", fan: "fan", outlet: "plug", switch: "power", shade: "shade", valve: "drop", garage: "car" };
+  // (v3.0.4) an air purifier (the house model's "thing" of kind purifier — the Dyson driver: fanState / fanMode / fanSpeed
+  // "0006"): off, on Auto, or running at a speed 1–10 — its words "On · Speed 6" / "Auto" ("Auto · Speed 4" when it
+  // reports the speed Auto picked) / "Off", never its temperature
+  const purifier = (id) => { const t = id && H.thing ? H.thing(id) : null; return t && t.kind === "purifier" ? t : null; };
+  const purNow = (t) => {
+    const a = t.attrs || {}, off = String(a.fanMode || a.fanState || "").toUpperCase() === "OFF", auto = !off && String(a.fanMode || "").toUpperCase() === "AUTO";
+    return { off, auto, sp: parseInt(a.fanSpeed, 10) || 0 };
+  };
   function devState(id) {
+    const pt = purifier(id);
+    if (pt) { const p = purNow(pt); return [p.off ? T("val.off") : p.auto ? (p.sp ? `${T("val.auto")} · ${T("g.speed", { n: p.sp })}` : T("val.auto")) : p.sp ? `${T("val.on")} · ${T("g.speed", { n: p.sp })}` : T("val.on"), !p.off, "airPurifier"]; }
     const d = H.device(id), lock = H.state.locks.find((l) => l.id === id), a = H.attrs(id);
     const r = (k) => a[k] ?? H.reading(id, k), w = parseFloat(r("power"));
     // (a plug's switch: what it draws as well)
@@ -84,7 +97,7 @@
     if (r("valve") != null) return [r("valve") === "open" ? T("val.open") : T("val.closed"), r("valve") === "open", "valve"];
     if (r("door") != null) return [GD_TEXT[r("door")] || words(r("door")), r("door") !== "closed", "garage"];
     if (r("temperature") != null) {   // (a thermostat: its mode too — "70° · Auto")
-      const m = r("thermostatMode"); return [`${fmt(r("temperature"))}°${m ? ` · ${words(m)}` : ""}`, false, "thermo"];
+      const m = r("thermostatMode"); return [`${fmt(degs(r("temperature")))}°${m ? ` · ${words(m)}` : ""}`, false, "thermo"];
     }
     if (r("presence") != null) return [r("presence") === "present" ? T("g.home") : T("g.away"), r("presence") === "present", "user"];
     if (r("humidity") != null) return [`${fmt(r("humidity"))} %`, false, "drop"];
@@ -98,7 +111,7 @@
   const ROOM_KINDS = { lights: ["light"], switches: ["switch", "outlet"], fans: ["fan"], shades: ["shade"] };
   function itemsOf(c) {
     const o = c.o || {}, r = Grid.room;
-    if (c.t === "group" || c.t === "scenes") return Array.isArray(o.items) ? o.items : [];
+    if (c.t === "group" || c.t === "scenes" || c.t === "devices") return Array.isArray(o.items) ? o.items : [];
     if (c.t === "spot") return (Array.isArray(o.rows) ? o.rows : []).map((r) => ({ id: r.id, as: r.as || "value", passive: !["switch", "lock"].includes(r.as) }));
     if (c.t === "roomdevs") return r ? H.devices(r).filter((d) => !ROOM_KINDS[o.show || "all"] || ROOM_KINDS[o.show].includes(d.kind)).map((d) => ({ id: d.id })) : [];
     if (c.t === "roomopen") { const p = r ? H.placed(r.name) : { locks: [], doors: [], windows: [] }; return [...p.locks, ...p.doors, ...p.windows].map((x) => ({ id: x.id })); }
@@ -196,11 +209,20 @@
   // contact sensor (the card's "contact"): a press while it's closed shows the door opening for its travel time, a press
   // while it's open shows it closing until the contact closes; it then stays open or closed as the contact says. Opened
   // or closed some other way (its remote, the wall button) the contact still moves it. Nothing to go by → null.
-  const gStates = new Map(), QUICK = 1800;   // card id → { phase, since, sent, pos, quick }; the catch-up closing (ms)
+  // (v3.0.4, the garage door sets: mockups/prototypes/garage-bins-timers.html) A door may have its own close time
+  // ("tclose"; else its open time) and a vibration / tilt sensor ("vib": its "acceleration" active / inactive):
+  //   1 · open, then vibration starts → closing, before the contact says so
+  //   2 · vibration stopped while closing, then starts again, no "closed" → opening again (the safety eye)
+  //   3 · the close time runs out, no "closed" → not closed (amber, flagged) — with or without a vibration sensor
+  //   4 · vibration stopped while closing, no "closed" within GRACE → partly open
+  // The contact saying closed always wins.
+  const gStates = new Map(), QUICK = 1800, GRACE = 2500;   // card id → { phase, since, sent, pos, quick, vib, stall }; the catch-up closing; rule 4's wait (ms)
+  const STILL = ["partly", "notclosed"];   // (open, but not all the way / not closed: kept while the contact says open)
   function garage(c, d) {
-    const o = c.o, TRAVEL = (Number.isInteger(o.travel) ? Math.max(3, Math.min(60, o.travel)) : 15) * 1000, now = Date.now();
+    const o = c.o, secs = (v, x) => (Number.isInteger(v) ? Math.max(3, Math.min(60, v)) : x) * 1000, now = Date.now();
+    const TRAVEL = secs(o.travel, 15), CLOSE = secs(o.tclose, TRAVEL / 1000);
     let g = gStates.get(c.i);
-    if (!g) gStates.set(c.i, (g = { phase: null, since: 0, sent: H.sentAt(o.id), pos: undefined }));
+    if (!g) gStates.set(c.i, (g = { phase: null, since: 0, sent: H.sentAt(o.id), pos: undefined, vib: undefined, stall: 0 }));
     if (o.contact == null) {
       if (!d || d.cmd !== "openclose") return null;
       const s = d.door || (d.on ? "open" : "closed");
@@ -208,29 +230,43 @@
     } else {
       const ct = H.attrs(o.contact).contact, pos = ct === "open" ? "open" : ct === "closed" ? "closed" : null;
       if (!pos) return null;
+      const vib = o.vib != null ? H.attr(o.vib, "acceleration") === "active" : null;
+      const go = (ph, quick) => { g.phase = ph; g.since = now; g.quick = !!quick; g.stall = 0; };
       const sent = H.sentAt(o.id);
-      if (sent > g.sent) { g.sent = sent; g.phase = pos === "closed" ? "opening" : "closing"; g.since = now; g.quick = false; }   // pressed here
+      if (sent > g.sent) { g.sent = sent; go(pos === "closed" ? "opening" : "closing"); }   // pressed here
       if (g.pos !== undefined && pos !== g.pos) {   // the contact changed
-        if (pos === "open" && g.phase !== "opening") { g.phase = "opening"; g.since = now; g.quick = false; }   // (opened some other way)
+        if (pos === "open" && g.phase !== "opening") go("opening");   // (opened some other way)
         // closed some other way (the car's remote): the contact only says so once it's down — a short catch-up closing
-        else if (pos === "closed") { if (g.phase === "closing") g.phase = "closed"; else { g.phase = "closing"; g.since = now; g.quick = true; } }
+        else if (pos === "closed") { if (g.phase === "closing") g.phase = "closed"; else go("closing", true); }
+      }
+      if (vib != null && g.vib !== undefined && vib !== g.vib && pos === "open") {   // the vibration sensor changed
+        if (vib && g.stall && g.phase !== "opening") go("opening");                     // rule 2
+        else if (vib && (g.phase === "open" || STILL.includes(g.phase))) go("closing");  // rule 1
+        else if (!vib && g.phase === "closing" && !g.quick) g.stall = now;              // (rule 4 after GRACE)
       }
       g.pos = pos;
-      const len = g.quick ? QUICK : TRAVEL;
-      if (g.phase === "opening" && now - g.since >= TRAVEL) g.phase = pos;                  // (if it never opened: back to closed)
-      if (g.phase === "closing" && now - g.since >= len + (g.quick ? 0 : 2000)) g.phase = pos;   // (didn't close: open again)
-      if (g.phase !== "opening" && g.phase !== "closing") g.phase = pos;
+      if (vib != null) g.vib = vib;
+      const len = g.quick ? QUICK : g.phase === "closing" ? CLOSE : TRAVEL;
+      if (g.phase === "opening" && now - g.since >= TRAVEL) g.phase = pos;   // (if it never opened: back to closed)
+      if (g.phase === "closing" && g.stall && now - g.stall >= GRACE) g.phase = pos === "open" ? "partly" : pos;      // rule 4
+      else if (g.phase === "closing" && now - g.since >= len + (g.quick ? 0 : 2000)) g.phase = pos === "open" && !g.quick ? "notclosed" : pos;   // rule 3
+      if (g.phase !== "opening" && g.phase !== "closing" && !(pos === "open" && STILL.includes(g.phase))) g.phase = pos;
     }
-    const moving = g.phase === "opening" || g.phase === "closing", len = g.quick && g.phase === "closing" ? QUICK : TRAVEL;
-    if (moving) {   // redraw when it should have arrived (a controller says so itself)
-      clearTimeout(g.t); g.t = setTimeout(() => H.refresh(), Math.max(50, len - (now - g.since) + 60) + (g.phase === "closing" && !g.quick && o.contact != null ? 2000 : 0));
+    const moving = g.phase === "opening" || g.phase === "closing", len = g.quick && g.phase === "closing" ? QUICK : g.phase === "closing" ? CLOSE : TRAVEL;
+    const stop = moving && g.stall ? g.stall - g.since : 0;   // (stopped partway: the drawing waits there)
+    if (moving) {   // redraw when it should have arrived (a controller says so itself), or rule 4's wait is over
+      const at = stop ? GRACE - (now - g.stall) : len - (now - g.since) + (g.phase === "closing" && !g.quick && o.contact != null ? 2000 : 0);
+      clearTimeout(g.t); g.t = setTimeout(() => H.refresh(), Math.max(50, at + 60));
     }
-    return { phase: g.phase, T: len, ago: moving ? now - g.since : 0 };
+    return { phase: g.phase, T: len, ago: moving ? (stop || now - g.since) : 0, stop: !!stop };
   }
+  Grid.garageState = garage;   // (the tests: service/test_v304_garage_sets.py)
+  // a moving door's animation: its length, how far it is (stopped partway — rule 4's wait — it holds there)
+  const gdAnim = (gs) => (gs.phase === "opening" || gs.phase === "closing"
+    ? ` style="animation-duration:${(gs.T / 1000).toFixed(1)}s;animation-delay:-${(Math.min(gs.ago, gs.T) / 1000).toFixed(2)}s${gs.stop ? ";animation-play-state:paused" : ""}"` : "");
   // the garage icon (24 × 24, like icons.js) with its door: up when open, down when closed, moving in between
   const garageIcon = (gs, size) => {
-    const mv = gs.phase === "opening" || gs.phase === "closing", AGO = Math.min(gs.ago, gs.T);
-    const anim = mv ? ` style="animation-duration:${(gs.T / 1000).toFixed(1)}s;animation-delay:-${(AGO / 1000).toFixed(2)}s"` : "";
+    const anim = gdAnim(gs);
     return `<svg class="ic gd-ic gd-${gs.phase}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">`
       + `<path d="M3 21V9l9-6 9 6v12"/><path d="M6 21v-9h12v9"/>`
       + `<g class="gd-car" stroke-width="1.4"><path d="M8 20.4v-1.6l1.2-2.2h5.6l1.2 2.2v1.6z"/><path d="M9.6 20.6v.4M14.4 20.6v.4"/></g>`
@@ -238,21 +274,23 @@
       + `<rect x="6.9" y="12.9" width="10.2" height="7.6" rx=".4" class="gd-fill" stroke="none"/><path d="M6 15h12M6 18h12"/></g></g>`
       + `<circle class="gd-lamp" cx="12" cy="7.6" r="1.1" fill="currentColor" stroke="none"/></svg>`;
   };
-  const GD_TEXT = { get opening() { return T("g.opening"); }, get open() { return T("val.open"); }, get closing() { return T("g.closing"); }, get closed() { return T("val.closed"); } };
-  // a garage of 1–3 doors, each as big as the single garage's door (the building gets wider, not the doors thinner);
-  // each door is its own tap target (data-gdoor) and moves on its own
+  const GD_TEXT = { get opening() { return T("g.opening"); }, get open() { return T("val.open"); }, get closing() { return T("g.closing"); }, get closed() { return T("val.closed"); },
+    get partly() { return T("g.partly"); }, get notclosed() { return T("g.notClosed"); } };
+  // a garage of 1–4 doors, each as big as the single garage's door (the building gets wider, not the doors thinner); a
+  // double-wide door ("wide") twice as wide; each door is its own tap target (data-gdoor) and moves on its own
   const garageDoors = (list, size) => {
-    const n = list.length, dw = 12, gap = 1.6, vw = 12 + n * dw + (n - 1) * gap, R = vw - 3;
-    let body = `<path d="M3 21V9L${(vw / 2).toFixed(1)} 3L${R} 9v12"/><path d="M6 21v-9h${(vw - 12).toFixed(1)}v9"/>`;
+    const gap = 1.6, ws = list.map((gs) => (gs.wide ? 24 : 12)), n = list.length;
+    const vw = 12 + ws.reduce((a, b) => a + b, 0) + (n - 1) * gap, R = vw - 3;
+    let body = `<path d="M3 21V9L${(vw / 2).toFixed(1)} 3L${R} 9v12"/><path d="M6 21v-9h${(vw - 12).toFixed(1)}v9"/>`, x = 6;
     list.forEach((gs, k) => {
-      const x = 6 + k * (dw + gap), mv = gs.phase === "opening" || gs.phase === "closing", AGO = Math.min(gs.ago, gs.T);
-      const anim = mv ? ` style="animation-duration:${(gs.T / 1000).toFixed(1)}s;animation-delay:-${(AGO / 1000).toFixed(2)}s"` : "";
+      const dw = ws[k], anim = gdAnim(gs);
       if (k) body += `<path d="M${(x - gap / 2).toFixed(1)} 12v9"/>`;
       body += `<g class="gd-${gs.phase}" data-gdoor="${k}"><rect x="${x}" y="11" width="${dw}" height="10" fill="transparent" stroke="none"/>`
-        + `<g class="gd-car" stroke-width="1.4"><path d="M${x + 2} 20.4v-1.6l1.2-2.2h5.6l1.2 2.2v1.6z"/></g>`
+        + `<g class="gd-car" stroke-width="1.4"><path d="M${x + dw / 2 - 4} 20.4v-1.6l1.2-2.2h5.6l1.2 2.2v1.6z"/></g>`
         + `<clipPath id="gdm-${k}"><rect x="${x}" y="12" width="${dw}" height="9"/></clipPath><g clip-path="url(#gdm-${k})"><g class="gd-door"${anim}>`
         + `<rect x="${x + 0.9}" y="12.9" width="${dw - 1.8}" height="7.6" rx=".4" class="gd-fill" stroke="none"/><path d="M${x} 15h${dw}M${x} 18h${dw}"/></g></g>`
         + `<circle class="gd-lamp" cx="${x + dw / 2}" cy="${n > 1 ? 10.3 : 7.6}" r="${n > 1 ? 0.8 : 1.1}" fill="currentColor" stroke="none"/></g>`;
+      x += dw + gap;
     });
     return `<svg class="ic gd-ic" width="${Math.round(size * vw / 24)}" height="${size}" viewBox="0 0 ${vw} 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
   };
@@ -305,6 +343,7 @@
   function valText(r) {
     const v = H.attr(r.id, r.at) ?? H.reading(r.id, r.at), num = v != null && v !== "" && !isNaN(+v);
     const dec = WHOLE.has(r.at) ? 0 : Math.abs(+v) < 10 && +v % 1 ? 1 : 0;
+    if (num && r.at === "temperature") { const t = degs(+v); if (t != null) return esc(fmt(t)) + (r.unit ? ` ${esc(r.unit)}` : UNITS.temperature); }   // (in the panel's unit, as devState's)
     return v == null || v === "" ? "—" : esc(num ? fmt(Math.round(+v * 10 ** dec) / 10 ** dec, dec) : words(v)) + (num ? (r.unit ? `\u00a0${esc(r.unit)}` : UNITS[r.at] || "") : "");
   }
   // a door / contact: open or closed (no contact event yet: what the house model says about that door / window)
@@ -312,6 +351,11 @@
     const dw = H.state.doors.find((x) => x.id === id) || H.state.windows.find((x) => x.id === id);
     return H.attr(id, "contact") ?? (dw ? (dw.open ? "open" : "closed") : undefined);
   };
+  // a garage set's doors (a Picture & values card, a blank card's piece): each one's state, its width
+  const doorStates = (key, doors) => doors.map((dr, k) => {
+    const d = H.device(dr.id), gs = garage({ i: `${key}#${k}`, o: { id: dr.id, contact: dr.contact, travel: dr.travel, tclose: dr.tclose, vib: dr.vib } }, d);
+    return { ...(gs || { phase: d && d.on ? "open" : "closed", T: 15000, ago: 0, none: !dr.id }), wide: dr.wide === true };
+  });
   // a garage's words under its doors: "Open", or "Open · Closed"; with the doors' own names (builder → a door's Name)
   // "Left: Open · Right: Closed"
   const doorWords = (doors, st) => st.map((x, k) => {
@@ -319,9 +363,9 @@
     const w = x.none ? T("g.pickOpener") : GD_TEXT[x.phase];   // (no opener yet: not "Closed" — nothing is known)
     return n ? `${n}: ${w}` : w;
   }).join(" · ");
-  // ---------- a blank card (the owner's own): its pieces, each where the owner put it on the card's 24 × 24 grid ----------
-  const INNER = 24, TXT = { s: 13, m: 17, l: 24, xl: 34 };
-  const at = (v) => `${((100 * v) / INNER).toFixed(3)}%`;
+  // ---------- a blank card (the owner's own): its pieces, each where the owner put it (thousandths of the card; a card ----------
+  // ---------- from before 3.0.4: cells of its 24 × 24 grid) ----------
+  const INNER = 24, FREE = 1000, TXT = { s: 13, m: 17, l: 24, xl: 34 };
   function piece(c, p, n) {
     const lab = (dflt) => esc(p.label || dflt);
     switch (p.t) {
@@ -342,12 +386,8 @@
         const ct = doorOpen(p.id);
         return [`<div class="bk-v bk-dr${ct === "open" ? " warn" : ""}">${ic(ct === "open" ? "doorOpen" : "door", 26)}<span>${lab(H.devName(p.id) || T("g.door"))}</span><b>${ct === "open" ? T("val.open") : ct === "closed" ? T("val.closed") : "—"}</b></div>`, false];
       }
-      case "garage": {   // 1–3 doors, each tapped on its own (opening and closing ask the PIN)
-        const st = (Array.isArray(p.doors) ? p.doors : []).slice(0, 3).map((dr, k) => {
-          const d = H.device(dr.id), gs = garage({ i: `${c.i}#p${n}#${k}`, o: { id: dr.id, contact: dr.contact, travel: dr.travel } }, d);
-          return gs || { phase: d && d.on ? "open" : "closed", T: 15000, ago: 0, none: !dr.id };
-        });
-        const sub = doorWords((Array.isArray(p.doors) ? p.doors : []).slice(0, 3), st);
+      case "garage": {   // 1–4 doors, each tapped on its own (opening and closing ask the PIN)
+        const doors = (Array.isArray(p.doors) ? p.doors : []).slice(0, 4), st = doorStates(`${c.i}#p${n}`, doors), sub = doorWords(doors, st);
         return [`<div class="bk-gar">${st.length ? garageDoors(st, 64) : ic("garage", 48)}${p.label || sub ? `<small>${p.label ? `${lab("")} · ` : ""}${esc(sub || "")}</small>` : ""}</div>`, st.some((x) => x.phase !== "closed")];
       }
       case "text": {
@@ -359,7 +399,78 @@
   }
 
   const spotPop = new Set();   // the cards whose values are open on a tap
+  // ---------- (v3.0.4) the Devices card: List, Tiles, Freeform or one big item ----------
+  // Every item the same way: its icon (any icon, drawing or own picture; any of motions.js's moves, only while it's on)
+  // in a round disc — or none: the "on" color goes on the icon itself —, its name and the values picked ("state": what
+  // it is now), beside / above / under the icon, each with its own icon and text size (--iz / --tz, on top of Style's).
+  // What it is (Value, Switch, Button, Lock, Fan, Scene): the item's own k, else from the device (kindOf). A card moved
+  // over from an old type keeps that card's look ("st": service/devices_card.py) — drawn by the old card's code.
+  const DV_LOOKS = new Set(["list", "tiles", "free", "single"]), DV_KINDS = new Set(["value", "switch", "button", "lock", "fan", "scene"]);
+  const DV_TP = new Set(["top", "bottom", "left", "right"]), IC_SIZE = { list: 26, tiles: 30, free: 30, single: 54 };
+  const dvLook = (o) => (DV_LOOKS.has(o && o.look) ? o.look : "list");
+  // (v3.0.4) "Single big item": the item shown now (swiped to; this screen only) → its index among n
+  const dvShown = new Map(), dvAt = (c, n) => { const k = dvShown.get(c.i) || 0; return n ? ((k % n) + n) % n : 0; };
+  const lockOf = (id) => H.state.locks.find((l) => l.id === id);
+  function kindOf(it) {
+    if (DV_KINDS.has(it.k)) return it.k;
+    const id = it.id, d = id ? H.device(id) : null;
+    if (!id) return it.tap ? "button" : "value";
+    if (lockOf(id)) return "lock";
+    if (purifier(id) || (d && d.kind === "fan")) return "fan";
+    return switches(id) ? "switch" : "value";
+  }
+  Grid.kindOf = kindOf;
+  // the old cards' looks a moved card keeps → the old type that draws it, and its options from the item
+  const ST_OF = { row: "device", square: "device", icon: "device", slider: "device", bar: "device", big: "value", gauge: "value", chip: "value", button: "button", lock: "lock", fan: "fan" };
+  function dvOld(c, it) {
+    const t = ST_OF[it.st], style = t === "device" || t === "value" ? it.st : undefined;
+    const o = { id: it.id, title: it.label, icon: it.icon, style, motion: it.motion, runW: it.runW, contact: it.contact, travel: it.travel,
+      at: (it.show || [])[0], unit: it.unit, dec: it.dec, min: it.min, max: it.max, wheel: it.wheel };
+    const b = DRAW[t]({ ...c, t, o }) || { html: "" };
+    return { ...b, cls: [`gc-${t}`, b.cls || ""].filter(Boolean).join(" ") };
+  }
+  function dvItem(c, it, n, look) {
+    const k = kindOf(it), id = it.id || null, dv = id ? H.device(id) : null;
+    let [st, on, i] = id ? devState(id) : ["", false, "power"];
+    if (k === "scene") { st = ""; on = false; i = "sparkles"; }
+    // (a garage opener: its door opening / open / closing / closed; a plug-in appliance: running above runW watts)
+    const gs = dv && dv.kind === "garage" && !/^(art|up):/.test(it.icon || "") ? garage({ i: `${c.i}#${n}`, o: { id, contact: it.contact, travel: it.travel } }, dv) : null;
+    if (gs) { st = GD_TEXT[gs.phase] || st; on = gs.phase !== "closed"; }
+    if (it.runW && id) {
+      const w = parseFloat(H.attrs(id).power), has = Number.isFinite(w);
+      on = has && w > it.runW;
+      st = on ? T("g.runningW", { w: Math.round(w) }) : has ? T("g.idleW", { w: Math.round(w) }) : st;
+    }
+    const show = Array.isArray(it.show) && it.show.length ? it.show : ["state"];
+    const vals = id ? show.map((a) => (a === "state" ? esc(st) : valText({ id, at: a, unit: it.unit }))).filter(Boolean).join(" · ") : "";
+    const pic = it.icon || i, size = IC_SIZE[look] || 26;
+    const mot = !gs && it.motion && window.Motion && !/^art:/.test(pic) ? Motion.pick(it.motion, pic, (dv || {}).kind) : "";
+    const icx = gs ? garageIcon(gs, size) : mot ? Motion.wrap(ic(pic, Math.round(size * 0.8), on), mot, on, Math.round(size * 0.8)) : ic(pic, size, on, id);
+    const tp = DV_TP.has(it.tp) ? it.tp : look === "list" ? "right" : "bottom";
+    const sty = [it.iz ? `--iz:${int(it.iz, 50, 250, 100) / 100}` : "", it.tz ? `--tz:${int(it.tz, 50, 250, 100) / 100}` : "", col(it.col) ? `--dc:${col(it.col)}` : ""];
+    if (look === "free" && [it.x, it.y, it.w, it.h].every(Number.isInteger)) sty.push(`left:${it.x / 10}%;top:${it.y / 10}%;width:${it.w / 10}%;height:${it.h / 10}%`);
+    if (look === "tiles") sty.push(it.sw > 1 ? `grid-column:span ${int(it.sw, 1, 4, 1)}` : "", it.sh > 1 ? `grid-row:span ${int(it.sh, 1, 4, 1)}` : "");
+    const name = esc(it.label || (id ? H.devName(id) : "") || T(k === "scene" ? "g.scene" : k === "button" ? "g.button" : "g.device"));
+    const cls = ["dv-it", `tp-${tp}`, `k-${k}`, it.bg === "none" ? "bg-none" : "", mot ? "mv" : "", on ? "on" : ""].filter(Boolean).join(" ");
+    const css = sty.filter(Boolean).join(";");
+    return `<div class="${cls}" data-gitem="${n}"${css ? ` style="${css}"` : ""}><span class="dv-ic">${icx}</span>`
+      + `<span class="dv-tx"><b class="dv-n">${name}</b>${vals ? `<small class="dv-s">${vals}</small>` : ""}</span></div>`;
+  }
   const DRAW = {
+    devices(c) {
+      const o = c.o || {}, items = Array.isArray(o.items) ? o.items.filter((x) => x && typeof x === "object") : [], look = dvLook(o);
+      if (!items.length) return { html: `${head(o.title)}<div class="gc-empty">${esc(T("g.noDevices"))}</div>` };
+      if (look === "single") {
+        // (v3.0.4) several items: one at a time, a swipe left / right for the next (dots under it say where)
+        const n = dvAt(c, items.length), it = items[n];
+        if (ST_OF[it.st] && (it.id || it.st === "button")) return dvOld(c, it);   // (an old card moved over: as it was)
+        const dots = items.length > 1 ? `<div class="dv-dots" aria-hidden="true">${items.map((_, k) => `<i${k === n ? ' class="on"' : ""}></i>`).join("")}</div>` : "";
+        // (dv-swipe: several — app.js's room swipe leaves this card's swipe alone)
+        return { cls: [dvTap(it) ? "act" : "", items.length > 1 ? "dv-swipe" : ""].filter(Boolean).join(" "), html: `${head(o.title)}<div class="dv dv-single">${dvItem(c, it, n, look)}${dots}</div>` };
+      }
+      const cols = look === "tiles" && o.cols ? ` style="--dvc:${int(o.cols, 1, 8, 1)}"` : "";
+      return { html: `${head(o.title)}<div class="${look === "free" ? "dv" : "gc-devs dv"} dv-${look}"${cols}>${items.map((it, n) => dvItem(c, it, n, look)).join("")}</div>` };
+    },
     // styles: row (icon, name, state), square (the icon in a disc on top, name and state under it), icon (big icon only)
     device(c) {
       const o = c.o, [st0, on0, i] = devState(o.id), name = esc(o.title || H.devName(o.id) || T("g.device"));
@@ -419,21 +530,22 @@
       const o = c.o, own = Number.isInteger(o.id) && o.id > 0, t = H.thermo(own ? o.id : null), tid = own ? o.id : "null";
       if (!o.style || o.style === "dial" || t.id == null) return null;   // (the dial: Home's own piece)
       const tgt = t.mode === "cool" ? "cool" : t.mode === "heat" ? "heat" : null, set = tgt ? t[tgt] : null;
-      const step = (d) => (tgt ? `<button class="gt-b"${Acts.on("gr.setpoint", tgt, d, tid)} aria-label="${d > 0 ? "Warmer" : "Cooler"}">${d > 0 ? "+" : "−"}</button>` : "");
+      const step = (d) => (tgt ? `<button class="gt-b"${Acts.on("gr.setpoint", tgt, d, tid)} aria-label="${esc(T(d > 0 ? "g.warmer" : "g.cooler"))}">${d > 0 ? "+" : "−"}</button>` : "");
       const modes = App.tModes(t, o, "gt-m");
-      const now = t.temp != null ? Math.round(t.temp) : "—";
-      if (o.style === "arc") {   // a 270° ring from 50 to 90 °F: the set point lit, a tick at the room's temperature
-        const pos = (v) => Math.max(0, Math.min(1, (v - 50) / 40)), L = 2 * Math.PI * 70 * 0.75;
+      const now = t.temp != null ? degs(t.temp) : "—";
+      const setT = set != null ? degs(set) : null;   // (the set point shown in the panel's unit; sent back in the hub's)
+      if (o.style === "arc") {   // a 270° ring over the set point range (50–90 °F): the set point lit, a tick at the room's temperature
+        const R = window.Fmt ? Fmt.hubRange() : { lo: 50, hi: 90 }, pos = (v) => Math.max(0, Math.min(1, (v - R.lo) / (R.hi - R.lo))), L = 2 * Math.PI * 70 * 0.75;
         const f = tgt ? pos(set) : 0, tk = t.temp != null ? pos(t.temp) : null, ang = (k) => (135 + k * 270) * Math.PI / 180;
         const tick = tk == null ? "" : `<circle cx="${(100 + 70 * Math.cos(ang(tk))).toFixed(1)}" cy="${(100 + 70 * Math.sin(ang(tk))).toFixed(1)}" r="6" class="ga-now"/>`;
         return { html: `<div class="gt gt-arc"><div class="ga"><svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="70" class="ga-bg" style="stroke-dasharray:${L.toFixed(1)} 999"/>`
           + `<circle cx="100" cy="100" r="70" class="ga-fg ${tgt || ""}" style="stroke-dasharray:${(f * L).toFixed(1)} 999"/>${tick}</svg>`
-          + `<div class="ga-mid"><b class="num">${tgt ? set : now}°</b><small>${esc(tgt ? T(tgt === "heat" ? "g.heatToNow" : "g.coolToNow", { t: now }) : App.tWord(t))}</small></div></div>`
+          + `<div class="ga-mid"><b class="num">${tgt ? setT : now}°</b><small>${esc(tgt ? T(tgt === "heat" ? "g.heatToNow" : "g.coolToNow", { t: now }) : App.tWord(t))}</small></div></div>`
           + `<div class="gt-row ga-row">${step(-1)}<span>${esc(o.title || t.name || T("thermo.title"))}</span>${step(1)}</div>${modes}</div>` };
       }
       if (o.style === "compact") return { html: `<div class="gt gt-compact">${ic("thermo", 28)}<div class="gt-now"><b class="num">${now}°</b><small>${esc(o.title || t.name || T("thermo.title"))}</small></div>`
-        + `${tgt ? `${step(-1)}<div class="gt-set ${tgt}"><b class="num">${set}°</b><small>${esc(T(tgt === "heat" ? "g.heatTo" : "g.coolTo"))}</small></div>${step(1)}` : `<div class="gt-set"><small>${esc(App.tWord(t))}</small></div>`}</div>` };
-      return { html: `<div class="gt gt-big">${head(o.title || t.name || T("thermo.title"))}<div class="gt-row">${step(-1)}<div class="gt-set ${tgt || ""}"><b class="num">${tgt ? set : now}°</b>`
+        + `${tgt ? `${step(-1)}<div class="gt-set ${tgt}"><b class="num">${setT}°</b><small>${esc(T(tgt === "heat" ? "g.heatTo" : "g.coolTo"))}</small></div>${step(1)}` : `<div class="gt-set"><small>${esc(App.tWord(t))}</small></div>`}</div>` };
+      return { html: `<div class="gt gt-big">${head(o.title || t.name || T("thermo.title"))}<div class="gt-row">${step(-1)}<div class="gt-set ${tgt || ""}"><b class="num">${tgt ? setT : now}°</b>`
         + `<small>${esc(tgt ? T(tgt === "heat" ? "g.heatingToNow" : "g.coolingToNow", { t: now }) : T("g.nowMode", { mode: App.tWord(t) }))}</small></div>${step(1)}</div>${modes}</div>` };
     },
     // who's home in other looks than Home's pills: big avatars, or one count
@@ -458,7 +570,7 @@
       if (!r) return { html: `<div class="gc-btn">${ic(c.o.icon || "home", 38)}<span>${esc(c.o.title || T("g.room"))}</span><small>${esc(T("g.notHere"))}</small></div>` };
       const p = H.placed(r.name), open = [...p.doors, ...p.windows].filter((x) => x.open).length, unl = p.locks.filter((l) => l.lock !== "locked").length;
       const temp = roomTemp(r.name);
-      const chips = [Number.isFinite(temp) ? `<i>${ic("thermo", 14)}${Math.round(temp)}°</i>` : "", open ? `<i class="w">${ic("doorOpen", 14)}${open}</i>` : "",
+      const chips = [Number.isFinite(temp) ? `<i>${ic("thermo", 14)}${degs(temp)}°</i>` : "", open ? `<i class="w">${ic("doorOpen", 14)}${open}</i>` : "",
         unl ? `<i class="w">${ic("unlock", 14)}${unl}</i>` : ""].join("");
       return { cls: n ? "on" : "", html: `<div class="gc-btn">${ic(c.o.icon || r.icon || "home", 38, n > 0)}<span>${esc(c.o.title || r.name)}</span><small>${esc(n ? T("g.lightsOn", { n }) : T("g.allOff"))}</small>${chips ? `<div class="gc-rchips">${chips}</div>` : ""}</div>` };
     },
@@ -485,8 +597,7 @@
     fan(c) {
       const o = c.o, d = H.device(o.id), th = H.thing ? H.thing(o.id) : null;
       if (th && th.kind === "purifier") {
-        const a = th.attrs || {}, off = String(a.fanMode || a.fanState || "").toUpperCase() === "OFF", auto = String(a.fanMode || "").toUpperCase() === "AUTO";
-        const sp = parseInt(a.fanSpeed, 10) || 0;
+        const { off, auto, sp } = purNow(th);
         const btn = (lbl, act, v, cur) => `<button class="${cur ? "cur" : ""}" ${Acts.on("gr.purifier", +o.id, act, v ?? null)}>${lbl}</button>`;
         return { cls: off ? "" : "on", html: `<div class="fn"><div class="fn-h"><span class="fn-ic">${ic(o.icon || "airPurifier", 34, !off)}</span><b>${esc(o.title || th.name)}</b><small>${off ? T("val.off") : auto ? T("val.auto") : T("g.speed", { n: sp })}</small></div>`
           + `<div class="fn-sp">${btn(T("val.off"), "off", null, off)}${btn(T("val.auto"), "auto", null, !off && auto)}${[2, 4, 6, 8, 10].map((n) => btn(n, "speed", n, !off && !auto && sp === n)).join("")}</div></div>` };
@@ -560,7 +671,7 @@
         const html = Cameras.cardHtml(o.cam, o.view === "still");
         if (html) return { html: `<div class="gc-cam">${html}</div>` };
       }
-      return { html: `<div class="gc-btn">${ic(o.icon || "film", 38)}<span>${esc(o.title || (cam && cam.name) || T("g.camera"))}</span></div>` };
+      return { html: `<div class="gc-btn">${ic(o.icon || "film", 38)}<span>${esc(o.title || (cam && (window.Cameras && Cameras.labelText ? Cameras.labelText(cam) : cam.name)) || T("g.camera"))}</span></div>` };
     },
     // several devices on one card: each with its state, its own icon / name; a tap on one switches that one
     group(c) { return rows(c, itemsOf(c), T("g.noDevices")); },
@@ -569,6 +680,11 @@
     notes(c) { return { html: window.Lists ? Lists.notes(c.o) : "" }; },
     // kitchen timers (timers.js): the running ones, then preset buttons
     timer(c) { return { html: window.Timers ? Timers.card(c.o) : "" }; },
+    // (v3.0.4) Bins / Trash (trash.js) and Countdown & timers (timers.js TimerCards): they replace bins, countdown, timer
+    trash(c) { return window.Trash ? Trash.card(c) : { html: "" }; },
+    // (v3.0.4) the UniFi cards (unifi.js): nothing on the wall while UniFi isn't connected
+    ...Object.fromEntries(["netwan", "netchips", "netstrip", "netmap", "netdevs", "netpoe", "netclients", "netlog", "netvals"].map((t) => [t, (c) => (window.UniFi ? UniFi.card(c) : { html: "" })])),
+    timers(c) { return window.TimerCards ? TimerCards.card(c) : { html: "" }; },
     // a row of scene / routine buttons: each does its own action (a scene switch on, a Hubitat button pushed…)
     scenes(c) {
       const o = c.o, items = Array.isArray(o.items) ? o.items : [];
@@ -612,16 +728,12 @@
       return { cls: `act ${open ? "on" : ""}`, html: `<div class="gr${wide ? "" : " gr-col"}">${ic(o.icon || "art:garage-sectional", 64, open)}<div><b>${esc(o.title || H.devName(o.id) || T("g.garage"))}</b>`
         + `<small>${esc(txt)}</small></div></div>` };
     },
-    // a picture with live values, or a garage of 1–3 doors (each tapped on its own — opening and closing ask the PIN)
+    // a picture with live values, or a garage of 1–4 doors (each tapped on its own — opening and closing ask the PIN)
     spot(c) {
       const o = c.o, rows = Array.isArray(o.rows) ? o.rows : [], pos = o.vpos || "beside", title = o.title ? `<div class="sp-t">${esc(o.title)}</div>` : "";
       let pic, sub = "", on;
       if (o.pic === "garage") {
-        const doors = (Array.isArray(o.doors) ? o.doors : []).slice(0, 3);
-        const st = doors.map((dr, k) => {
-          const d = H.device(dr.id), gs = garage({ i: `${c.i}#${k}`, o: { id: dr.id, contact: dr.contact, travel: dr.travel } }, d);
-          return gs || { phase: d && d.on ? "open" : "closed", T: 15000, ago: 0, none: !dr.id };
-        });
+        const doors = (Array.isArray(o.doors) ? o.doors : []).slice(0, 4), st = doorStates(c.i, doors);
         pic = st.length ? garageDoors(st, 64) : ic("garage", 56);
         sub = doorWords(doors, st);
         on = st.some((s) => s.phase !== "closed");
@@ -642,10 +754,12 @@
       // (the hint: only in the builder's canvas, and not while the builder edits inside this very card — it sets
       // Grid.editingInside = the card's id then)
       if (!parts.length) return { html: `<div class="bk bk-none">${H.design && Grid.editingInside !== c.i ? `<div class="gc-empty">${ic("plus", 26)}<span>${esc(T("g.emptyBlock"))}</span></div>` : ""}</div>` };
+      // (v3.0.4: "fr" — anywhere on the card, in thousandths of it, as the builder places them; before: cells of 24)
+      const U = c.o.fr === 1 ? FREE : INNER, pos = (v) => `${((100 * v) / U).toFixed(3)}%`;
       const html = parts.map((p, n) => {
-        const [inner, on] = piece(c, p, n), x = int(p.x, 0, 23, 0), y = int(p.y, 0, 23, 0);
-        const w = int(p.w, 1, INNER - x, 1), h = int(p.h, 1, INNER - y, 1);
-        return `<div class="bk-p bk-${String(p.t).replace(/[^a-z]/g, "")}${on ? " on" : ""}" data-gitem="${n}" style="left:${at(x)};top:${at(y)};width:${at(w)};height:${at(h)}">${inner}</div>`;
+        const [inner, on] = piece(c, p, n), x = int(p.x, 0, U - 1, 0), y = int(p.y, 0, U - 1, 0);
+        const w = int(p.w, 1, U - x, 1), h = int(p.h, 1, U - y, 1);
+        return `<div class="bk-p bk-${String(p.t).replace(/[^a-z]/g, "")}${on ? " on" : ""}" data-gitem="${n}" style="left:${pos(x)};top:${pos(y)};width:${pos(w)};height:${pos(h)}">${inner}</div>`;
       }).join("");
       return { html: `<div class="bk">${html}</div>` };
     },
@@ -657,9 +771,9 @@
       const head_ = esc(c.o.title || T("g.safety"));
       // (a freezer above its warning limit: "to check", amber — red 5 °F above; shown only, the alert is Hubitat's)
       const warm = !bad.length && H.sensorWarn ? H.state.sensors.filter((s) => H.sensorWarn(s)) : [];
-      if (warm.length) return { cls: "", html: `<div class="gc-safe ${warm.some((s) => H.sensorWarn(s) === "hot") ? "bad" : "warn"}">${ic("thermo", 34)}<div><b>${warm.length} to check</b><small>${warm.slice(0, 3).map((s) => `${esc(H.devName(s.id) || s.where || s.name)} ${Math.round(s.temp)}°`).join(" · ")}</small></div></div>` };
+      if (warm.length) return { cls: "", html: `<div class="gc-safe ${warm.some((s) => H.sensorWarn(s) === "hot") ? "bad" : "warn"}">${ic("thermo", 34)}<div><b>${esc(T("g.toCheck", { n: warm.length }))}</b><small>${warm.slice(0, 3).map((s) => `${esc(H.devName(s.id) || s.where || s.name)} ${degs(s.temp)}°`).join(" · ")}</small></div></div>` };
       if (!bad.length) return { cls: "", html: `<div class="gc-safe ok">${ic("shield", 34)}<div><b>${head_}</b><small>${esc(all ? T("g.allClear", { n: all }) : T("g.noSafety"))}</small></div></div>` };
-      return { cls: "alarm", html: `<div class="gc-safe bad">${ic("shieldAlert", 34)}<div><b>${bad.length} alert${bad.length > 1 ? "s" : ""}</b><small>${bad.slice(0, 3).map((s) => esc(s.name || s.kind)).join(" · ")}</small></div></div>` };
+      return { cls: "alarm", html: `<div class="gc-safe bad">${ic("shieldAlert", 34)}<div><b>${esc(T("g.alertsN", { n: bad.length }))}</b><small>${bad.slice(0, 3).map((s) => esc(s.name || s.kind)).join(" · ")}</small></div></div>` };
     },
     // alerts from Hubitat rules that are up on this panel (hubalerts.js): newest first; × dismisses one
     notices(c) {
@@ -706,8 +820,8 @@
       const on = H.lightsOn(r), all = H.lightsTotal(r), p = H.placed(r.name);
       const open = [...p.doors, ...p.windows].filter((x) => x.open).length, unl = p.locks.filter((l) => l.lock !== "locked").length;
       const temp = roomTemp(r.name);
-      const chips = [all ? `<span class="chip">${ic("bulb", 16)}${on} of ${all} on</span>` : "", Number.isFinite(temp) ? `<span class="chip">${ic("thermo", 16)}${Math.round(temp)}°</span>` : "",
-        open ? `<span class="chip warn">${ic("doorOpen", 16)}${open} open</span>` : "", unl ? `<span class="chip warn">${ic("unlock", 16)}${unl} unlocked</span>` : ""].join("");
+      const chips = [all ? `<span class="chip">${ic("bulb", 16)}${esc(T("g.lightsOn", { on, n: all }))}</span>` : "", Number.isFinite(temp) ? `<span class="chip">${ic("thermo", 16)}${degs(temp)}°</span>` : "",
+        open ? `<span class="chip warn">${ic("doorOpen", 16)}${esc(T("g.openN", { n: open }))}</span>` : "", unl ? `<span class="chip warn">${ic("unlock", 16)}${esc(T("g.unlockedN", { n: unl }))}</span>` : ""].join("");
       // (the room id is [a-z0-9-] only: safe in the attribute)
       const rid = String(r.id).replace(/[^a-z0-9-]/g, "");
       const btns = c.o.allOff === false || !all ? "" : `<div class="gc-rhb"><button${Acts.on("gr.roomAll", rid, true)}>${ic("bulb", 18)}${esc(T("g.allOnBtn"))}</button><button class="ghost"${Acts.on("gr.roomAll", rid, false)}>${ic("power", 18)}${esc(T("g.allOffBtn"))}</button></div>`;
@@ -816,6 +930,7 @@
       if (c.t === "blank") (o.parts || []).forEach((p) => [p.id, ...ids(p.text), ...(p.doors || []).flatMap((d) => [d.id, d.contact])].forEach((x) => x && watch.add(x)));
       if (c.t === "temps") [o.inside, o.outside].forEach((x) => Number.isInteger(x) && watch.add(x));   // (its own sensors)
       if (c.t === "scenes") (o.items || []).forEach((it) => it && it.a && it.a.id && watch.add(it.a.id));
+      if (c.t === "devices") (o.items || []).forEach((it) => it && [it.contact, it.tap && it.tap.id].forEach((x) => x && watch.add(x)));
       if (["roomdevs", "roomopen"].includes(c.t)) itemsOf(c).forEach((it) => watch.add(it.id));
       const shown = all(c.show), hi = c.hi && all(c.hi);
       let body = { html: "" };
@@ -842,8 +957,9 @@
         c.tap || c.hold || c.dbl || defTap(c) ? "act" : ""].filter(Boolean).join(" ");
       const jn = joined.get(c.i), jc = jn ? Object.keys(jn).map((k) => `j-${k}`).join(" ") : "";
       const jv = jn ? Object.entries(jn).filter(([, d]) => d > 0).map(([k, d]) => `--j${k}:${d}`).join(";") : "";
-      // (the Guest Wi-Fi card with nothing to show — no network, off for this panel: no empty glass box on the wall)
-      const gone = !shown || (c.t === "guest" && !body.html && !marked);
+      // (the Guest Wi-Fi card with nothing to show — no network, off for this panel: no empty glass box on the wall; v3.0.4:
+      // nor a UniFi card while UniFi isn't connected)
+      const gone = !shown || ((c.t === "guest" || /^net[a-z]+$/.test(c.t)) && !body.html && !marked);
       const cls = [base, jc, body.cls || "", hi ? "hi" : "", !gone ? "" : marked ? "gc-cond" : "gc-hide"].filter(Boolean).join(" "), ghi = hi && col(c.hic) ? col(c.hic) : "";
       // (the place is kept apart from the key: moving a card — the builder's live canvas while dragging — only moves it)
       const area = `${int(c.y, 0, 255, 0) + 1}/${int(c.x, 0, 255, 0) + 1}/span ${int(c.h, 1, 256, 1)}/span ${int(c.w, 1, 256, 1)}`;   // (the fine grid: up to 192 × 128)
@@ -963,7 +1079,7 @@
     const open = d && d.cmd === "openclose" ? !!d.on : ct === "open" || ct === "closed" ? ct === "open" : d ? !!d.on : H.attr(id, "switch") === "on";
     const gar = open ? "close" : "open";
     if (H.design && gd.contact != null) {
-      const TRAVEL = (Number.isInteger(gd.travel) ? Math.max(3, Math.min(60, gd.travel)) : 15) * 1000;
+      const TRAVEL = (Number.isInteger(gd.tclose ?? gd.travel) ? Math.max(3, Math.min(60, gd.tclose ?? gd.travel)) : 15) * 1000;   // (its close time)
       if (ct !== "open" && ct !== "closed") H.demoAttr(gd.contact, "contact", open ? "open" : "closed");
       setTimeout(() => H.demoAttr(gd.contact, "contact", gar === "open" ? "open" : "closed"), gar === "open" ? 800 : Math.max(500, TRAVEL - 300));
     }
@@ -974,6 +1090,11 @@
   function run(a, c) {
     if (!a || a.do === "none") return;
     const id = a.id, d = id ? H.device(id) : null, lock = id ? H.state.locks.find((l) => l.id === id) : null;
+    // (v3.0.4) an air purifier has no on / off: fanOn / off / auto / setFanSpeed 1–10 (H.purifier: shown at once, from
+    // off it starts first) — whatever sent it: a Devices item's tap, a wheel, a Device card, a picture's switch row
+    const pt = purifier(id);
+    if (pt && ["toggle", "on", "off"].includes(a.do)) return H.purifier(id, a.do === "off" || (a.do === "toggle" && !purNow(pt).off) ? "off" : "fanOn");
+    if (pt && a.do === "cmd" && ["fanOn", "off", "auto", "setFanSpeed", "on"].includes(a.c)) return H.purifier(id, a.c === "setFanSpeed" ? "speed" : a.c === "on" ? "fanOn" : a.c, a.v);
     switch (a.do) {
       case "toggle":
         if (lock) return lock.lock === "locked" ? (H.canUnlock(id) ? H.unlock(id) : unlockNo()) : H.lock(id);
@@ -1014,7 +1135,29 @@
   }
   // what a card does when the owner set nothing
   // (a device card: only a device that switches — a sensor card does nothing by itself)
-  const switches = (id) => !!H.device(id) || H.attr(id, "switch") != null || H.state.locks.some((l) => l.id === id);
+  const switches = (id) => !!H.device(id) || H.attr(id, "switch") != null || H.state.locks.some((l) => l.id === id) || !!purifier(id);
+  // (v3.0.4) a Devices item's own tap, else what it is: a switch (or a fan, the purifier) switches, a lock only locks, a
+  // garage opener opens / closes its door; a value, a button and a scene do only what was set (an old Fan card's look:
+  // its speed buttons)
+  function dvTap(it) {
+    if (it.tap) return it.tap;
+    const k = kindOf(it), id = it.id;
+    if (!id || it.st === "fan" || !["switch", "fan", "lock"].includes(k)) return null;
+    if (k === "lock") { const l = lockOf(id); return l ? (l.lock === "locked" ? null : { do: "lock", id }) : null; }
+    if (!switches(id)) return null;
+    return { do: "toggle", id, ...((H.device(id) || {}).kind === "garage" ? { gd: { contact: it.contact, travel: it.travel } } : {}) };
+  }
+  // its hold: its wheel, its hold action, else what it is — a light's pop-up, the automatic wheel (dimmers, fans, shades,
+  // the purifier's Auto and speeds); a lock, a garage, a value, a scene: nothing → {wheel} | {pop} | {act} | null
+  function dvHold(it) {
+    if (Array.isArray(it.wheel) && it.wheel.length) return { wheel: it.wheel };
+    if (it.hold) return { act: it.hold };
+    const k = kindOf(it), id = it.id;
+    if (!id || !["switch", "fan"].includes(k) || (H.device(id) || {}).kind === "garage") return null;
+    if (lightPopOk(id)) return { pop: id };
+    const w = Grid.autoWheel(id); return w ? { wheel: w } : null;
+  }
+  Grid.dvTap = dvTap; Grid.dvHold = dvHold;
   // (a group card: no default — its devices are tapped one by one)
   const defTap = (c) => (c.t === "spot" && c.o ? (c.o.tapdo === "toggle" && c.o.tid ? { do: "toggle", id: c.o.tid } : c.o.tapdo === "values" || (c.o.vpos === "tap" && c.o.tapdo !== "none") ? { do: "spotpop" } : null)
     : c.t === "garage" && c.o && c.o.id ? { do: "toggle", id: c.o.id, gd: { contact: c.o.contact, travel: c.o.travel } } : c.t === "lock" && c.o && c.o.id ? { do: "toggle", id: c.o.id, dflt: true }
@@ -1036,8 +1179,10 @@
     if (el.matches(".gc-player") && e.target.closest("button")) return;   // (its own buttons)
     const c = Grid.byId.get(el.dataset.gi); if (!c) return;
     // one device on a card of several: a tap switches that one (the card's own actions don't apply)
-    const many = ["group", "roomdevs", "roomopen", "scenes"].includes(c.t);
-    const gi = e.target.closest("[data-gitem]"), item = gi && many ? itemsOf(c)[+gi.dataset.gitem] : null;
+    // (v3.0.4: a Devices card — each item its own tap / hold / double-tap; one big item: anywhere on the card)
+    const dvc = c.t === "devices", one = dvc && dvLook(c.o) === "single";
+    const many = dvc || ["group", "roomdevs", "roomopen", "scenes"].includes(c.t);
+    const gi = e.target.closest("[data-gitem]"), item = one ? itemsOf(c)[dvAt(c, itemsOf(c).length)] || null : gi && many ? itemsOf(c)[+gi.dataset.gitem] : null;
     if (many && !item) return;
     // a picture card: one garage door, or one of its rows (a value row does nothing; the picture itself: its tap)
     // a blank card: one of its pieces (a value, a door, text: the card's own tap); a garage piece: the door tapped
@@ -1047,29 +1192,35 @@
     if (blank && srow && srow.passive) srow = null;
     else if (spot && gi && (!srow || srow.passive)) return;
     if (blank) { if (!srow || srow.as !== "garage") dn = null; else if (dn == null && (srow.doors || []).length === 1) dn = 0; else if (dn == null) return; }
-    press = { id: e.pointerId, el: item || srow ? gi : el, c, item: item || srow, x: e.clientX, y: e.clientY, held: false, door: dn, at: Date.now() };
+    press = { id: e.pointerId, el: (item && !one) || srow ? gi : el, c, item: item || srow, x: e.clientX, y: e.clientY, held: false, door: dn, at: Date.now() };
     // a lock card's "slide to unlock": the thumb follows the finger (pointermove), let go near the end → unlock
-    const thumb = (c.t === "lock" || (srow && srow.as === "lock")) && e.target.closest(".lk-thumb");
-    if (thumb) { press.unlock = { track: thumb.parentElement, thumb, id: srow ? srow.id : c.o.id }; App.dragging = true; return; }
+    const thumb = (c.t === "lock" || (srow && srow.as === "lock") || (dvc && item)) && e.target.closest(".lk-thumb");
+    if (thumb) { press.unlock = { track: thumb.parentElement, thumb, id: srow ? srow.id : item ? item.id : c.o.id }; App.dragging = true; return; }
     if (press.door != null) { press.el.classList.add("pressed"); return; }
-    // a slider tile on a light that dims: dragging across it sets the level
-    if (!item && c.t === "device" && ["slider", "bar"].includes((c.o || {}).style)) { const d = H.device(c.o.id); if (d && d.dim !== false && d.kind === "light") { press.slider = d; press.vert = c.o.style === "bar"; } }
+    // a slider tile on a light that dims: dragging across it sets the level (a Device card, or one moved over: its "st")
+    const sl = !item && c.t === "device" ? c.o || {} : one && item ? { id: item.id, style: item.st } : {};
+    if (["slider", "bar"].includes(sl.style)) { const d = H.device(sl.id); if (d && d.dim !== false && d.kind === "light") { press.slider = d; press.vert = sl.style === "bar"; } }
     // (v3.0.2) an orb that dims: press and slide up / down = brightness from where it is (Room Layout G's orb), off at the bottom
     // (v3.0.2: not in a card whose list scrolls — data-lscroll: there an up / down swipe scrolls; hold for the pop-up)
-    if (item && gi.matches(".gc-orbi") && !el.dataset.lscroll && e.target.closest(".rlG-ow")) { const d = H.device(item.id); if (d && d.dim && d.kind === "light") { press.slider = d; press.orb = gi.querySelector("[data-light]"); press.lv0 = d.on ? d.level || 0 : 0; } }
+    if (item && gi && gi.matches(".gc-orbi") && !el.dataset.lscroll && e.target.closest(".rlG-ow")) { const d = H.device(item.id); if (d && d.dim && d.kind === "light") { press.slider = d; press.orb = gi.querySelector("[data-light]"); press.lv0 = d.on ? d.level || 0 : 0; } }
     press.el.classList.add("pressed");
     // press and hold: the card's wheel of actions when it has one (else its hold action); a device that switches with
     // neither (an item of a Devices card, a Device card with no wheel set): the automatic wheel from what it is
     // (v3.0.2: a light that dims / changes colour: its pop-up — brightness, white, colour — not the wheel's two colours)
     const it2 = press.item, auto = (x) => (x && x.id && !H.state.locks.some((l) => l.id === x.id) && (H.device(x.id) || {}).kind !== "garage" ? (lightPopOk(x.id) ? [{ pop: x.id }] : Grid.autoWheel(x.id)) : null);
-    const wh = it2 ? it2.wheel || (c.t === "roomdevs" || c.t === "group" || (spot && it2.as === "switch") ? auto(it2) : null)
+    let wh = it2 ? it2.wheel || (c.t === "roomdevs" || c.t === "group" || (spot && it2.as === "switch") ? auto(it2) : null)
       : (c.o || {}).wheel || (c.t === "device" && !c.hold ? auto(c.o) : null);
+    if (dvc && it2) {   // (a Devices item: its wheel, its hold action, else what it is — dvHold)
+      const h = dvHold(it2);
+      if (h && h.act) { press.fire = () => { if (!press) return; press.held = true; press.el.classList.remove("pressed"); asked(it2, h.act, c); }; press.timer = setTimeout(press.fire, 550); return; }
+      wh = h ? (h.pop != null ? [{ pop: h.pop }] : h.wheel) : null;
+    }
     if (wh && wh.length) {
       const at = press.el;
       at.classList.add("holding");   // (a ring fills while the finger stays: the wheel is coming)
       press.fire = () => {
         if (!press) return; press.held = true; at.classList.remove("pressed", "holding");
-        if (wh[0].pop != null) { eatAfter(press.id); Grid.lightPop(wh[0].pop); } else Grid.openWheel(at, wh, c, it2 ? it2.icon : (c.o || {}).icon);   // (the lift's click: not on the pop-up's backdrop)
+        if (wh[0].pop != null) { eatAfter(press.id); Grid.lightPop(wh[0].pop); } else Grid.openWheel(at, wh, c, it2 ? it2.icon || (dvc && it2.id ? devState(it2.id)[2] : null) : (c.o || {}).icon);   // (the lift's click: not on the pop-up's backdrop)
       };
       press.timer = setTimeout(press.fire, 550);
       return;
@@ -1105,22 +1256,42 @@
       App.render();
       return;
     }
+    // (v3.0.4) a swipe across a "Single big item" card of several: the next (left) or the one before (right)
+    const dx = e.clientX - p.x;
+    if (!cancel && !p.held && p.c.t === "devices" && dvLook(p.c.o) === "single" && itemsOf(p.c).length > 1 && Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(e.clientY - p.y) * 1.5) {
+      dvShown.set(p.c.i, dvAt(p.c, itemsOf(p.c).length) + (dx < 0 ? 1 : -1)); App.render(); return;
+    }
     // (a release after a hold is never a tap — also where the hold had nothing to open)
     if (cancel || p.held || Date.now() - p.at >= 550 || Math.hypot(e.clientX - p.x, e.clientY - p.y) > 12) return;
-    if (p.door != null) { const dr = ((p.c.t === "blank" ? (p.item || {}).doors : (p.c.o || {}).doors) || [])[p.door]; return dr && dr.id ? run({ do: "toggle", id: dr.id, gd: { contact: dr.contact, travel: dr.travel } }, p.c) : null; }   // (the PIN: data.js)
+    if (p.door != null) { const dr = ((p.c.t === "blank" ? (p.item || {}).doors : (p.c.o || {}).doors) || [])[p.door]; return dr && dr.id ? run({ do: "toggle", id: dr.id, gd: { contact: dr.contact, travel: dr.travel, tclose: dr.tclose } }, p.c) : null; }   // (the PIN: data.js)
     if (p.item && p.c.t === "scenes") return run(p.item.a, p.c);
+    if (p.item && p.c.t === "devices") return tapOrDbl(p.item, dvTap(p.item), p.item.dbl, p.c, (a, c) => asked(p.item, a, c));
     if (p.item) {   // (like a device card's own tap: a lock only locks)
       const id = p.item.id, lock = H.state.locks.find((l) => l.id === id);
       return lock ? (lock.lock === "locked" ? null : H.lock(id)) : switches(id) ? run({ do: "toggle", id }, p.c) : null;
     }
-    const dbl = act(p.c, "dbl"), tap = act(p.c, "tap");
-    if (!dbl) return run(tap, p.c);
-    if (lastTap && lastTap.c === p.c && Date.now() - lastTap.at < 300) { clearTimeout(lastTap.timer); lastTap = null; return run(dbl, p.c); }
-    if (lastTap) { clearTimeout(lastTap.timer); const prev = lastTap; lastTap = null; run(act(prev.c, "tap"), prev.c); }   // (another card's tap: now)
-    const mine = { c: p.c, at: Date.now() };
-    mine.timer = setTimeout(() => { if (lastTap === mine) lastTap = null; run(tap, p.c); }, 300);
+    return tapOrDbl(p.c, act(p.c, "tap"), act(p.c, "dbl"), p.c);
+  };
+  // a tap waits 0.3 s when there's a double-tap to tell it from (key: the card, or a Devices card's item)
+  const tapOrDbl = (key, tap, dbl, c, go = run) => {
+    if (!dbl) return go(tap, c);
+    if (lastTap && lastTap.key === key && Date.now() - lastTap.at < 300) { clearTimeout(lastTap.timer); lastTap = null; return go(dbl, c); }
+    if (lastTap) { clearTimeout(lastTap.timer); const prev = lastTap; lastTap = null; prev.go(); }   // (another card's tap: now)
+    const mine = { key, at: Date.now(), go: () => go(tap, c) };
+    mine.timer = setTimeout(() => { if (lastTap === mine) lastTap = null; mine.go(); }, 300);
     lastTap = mine;
   };
+  Grid.run = run;
+  // (v3.0.4) a Devices item set to "Ask before doing it": "Turn on Desk fan?" Yes / Cancel first. A garage door asks
+  // already, whatever its item says (data.js: "Open the garage door?", then the PIN) — never twice
+  const asked = (it, a, c) => {
+    if (!a || a.do === "none" || !it.ask || !window.PinPad || a.gd || (H.device(a.id || it.id) || {}).kind === "garage") return run(a, c);
+    const name = it.label || (it.id ? H.devName(it.id) : "") || T("g.device");
+    const on = it.id ? devState(it.id)[1] : false, k = a.do === "toggle" ? (on ? "off" : "on") : a.do;
+    const title = { on: "g.ask.on", off: "g.ask.off", lock: "g.ask.lock" }[k] || "g.ask.other";
+    return PinPad.confirm({ title: T(title, { name }), yes: T("common.yes") }).then((ok) => (ok ? run(a, c) : null));
+  };
+  Grid.asked = asked;
   document.addEventListener("pointermove", (e) => {
     if (press && press.unlock && e.pointerId === press.id) {
       const u = press.unlock, r = u.track.getBoundingClientRect(), room = r.width - u.thumb.offsetWidth - 8;
@@ -1152,8 +1323,10 @@
 
   // a room's own device list: a wheel from what the device is (no setup) — on / off, brightness, white, colour, speed, open
   Grid.autoWheel = (id) => {
-    const d = H.device(id); if (!d) return null;
-    const w = [], a = (label, icon, x, col) => w.push({ id, label, icon, col, ...x });
+    const d = H.device(id), w = [], a = (label, icon, x, col) => w.push({ id, label, icon, col, ...x });
+    // (v3.0.4) an air purifier: Auto, its speeds (as the Fan card has them) and Off — run() sends them through H.purifier
+    if (!d && purifier(id)) { a(T("val.auto"), "airPurifier", { do: "cmd", c: "auto" }); for (const n of [2, 4, 6, 8, 10]) a(T("g.speed", { n }), "fan", { do: "cmd", c: "setFanSpeed", v: n }); a(T("val.off"), "power", { do: "off" }); return w; }
+    if (!d) return null;
     if (d.kind === "fan") { for (const s of ["low", "medium", "high"]) a(s[0].toUpperCase() + s.slice(1), "fan", { do: "cmd", c: "setSpeed", v: s }); a(T("val.off"), "power", { do: "off" }); return w; }
     if (d.kind === "shade") { a(T("val.open"), "shade", { do: "cmd", c: "setPosition", v: 100 }); a(T("shade.half"), "shade", { do: "cmd", c: "setPosition", v: 50 }); a(T("shade.close"), "shade", { do: "cmd", c: "setPosition", v: 0 }); return w; }
     a(T("val.on"), "power", { do: "on" }); a(T("val.off"), "power", { do: "off" });

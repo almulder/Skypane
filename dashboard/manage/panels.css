@@ -184,8 +184,6 @@ button.pn-pick small { color: var(--t3); font-size: 12px; line-height: 1.35; }
 .pn-olist { display: flex; flex-direction: column; }
 .pn-orow { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-top: 1px solid var(--line); border-radius: 8px; min-width: 0; }
 .pn-orow:first-child { border-top: 0; }
-.pn-orow.over { background: var(--acc-soft); }
-.pn-orow .grip { cursor: grab; color: var(--t3); font-size: 16px; user-select: none; flex: none; }
 .pn-orow .tx { flex: 1; min-width: 0; }
 .pn-orow .tx b { display: block; font-weight: 500; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pn-orow .tx small { display: block; color: var(--t3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -318,6 +318,21 @@
     const r = String(cam.room || "").trim(), n = String(cam.name || "").toLowerCase();
     return r && !n.includes(r.toLowerCase()) ? r : "";
   };
+  // (v3.0.4) what a camera's label shows (Manager → Cameras → a camera → Label; service/camera_labels.py): its name,
+  // its room, your own text — any mix, or nothing. Unchanged: the name and the room, as before. The same label on a
+  // camera tile, the Cameras page and full screen (grid.js's camera card: Cameras.labelHTML).
+  C.labelOf = (cam) => {
+    const h = window.PanelStore && PanelStore.get ? PanelStore.get("house") : null, l = h && h.camLabels && cam ? h.camLabels[String(cam.id)] : null;
+    return l && typeof l === "object" ? { room: l.room !== false, name: l.name !== false, custom: l.custom === true, text: String(l.text || "") } : { room: true, name: true, custom: false, text: "" };
+  };
+  C.labelParts = (cam) => {
+    if (!cam) return [];
+    const l = C.labelOf(cam);
+    return [l.name && String(cam.name || ""), l.room && roomOf(cam), l.custom && l.text.trim()].filter(Boolean);
+  };
+  C.labelText = (cam) => C.labelParts(cam).join(" · ");
+  // the caption's inside: the first part in bold, the rest smaller (empty: no label — a doorbell keeps its bell)
+  C.labelHTML = (cam) => { const p = C.labelParts(cam); return p.length ? `<b>${esc(p[0])}</b>${p.slice(1).map((x) => `<span>${esc(x)}</span>`).join("")}` : ""; };
   function tile(cam, { hd = false, big = false, live = true, spk = true, attrs = "" } = {}) {
     if (!cam) return "";
     // hd "g3": HD only for cameras whose small streams are slow (tileHd, older G3s — see grid())
@@ -334,7 +349,7 @@
       ? (live ? `<button class="cam-spk" data-spk="live" aria-label="${esc(T("cam.sound"))}">${SPK_OFF}</button>`
               : `<button class="cam-spk snap" data-spk="snap" aria-label="${esc(T("cam.liveWithSound"))}">${SPK_OFF}<span>${esc(T("cam.liveSound"))}</span></button>`) : "";
     return `<div class="cam-tile ${big ? "big" : ""}" data-cam="${cam.id}" ${attrs}>${media_}
-      <div class="cam-cap">${cam.doorbell ? BELL_SVG : ""}<b>${esc(cam.name)}</b>${roomOf(cam) ? `<span>${esc(roomOf(cam))}</span>` : ""}</div>
+      ${cam.doorbell || C.labelParts(cam).length ? `<div class="cam-cap">${cam.doorbell ? BELL_SVG : ""}${C.labelHTML(cam)}</div>` : ""}
       ${speaker}${preview ? `<span class="cam-live">${esc(T("cam.preview"))}</span>` : ""}</div>`;
   }
 
@@ -500,7 +515,7 @@
     let single = cam ? tile(cam, { hd: true, big: true, live: true, spk: false }) : "";
     if (sound) single = single.replace("<panel-video ", `<panel-video data-sound="1" `); // connects with audio from the start
     fullEl.innerHTML = `${cam ? `<div class="cam-grid l-1">${single}</div>` : grid(view, { hd: false })}
-      <div class="cam-full-bar"><b>${esc(cam ? cam.name : view.name)}</b><span class="cam-count"></span>
+      <div class="cam-full-bar"><b>${esc(cam ? C.labelText(cam) : view.name)}</b><span class="cam-count"></span>
         ${cam && C.go2rtc && player !== "failed" && cam.online !== false && cam.video !== false ? `<button class="cam-sound">${SPK_OFF}<span>${esc(T("cam.tapSound"))}</span></button>` : ""}
         <span class="cam-hint">${esc(T("cam.tapClose"))}</span></div>`;
     // close on the completed tap and swallow it (so it can't press whatever is underneath) — except on sound buttons

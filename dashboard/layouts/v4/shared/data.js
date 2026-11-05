@@ -495,10 +495,12 @@
       changed();
     },
     // both set points after one is moved to value: clamped to the dial's 50–90 °F, heat at least T_GAP below cool — the
-    // other one moves along (never heat above cool; in Auto the two keep their dead band)
+    // other one moves along (never heat above cool; in Auto the two keep their dead band). (v3.0.4) In the hub's own unit
+    // (Fmt.hubRange: a °C hub 10–32, 1° apart): the value goes back to the hub as it is
     tPair(t, which, value) {
-      const v = which === "heat" ? Math.max(50, Math.min(90 - T_GAP, Math.round(value))) : Math.max(50 + T_GAP, Math.min(90, Math.round(value)));
-      return which === "heat" ? { heat: v, cool: Math.max(t.cool, v + T_GAP) } : { cool: v, heat: Math.min(t.heat, v - T_GAP) };
+      const R = window.Fmt ? Fmt.hubRange() : { lo: 50, hi: 90, gap: T_GAP }, g = R.gap;
+      const v = which === "heat" ? Math.max(R.lo, Math.min(R.hi - g, Math.round(value))) : Math.max(R.lo + g, Math.min(R.hi, Math.round(value)));
+      return which === "heat" ? { heat: v, cool: Math.max(t.cool, v + g) } : { cool: v, heat: Math.min(t.heat, v - g) };
     },
     // the one place a setpoint changes (and the other one, when it has to move along: tPair)
     setTemp(which, value, id) {
@@ -506,9 +508,11 @@
       if (t.id == null) return;
       const p = api.tPair(t, which, value), other = which === "heat" ? "cool" : "heat", C = { heat: "setHeatingSetpoint", cool: "setCoolingSetpoint" };
       const moved = p[other] !== t[other];
-      if (otherThermo(id)) {
-        const undo = rawSet(id, { heatingSetpoint: p.heat, coolingSetpoint: p.cool });
-        setSoon(id, undo, { [C[which]]: p[which], ...(moved ? { [C[other]]: p[other] } : {}) });
+      if (otherThermo(id)) {   // (only the sides it has: a cool-only thermostat never gets setHeatingSetpoint)
+        const has = t.has || {}, send = { ...(has[which] ? { [C[which]]: p[which] } : {}), ...(moved && has[other] ? { [C[other]]: p[other] } : {}) };
+        if (!Object.keys(send).length) return;
+        const undo = rawSet(id, { ...(has.heat ? { heatingSetpoint: p.heat } : {}), ...(has.cool ? { coolingSetpoint: p.cool } : {}) });
+        setSoon(id, undo, send);
         changed(); return;
       }
       const undo = snapObj(t);
@@ -617,11 +621,24 @@
       const extra = { tmode: raw("thermostatMode"), fan: raw("thermostatFanMode"), op: raw("thermostatOperatingState") };
       if (own) return { ...t, ...extra };
       const n = (k) => { const v = parseFloat(raw(k)); return Number.isFinite(v) ? v : null; };
-      const m = extra.tmode, f = extra.fan, temp = n("temperature"), heat = n("heatingSetpoint") ?? 70, cool = n("coolingSetpoint") ?? 76;
+      // (v3.0.4) a set point it doesn't report: a default in the hub's unit (21 / 24 °C, 70 / 76 °F); has: the sides it
+      // reports or supports (supportedThermostatModes) — the only ones a set point is ever sent for (setTemp)
+      const hubC = !!(window.Fmt && Fmt.hub() === "C"), has = api.thermoSides(id);
+      const m = extra.tmode, f = extra.fan, temp = n("temperature"), heat = n("heatingSetpoint") ?? (hubC ? 21 : 70), cool = n("coolingSetpoint") ?? (hubC ? 24 : 76);
       // (auto: the dial turns the set point nearer the room's temperature)
       const mode = m === "heat" || m === "emergency heat" ? "heat" : m === "cool" ? "cool" : m === "off" ? (f === "on" || f === "circulate" ? "fan" : "off")
         : m === "auto" ? (temp != null ? autoSide(id, temp, heat, cool) : autoPick[id] || "heat") : "off";
-      return { id, name: api.fullName(id) || "Thermostat", room: (CAT.get(id) || {}).room || "", temp: temp ?? 70, heat, cool, mode, ...extra };
+      return { id, name: api.fullName(id) || "Thermostat", room: (CAT.get(id) || {}).room || "", temp: temp ?? (hubC ? 21 : 70), heat, cool, mode, has, ...extra };
+    },
+    // (v3.0.4) which set points a thermostat has: {heat, cool} — reported (heatingSetpoint / coolingSetpoint), else its
+    // modes (supportedThermostatModes, or the one it is in) say so (heat / emergency heat / auto; cool / auto). Neither known: no
+    thermoSides(id) {
+      const d = CAT.get(id) || {}, v = api.reading(id, "supportedThermostatModes"), got = (k) => Number.isFinite(parseFloat(api.reading(id, k)));
+      let modes = Array.isArray(d.modes) && d.modes.length ? d.modes : [];
+      if (!modes.length && typeof v === "string" && v.trim()) { try { const x = JSON.parse(v); if (Array.isArray(x)) modes = x; } catch { modes = v.split(","); } }
+      modes = [...modes, api.reading(id, "thermostatMode") ?? ""].map((x) => String(x).replace(/[[\]"']/g, "").trim().toLowerCase());
+      return { heat: got("heatingSetpoint") || modes.some((x) => x === "heat" || x === "emergency heat" || x === "auto"),
+        cool: got("coolingSetpoint") || modes.some((x) => x === "cool" || x === "auto") };
     },
 
     // things (see state.things), optionally only one room ("Kitchen") or kind ("washer")
@@ -675,6 +692,9 @@
     // a card's own command: through the same checks as a tap (only some panels, the PIN, the bridge's lists)
     // (gar: a garage door tap — see toggle)
     send: (id, command, value, gar) => cmd(id, command, value, null, null, gar),
+    // (v3.0.4) a command nobody is asked about (a timer flashing its lights): sent only when this panel may and no PIN
+    // is needed — else nothing, with no pop-up; on the bridge, the same checks as any command
+    sendQuiet: (id, command) => !DESIGN && !VIEW_ONLY && hub.live && mayControl(id) && !needsPin(id, command) && cmd(id, command),
     // the builder's Try it (?design=1) only: a demo value, e.g. a garage door's contact following the door
     demoAttr: (id, name, value) => { if (!DESIGN) return; let a = hub.attrs.get(id); if (!a) hub.attrs.set(id, (a = {})); a[name] = value; changed(); },
     toggleWindow(id) { const w = state.windows.find((w) => w.id === id); if (w) { w.open = !w.open; changed(); } },

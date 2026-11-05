@@ -39,6 +39,7 @@
 <main id="main"><div class="p-skel boot-skel" role="status" aria-label="Loading the Manager"><i></i><i></i><i></i></div></main><!-- (v2.8.0: skeleton rows while the first answers come — phone.css) -->
 </div>
 <div id="toast" role="status" aria-live="polite"></div>
+<small id="mver" class="ver" aria-hidden="true"></small><!-- (v3.0.4) the version in the lower-right corner, signed in only (manage.css; manage.js fills every .ver) -->
 <script src="../layouts/v4/shared/icons.js"></script>
 <script src="../layouts/v4/shared/themes.js"></script>
 <script src="../layouts/v4/shared/backgrounds.js"></script><!-- the built-in scenes (their names; the panels draw them) -->
@@ -47,6 +48,7 @@
 <script src="strings/en.js"></script><!-- (v2.9.0) the Manager's words (Kit.t): English; other languages later -->
 <script src="manage.js"></script><!-- the core: el, api, sign-in, permissions, dialogs, the unsaved-changes guard -->
 <script src="kit.js"></script><!-- the icons, the side layout, grouped rows -->
+<script src="reorder.js"></script><!-- (v3.0.4) drag to reorder: the grip, the keyboard, one Undo (Kit.reorder) -->
 <script src="shell.js"></script><!-- the sidebar, the top bar, the router, each login's prefs -->
 <script src="phone.js"></script><!-- (v2.8.0) the phone shell: bottom tabs, ‹ Back, More, Kit.sheet, Back closes a sheet -->
 <script src="layoutmaps.js"></script><!-- (v2.8.0) the layout grid and the built-in layouts: the Panels maps and the builder -->
@@ -59,6 +61,9 @@
 <script src="calendars.js"></script><!-- Integrations → Calendars: the house's calendar links (the admin) -->
 <script src="eventicons.js"></script><!-- (v3.0.2) Integrations → Calendars → Event icons: which title words show which icon -->
 <script src="weatherdev.js"></script><!-- (v3.0.0) Integrations → Weather: a Hubitat weather device's warnings and weather -->
+<script src="unifinet.js"></script><!-- (v3.0.4) Integrations → UniFi Network: line names, the new-device notice, guests, PoE, the client log -->
+<script src="../layouts/v4/shared/fmt.js"></script><!-- (v3.0.4) the panels' formatter: the house's units and date formats -->
+<script src="display.js"></script><!-- (v3.0.4) Display settings: the house's units and date formats (the admin) -->
 <script src="house.js"></script>
 <script src="cardlib.js"></script><!-- a card's install dialog, preview, export, the AI prompt -->
 <script src="cameras.js"></script><!-- the Cameras page: Live / Setup (v2.6.0) -->

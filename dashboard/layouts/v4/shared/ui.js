@@ -143,9 +143,12 @@
 
   // ---------- calendar (week strip + agenda) ----------
   const cal = { weekStart: null, selected: new Date() };
-  const startOfWeek = (d) => { const s = new Date(d); s.setHours(0, 0, 0, 0); s.setDate(s.getDate() - s.getDay()); return s; };
+  // (v3.0.4) weeks start on the house's day — Sunday or Monday (Manager → Display settings, fmt.js)
+  const wk0 = () => (window.Fmt ? Fmt.weekStart() : 0);
+  const startOfWeek = (d) => { const s = new Date(d); s.setHours(0, 0, 0, 0); s.setDate(s.getDate() - ((s.getDay() - wk0() + 7) % 7)); return s; };
   cal.weekStart = startOfWeek(new Date());
   UI.cal = cal;
+  UI.calRealign = () => { cal.weekStart = startOfWeek(cal.selected); };   // (the house's first day of the week changed)
   UI.calShift = (weeks) => {
     cal.weekStart.setDate(cal.weekStart.getDate() + 7 * weeks);
     const thisWeek = H.sameDay(startOfWeek(new Date()), cal.weekStart);
@@ -194,13 +197,13 @@
   UI.monthShift = (n) => { cal.month = new Date(cal.month.getFullYear(), cal.month.getMonth() + n, 1); UI.render(); };
   UI.monthPick = (t) => { cal.selected = new Date(t); cal.weekStart = startOfWeek(cal.selected); UI.render(); };
   UI.monthGrid = () => {
-    const y = cal.month.getFullYear(), m = cal.month.getMonth(), start = new Date(y, m, 1 - new Date(y, m, 1).getDay());
+    const y = cal.month.getFullYear(), m = cal.month.getMonth(), start = new Date(y, m, 1 - ((new Date(y, m, 1).getDay() - wk0() + 7) % 7));
     const cells = Array.from({ length: 42 }, (_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
     const rows = cells[35].getMonth() === m ? 42 : 35;
     return `<div class="mo-head"><button class="wk-nav" style="height:40px"${Acts.on("ui.monthShift", -1)} aria-label="${esc(T("cal.prevMonth"))}">${icon("chevronLeft", 22)}</button>
         <b>${esc(T.month(cal.month))}</b>
         <button class="wk-nav" style="height:40px"${Acts.on("ui.monthShift", 1)} aria-label="${esc(T("cal.nextMonth"))}">${icon("chevron", 22)}</button></div>
-      <div class="cal-mo">${Array.from({ length: 7 }, (_, i) => `<span class="dow">${esc(T.weekday(new Date(2000, 0, 2 + i), "narrow"))}</span>`).join("")}
+      <div class="cal-mo">${Array.from({ length: 7 }, (_, i) => `<span class="dow">${esc(T.weekday(new Date(2000, 0, 2 + wk0() + i), "narrow"))}</span>`).join("")}
       ${cells.slice(0, rows).map((d) => {
         const ev = H.eventsOn(d);
         return `<button class="${d.getMonth() !== m ? "other" : ""} ${H.sameDay(d, new Date()) ? "today" : ""} ${H.sameDay(d, cal.selected) ? "sel" : ""}" ${Acts.on("ui.monthPick", d.getTime())}>

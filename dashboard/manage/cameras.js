@@ -428,6 +428,23 @@
           main: mainIn.value.trim(), ...(subIn.value.trim() ? { sub: subIn.value.trim() } : {}) }) }, K.t("cameras.saveButton")),
         own.sub ? el("button.btn.sm", { type: "button", onclick: () => send({ action: "edit", id: own.id, sub: "" }, K.t("cameras.side.subRemoved")) }, K.t("cameras.side.noSub")) : null) : null));
     }
+    // (v3.0.4) what its label shows on the panels — a tile, the Cameras page, full screen: the name, the room, your own
+    // text, any mix, or nothing (service/camera_labels.py). Saved at once.
+    const lb = { room: true, name: true, custom: false, text: "", ...((C.labels || {})[String(c.id)] || {}) };
+    const lbSave = () => send({ action: "label", id: c.id, label: { room: lb.room, name: lb.name, custom: lb.custom, text: lb.text } }, K.t("cameras.label.saved"));
+    const lbPrev = el("p.pn-info", { "aria-live": "polite" });
+    const lbDraw = () => { const p = [lb.name && c.name, lb.room && c.room, lb.custom && lb.text.trim()].filter(Boolean);
+      lbPrev.textContent = p.length ? K.t("cameras.label.shows", { label: p.join(" · ") }) : K.t("cameras.label.none"); };
+    const lbText = el("input", { type: "text", value: lb.text, maxlength: "40", placeholder: K.t("cameras.label.yourText"), "aria-label": K.t("cameras.label.custom"),
+      disabled: !may || !lb.custom, oninput: () => { lb.text = lbText.value; lbDraw(); }, onchange: lbSave });
+    const lbChk = (k) => el("label", {}, el("input", { type: "checkbox", checked: lb[k], disabled: !may, onchange: (e) => {
+      lb[k] = e.target.checked; lbText.disabled = !may || !lb.custom; lbDraw();
+      if (k === "custom" && lb.custom && !lb.text.trim()) { lbText.focus(); return; }   // (saved once there is text)
+      lbSave();
+    } }), K.t(`cameras.label.${k}`));
+    lbDraw();
+    parts.push(el("div.cm-sec", {}, el("h4", {}, K.t("cameras.label.title")),
+      el("div.cm-lbl", {}, lbChk("name"), lbChk("room"), lbChk("custom"), lbText), lbPrev));
     // which panels show it: per panel, the views it is in — a switch for each. Only the panels this login may change
     // (v2.9.2: the others aren't listed at all; none: one line instead)
     const inViews = Object.entries(C.viewCams || {}).filter(([, ids]) => ids.includes(c.id)).map(([v]) => v);

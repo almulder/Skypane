@@ -204,6 +204,17 @@ img.thumb { width: 52px; height: 52px; object-fit: contain; }
   max-width: calc(100vw - 24px); }
 #toast.show { opacity: 1; }
 #toast.bad { border-color: var(--bad); color: var(--bad); }
+/* (v3.0.4) the version, plain faint text fixed in the lower-right corner of the window: signed in only (the sign-in page
+   shows it on its card), never on a phone (the bottom tabs fill that edge; More shows it). Clicks go through it; under
+   dialogs, pop-ups and the builder (z-index just above the page and the sidebar); a toast lifts it out of the way. */
+#mver { display: none; }
+html:not(.phone) body.signed-in:not(.at-login) #mver { display: block; position: fixed; right: 14px; bottom: 8px; z-index: calc(var(--z-drawer) - 2);
+  font: 11px/1 ui-monospace, Consolas, monospace; letter-spacing: .01em; color: var(--faint); opacity: .75; white-space: nowrap;
+  pointer-events: none; user-select: none; -webkit-user-select: none; transition: bottom .2s; }
+#toast.show ~ #mver { bottom: 64px !important; }
+/* (the builder fills the screen with its own controls in that corner — Auto-hide, Duplicate — and its own dialogs: none there) */
+html body.bld-open #mver { display: none !important; }
+@media (prefers-reduced-motion: reduce) { #mver { transition: none !important; } }
 
 /* house-wide tabs (house.js) */
 .house { display: flex; flex-direction: column; gap: 16px; }
@@ -310,6 +321,24 @@ body > .bld-add.ui-draggable-dragging { width: 96px; z-index: var(--z-pop); back
 .bld-dockproxy.on-btn { cursor: pointer; }
 .bld-dockproxy.dragging { cursor: grabbing; }
 .bld-screen.trying .bld-dockproxy, .bld-screen.benching .bld-dockproxy, .bld-screen.inner .bld-dockproxy { display: none; }
+/* (v3.0.4) the whole room bar (builder.js dockBoxEl): pointed at, its grip dots show on the side facing the page; dragged,
+   the panel's real bar follows to the nearest edge (the rooms' box above keeps scrolling them) */
+.bld-dockbox { position: absolute; z-index: 39; cursor: grab; touch-action: none; user-select: none; border-radius: 16px; }
+.bld-dockbox[hidden] { display: none; }
+button.bld-dgrip { position: absolute; display: grid; place-items: center; min-height: 0; padding: 6px; border: 0; background: none; box-shadow: none; opacity: 0; transition: opacity .16s; cursor: grab; }
+.bld-dgrip .gi { width: 64px; height: 26px; border-radius: 13px; background: rgba(139, 92, 246, .62) radial-gradient(circle, #fff 1.6px, transparent 2.2px) center / 10px 10px;
+  border: 1px solid rgba(199, 182, 255, .8); box-shadow: 0 4px 14px rgba(20, 8, 60, .45); }
+.bld-dockbox[data-at=left] .bld-dgrip .gi, .bld-dockbox[data-at=right] .bld-dgrip .gi { width: 26px; height: 64px; }
+.bld-dockbox[data-at=bottom] .bld-dgrip { bottom: 100%; left: 50%; translate: -50% 0; }
+.bld-dockbox[data-at=top] .bld-dgrip { top: 100%; left: 50%; translate: -50% 0; }
+.bld-dockbox[data-at=left] .bld-dgrip { left: 100%; top: 50%; translate: 0 -50%; }
+.bld-dockbox[data-at=right] .bld-dgrip { right: 100%; top: 50%; translate: 0 -50%; }
+.bld-dockbox:hover .bld-dgrip, .bld-screen:has(.bld-dockproxy:hover) .bld-dgrip, .bld-screen.bar-moving .bld-dgrip, .bld-dgrip:focus-visible { opacity: 1; }
+.bld-dockbox:hover { box-shadow: 0 0 0 2px rgba(167, 139, 250, .55); }
+.bld-screen.bar-moving .bld-dockbox, .bld-screen.bar-moving .bld-dgrip { cursor: grabbing; }
+.bld-screen.bar-moving .bld-dockproxy { pointer-events: none; box-shadow: none; }
+.bld-screen.trying .bld-dockbox, .bld-screen.benching .bld-dockbox, .bld-screen.inner .bld-dockbox { display: none; }
+@media (prefers-reduced-motion: reduce) { .bld-dgrip { transition: none; } }
 /* alignment guides while a card moves (builder.js guides) */
 .bld-guides { position: absolute; inset: 0; pointer-events: none; z-index: 60; }
 .bld-guides i { position: absolute; display: block; }
@@ -340,10 +369,7 @@ small.bld-note { display: block; color: var(--warn); font-size: 13px; }
 .bld-card { cursor: grab; background: transparent; border: 1px dashed transparent; border-radius: 10px; }
 body.bld-dragging, body.bld-dragging * { cursor: grabbing !important; }
 .bld-item.bad > .bld-card { border: 2px solid #ef4444 !important; background: rgba(239, 68, 68, .14); }
-/* the corner to resize (as everywhere else); shows on hover and on the selected card — a third of a tiny card, so it still moves */
-.bld-rz { position: absolute; right: 2px; bottom: 2px; width: min(18px, 33%); height: min(18px, 33%); background: #fbbf24; border-radius: 4px 0 10px 0; cursor: nwse-resize;
-  opacity: 0; transition: opacity .15s; z-index: 3; }
-.bld-item:hover > .bld-rz, .bld-item:has(> .bld-card.sel) > .bld-rz { opacity: .9; }
+/* (v3.0.4: no corner mark — a card resizes from any edge or corner, the cursor says which: builder.js item) */
 /* a card type being dragged in: a copy follows the pointer; a dashed box shows where it would land */
 .bld-ghost { position: fixed; z-index: 9999; pointer-events: none; display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 12px;
   background: var(--pop); border: 1px solid #fbbf24; color: var(--text); font-size: 13px; box-shadow: 0 8px 24px rgba(0, 0, 0, .5); }
@@ -372,6 +398,10 @@ details.bld-sec:not([open]) { gap: 0; }
 .bld-row, .bld-act { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .bld-row > select, .bld-row > input[type=text], .bld-row > textarea, .bld-act > select, .bld-act > input { flex: 1; min-width: 120px; }
 .bld-row > input[type=range] { flex: 1; }
+/* (v3.0.4) a weather card's "Weather from": one row per source; one not connected grayed, with where to connect it */
+.bld-wxsrc { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; cursor: pointer; }
+.bld-wxsrc > span { display: flex; flex-direction: column; gap: 1px; } .bld-wxsrc small { font-size: 12px; }
+.bld-wxsrc.off { cursor: default; } .bld-wxsrc.off b { color: var(--muted); }
 /* (at least 96 px so the controls line up; a longer label — "When it's resized" — takes its own width on one line
    instead of wrapping word by word, and the control goes beside it or onto the next line) */
 .bld-l { font-size: 13px; color: var(--muted); min-width: 96px; max-width: 100%; flex: 0 0 auto; }
@@ -569,10 +599,8 @@ button.linkish:hover, button.linkish:focus-visible { color: var(--text); }
 .ei-list { display: flex; flex-direction: column; margin-top: 8px; }
 .ei-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 4px; border-top: 1px solid var(--line); border-radius: 8px; min-width: 0; }
 .ei-row:first-child { border-top: 0; }
-.ei-row.over { background: var(--acc-soft); }
-.ei-row.dragging { opacity: .5; }
 .ei-row.off .ei-face, .ei-row.off .ei-words, .ei-row.off .ei-name { opacity: .45; }
-.ei-row .grip { cursor: grab; color: var(--t3); font-size: 16px; user-select: none; flex: none; padding-top: 8px; }
+.ei-row .grip { height: 36px; }
 .ei-n { color: var(--t3); font-size: 12px; width: 18px; text-align: right; flex: none; padding-top: 10px; }
 .ei-face { display: inline-grid; place-items: center; width: 36px; height: 36px; padding: 0; border-radius: 10px; flex: none; border: 0; }
 .ei-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -752,6 +780,22 @@ a.hp-link:hover, a.hp-link:focus-visible { color: var(--text); }
 .ok4 > div { min-width: 0; }
 .ovg { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 20px; align-items: start; }
 .ovg > div { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+/* (v3.0.4) the admin's "What changed in 3.0.4" notice (overview.js; mockups/prototypes/upgrade-and-notices.html) */
+.up-card { margin-bottom: 20px; overflow: hidden; }
+.up-head { display: flex; gap: 12px; padding: 16px 16px 12px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, var(--acc-soft), transparent); }
+.up-head .ni { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: var(--acc-soft); color: var(--acc-text); flex: none; }
+.up-head h2 { margin: 0; font-size: 16px; font-weight: 650; }
+.up-head p { margin: 3px 0 0; font-size: 12.5px; color: var(--t2); }
+.up-sum { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.up-grp > summary { display: flex; align-items: center; gap: 8px; padding: 10px 16px; cursor: pointer; border-top: 1px solid var(--line); list-style: none; }
+.up-grp > summary::-webkit-details-marker { display: none; }
+.up-grp > summary .sp { flex: 1; }
+.up-row { display: flex; align-items: center; gap: 10px; padding: 7px 16px 7px 22px; border-top: 1px solid var(--line); min-width: 0; }
+.up-row .ri { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--surface-2); color: var(--t2); border: 1px solid var(--line); flex: none; }
+.up-row b { font-weight: 550; font-size: 13px; } .up-row small { display: block; color: var(--t3); font-size: 12px; overflow-wrap: anywhere; }
+.up-row.bad .ri { color: var(--bad); }
+.up-foot { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.up-foot .sp { flex: 1; }
 .nl { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-top: 1px solid var(--line); min-width: 0; }
 .card > h3.ch + .nl, .nl:first-child { border-top: 0; }
 .nl .ni { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; flex: none; background: var(--surface-2); color: var(--t2); border: 1px solid var(--line); }

@@ -24,7 +24,7 @@ A driver that has its alerts as JSON (a list of {event, severity, sender, start,
 that attribute as "alertsJson": every alert is then read, with its times.
 
 The setting (DATA_DIR/house/weather-device.json, written by the Manager — Integrations → Weather, read by the bridge):
-  {"v": 1, "on": bool, "device": id | null, "card": bool, "warnings": bool, "panels": ["all"] | [panel names],
+  {"v": 1, "on": bool, "device": id | null, "card": bool (v3.0.4: only the default of "Automatic" cards), "warnings": bool, "panels": ["all"] | [panel names],
    "levels": {"extreme": 5, "warning": 4, "watch": 3, "advisory": 2} (0 = not shown), "extreme": [words],
    "units": {"temp": "auto"|"F"|"C", "wind": "auto"|"mph"|"kmh"|"knots"|"ms"}, "attrs": {role: attribute name}}
 
@@ -35,6 +35,11 @@ What the bridge publishes (scripts/hubitat_bridge.py):
                    (level 3–5, or any level from the Manager) stays dismissed while the device still reports it (one
                    missed poll included) — re-issued after that, it is a new alert with a new id (GONE_S)
   hubitat/weather  (retained) WEATHER below: the panels use it for the Home tab while "active" and fresh
+(v3.0.4) The house's OpenWeatherMap key: the server's One Call fetches (weather_sources.py) carry the place's warnings;
+the server publishes them (OWM_TOPIC, retained: {"v": 1, "at": s, "alerts": [{event, sender, start, end, text}]}) and
+the bridge hands them to on_owm(): they join the device's as more warnings — the same levels, panels, ids, dismissals
+(one the device reports too is shown once). Shown while "warnings" is on (the default), also without a device; the
+server's last word older than ALERT_STALE_S: none.
 """
 import datetime
 import hashlib
@@ -51,6 +56,7 @@ import time
 FILE = "weather-device.json"        # the setting (house dir)
 STATE_FILE = "weather-state.json"   # the bridge's memory: dismissed warnings, first seen, the units heard, freshness
 TOPIC = "hubitat/weather"
+OWM_TOPIC = "dashboard/weather/alerts"   # (v3.0.4) the server's OpenWeatherMap warnings, for the bridge
 STALE_S = 2 * 3600          # data older than this: the panels go back to Open-Meteo
 ALERT_STALE_S = 12 * 3600   # warnings from a device not heard this long are dropped (it may have stopped polling)
 # A warning the device stops reporting ends its "episode" — and its dismissal — once a later poll still lacks it, or
@@ -446,14 +452,15 @@ def _unit_wind(cfg, heard):
 
 
 def build_weather(attrs, cfg, heard_units, updated_at, now, device_name=""):
-    """The Home tab's weather (TOPIC) from a device's values. "active": the panels use it (on, a device, the weather
-    card switch on, a temperature, fresh); otherwise "reason" says why not and they keep Open-Meteo."""
+    """The Home tab's weather (TOPIC) from a device's values. "active": the panels may use it (on, a device, a
+    temperature, fresh; v3.0.4: whatever the house switch says — "card" carries it, for cards set to Automatic); otherwise "reason" says why not and they keep Open-Meteo."""
     cfg = cfg or DEFAULT
     base = {"v": 1, "source": "hubitat", "replaces": None, "active": False, "updatedAt": int(updated_at) if updated_at else None}
     if not cfg.get("on") or not cfg.get("device"):
         return {**base, "reason": "off"}
-    if not cfg.get("card"):
-        return {**base, "reason": "card-off", "device": {"id": cfg["device"], "name": clean_text(device_name, SHORT_MAX)}}
+    # (v3.0.4) each weather card picks its source: the device's weather is published whatever the house switch says;
+    # "card" (the switch as stored, no longer on the Integrations page) is what a card set to "Automatic" follows
+    base["card"] = bool(cfg.get("card"))
     names = attrs_for(cfg)
     get = lambda role: _first(attrs or {}, names[role])   # noqa: E731
     tu = _unit_temp(cfg, heard_units)
@@ -515,6 +522,7 @@ class Watch:
         self.gaps, self.poll_at = [], None   # the device's own update rhythm: gaps between its polls, its last poll
         self.episodes = {}         # warning key (event | start) → {"t": first seen, "gone": when first missing, "upd": the data then}
         self.dismissed = {}        # alert id → when dismissed
+        self.owm, self.owm_at = [], None   # (v3.0.4) the server's OpenWeatherMap warnings (raw, as read_alerts) and when it sent them
         self.reload()
         self._load_state()
 
@@ -678,6 +686,30 @@ class Watch:
             self._changed()
             return True
 
+    def on_owm(self, doc, now=None):
+        """(v3.0.4) The server's OpenWeatherMap warnings (OWM_TOPIC; bytes, text or the parsed doc), checked field by
+        field. True when they changed."""
+        now = self.clock() if now is None else now
+        try:
+            if isinstance(doc, (bytes, str)):
+                doc = json.loads(doc[:64 * 1024])
+        except (ValueError, UnicodeDecodeError, RecursionError):
+            doc = None
+        if not isinstance(doc, dict) or doc.get("v") != 1 or not isinstance(doc.get("alerts"), list):
+            return False
+        at = _time(doc.get("at"))
+        out = []
+        for a in doc["alerts"][:MAX_ALERTS]:
+            ev = clean_text(a.get("event"), TITLE_MAX) if isinstance(a, dict) else ""
+            if _is_none(ev):
+                continue
+            out.append({"event": ev, "severity": "", "sender": clean_text(a.get("sender"), SHORT_MAX), "start": _time(a.get("start")),
+                        "end": _time(a.get("end")), "description": clean_text(a.get("text"), TEXT_MAX), "place": "", "more": 0, "owm": True})
+        with self.lock:
+            changed = out != self.owm
+            self.owm, self.owm_at = out, (min(at, now) if at else now)
+            return changed
+
     def save(self):
         with self.lock:
             self._save_state()
@@ -690,13 +722,16 @@ class Watch:
     def _current(self, now):
         """Every warning the device reports now (dismissed or not), checked and levelled: [alert…]."""
         cfg = self.cfg
-        if not cfg.get("on") or not cfg.get("device") or not cfg.get("warnings"):
+        if not cfg.get("warnings"):
             return []
-        if not self.updated or now - self.updated > ALERT_STALE_S:
-            return []
+        dev = cfg.get("on") and cfg.get("device") and self.updated and now - self.updated <= ALERT_STALE_S
+        raw = read_alerts(self.attrs, cfg) if dev else []
+        if self.owm_at and now - self.owm_at <= ALERT_STALE_S:   # (v3.0.4: OpenWeatherMap's — one the device has too: once)
+            evs = {re.sub(r"[^a-z0-9]+", " ", a["event"].casefold()).strip() for a in raw}
+            raw += [a for a in self.owm if re.sub(r"[^a-z0-9]+", " ", a["event"].casefold()).strip() not in evs]
         out, seen = [], set()
-        place = clean_text(_first(self.attrs, attrs_for(cfg)["place"]), SHORT_MAX)
-        for a in read_alerts(self.attrs, cfg):
+        place = clean_text(_first(self.attrs, attrs_for(cfg)["place"]), SHORT_MAX) if dev else ""
+        for a in raw:
             if a["end"] and a["end"] <= now:
                 continue
             lvl = classify(a["event"], a["severity"], cfg)
@@ -717,6 +752,8 @@ class Watch:
             elif doubt or ep.get("th") != th:
                 ep.pop("unv", None)
                 ep["th"] = th   # (vouched for: an updated description is the same warning)
+            if a.get("owm") and self.owm_at > ep["seen"]:   # (the server's last word vouches for it, as a poll does)
+                ep["seen"] = self.owm_at
             first = ep["t"]
             aid = alert_id(a["event"], a["start"] or first)   # (no start from the driver: this episode's own id)
             text = a["description"] or a["event"]

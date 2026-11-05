@@ -49,6 +49,11 @@
     // (the room bar's look: settings of their own, beside look)
     if (["pill", "rail", "segmented", "tabs", "chips", "split"].includes(patch.dockStyle)) cur.dockStyle = patch.dockStyle;
     for (const k of ["dockLabels", "dockAutoHide"]) if (typeof patch[k] === "boolean") cur[k] = patch[k];
+    // (v3.0.4) its edge — live while the builder drags it — and its rooms: which, in what order
+    if (["bottom", "top", "left", "right"].includes(patch.dockAt)) cur.dockAt = patch.dockAt;
+    if (Array.isArray(patch.roomOrder) && patch.roomOrder.every((x) => typeof x === "string")) cur.roomOrder = patch.roomOrder.slice(0, 500);
+    if (patch.hiddenRooms && typeof patch.hiddenRooms === "object" && !Array.isArray(patch.hiddenRooms))
+      cur.hiddenRooms = Object.fromEntries(Object.entries(patch.hiddenRooms).filter(([, v]) => v === true).slice(0, 500));
     PanelStore.setOverride("settings", { ...cur });
   }
 
@@ -69,6 +74,7 @@
       show.trying = true;
       if (window.Grid) { Grid.trying = true; App.render(); }
     }
+    else if (m.t === "netArrange" && window.UniFi) UniFi.arrange(typeof m.i === "string" ? m.i : null);   // (v3.0.4: the map's parts dragged here)
     else if (m.t === "bench" && window.Bench && Bench.mirror) Bench.mirror(m.p && typeof m.p === "object" ? m.p : null);   // (a run on the panel, copied here)
   });
   new ResizeObserver(rect).observe(document.documentElement);

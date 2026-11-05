@@ -15,7 +15,11 @@
   const AREA = { signin: "signins", account: "accounts", settings: "settings", panel: "panels", library: "library", device: "devices", camera: "cameras", weather: "alerts" };
   const AREA_WORDS = { signins: K.t("timeline.area.signin"), accounts: K.t("timeline.chip.accounts"), settings: K.t("timeline.chip.settings"), panels: K.t("timeline.shared.aboutpanels"),
     alerts: K.t("timeline.chip.alerts"), library: K.t("timeline.area.library"), devices: K.t("timeline.shared.aboutdevices"), cameras: K.t("timeline.shared.aboutcameras"), problems: K.t("health.title") };
-  const ICON = { signins: "user", accounts: "users", settings: "link", panels: "tablet", alerts: "bell", library: "image", devices: "devices", cameras: "camera", problems: "activity" };
+  const ICON = { signins: "user", accounts: "users", settings: "link", panels: "tablet", alerts: "bell", library: "image", devices: "devices", cameras: "camera", problems: "activity", network: "wifi" };
+  AREA_WORDS.network = K.t("timeline.chip.network");
+  // (v3.0.4) the admins' "Network" chip: UniFi's client log (unifinet.js M.unifiLog — who connected, left, moved to
+  // another access point, new devices; kept 1 or 7 days by the child), on its own: never mixed into "All"
+  let NET = null, NETLOG = [];   // (NET false: UniFi Network isn't set up — no chip)
   const PERM = {};   // permission id → its words (from the sign-in answer)
   const st = { chip: "all", days: 2, q: "", who: null };
   let EV = [], HL = [], more = false, oldest = null, newest = 0, poll = null;
@@ -89,6 +93,7 @@
     // (v3.0.2) the house's calendar event icons — saved or reset, how many
     "settings.event-icons": (e) => [K.t((e.data || {}).what === "reset" ? "timeline.say.eventIconsReset" : "timeline.say.eventIcons", { who: name(e.who) }),
       K.t("timeline.say.eventIconsCount", { n: (e.data || {}).count || 0 })],
+    "settings.display": (e) => [K.t("timeline.say.settingsDisplay", { who: name(e.who) }), (e.data || {}).what || ""],   // (v3.0.4)
     "library.upload": (e) => [K.t("timeline.say.libraryUpload", { who: name(e.who), name: e.target }), ""],
     "library.remove": (e) => [K.t("timeline.say.libraryRemove", { who: name(e.who) }), ""],
     "library.card": (e) => [K.t("timeline.say.libraryCard", { who: name(e.who), name: e.target }), ""],
@@ -116,7 +121,7 @@
   const since = () => (st.days === 1 ? new Date().setHours(0, 0, 0, 0) / 1000 : Date.now() / 1000 - st.days * 86400);
   function query(extra) {
     const p = new URLSearchParams();
-    if (st.chip !== "all" && st.chip !== "problems") p.set("kinds", st.chip);
+    if (st.chip !== "all" && st.chip !== "problems" && st.chip !== "network") p.set("kinds", st.chip);
     if (st.q.trim()) p.set("q", st.q.trim());
     if (st.who) p.set("who", st.who);
     for (const [k, v] of Object.entries(extra || {})) if (v != null) p.set(k, String(v));
@@ -132,6 +137,10 @@
     oldest = EV.length ? EV[EV.length - 1].at : null;
     newest = EV.length ? EV[0].at : since();
     HL = Array.isArray(h.log) ? h.log : [];
+    if (st.chip === "network" && M.unifiLog) {
+      NETLOG = (await M.unifiLog().catch(() => [])) || (NET = false, []);
+      if (NET === false) st.chip = "all"; else NET = true;
+    }
   }
   async function older() {
     const a = await api(query({ before: oldest, since: since().toFixed(3), limit: 200 })).catch(() => ({}));
@@ -142,6 +151,11 @@
   }
   async function refresh() {
     if (S.route().page !== "health" || !M.$main.querySelector(".tl-page") || document.visibilityState !== "visible") return;
+    if (st.chip === "network" && M.unifiLog) {   // (the client log: read again whole — the child keeps it short)
+      const l = await M.unifiLog(true).catch(() => null);
+      if (Array.isArray(l)) { NETLOG = l; draw(); }
+      return;
+    }
     try {
       const r = await M.poll(query({ since: newest.toFixed(3), limit: 200 }));
       if (!r || !r.ok) return;
@@ -154,6 +168,21 @@
   function rows() {
     const from = since(), words = st.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const out = [];
+    // (v3.0.4) each word once: a guest's "Guests · Guest · Guest" (its Wi-Fi, its network, the tag) says "Guests"
+    const once = () => { const had = []; return (w) => { const k = String(w || "").toLowerCase().replace(/s$/, ""); if (!k || had.includes(k)) return false; had.push(k); return true; }; };
+    if (st.chip === "network") {
+      for (const e of NETLOG) {
+        if (!e || !(e.at >= from)) continue;
+        const text = [e.name, e.network, e.ssid, e.to, e.from].filter(Boolean).join(" ").toLowerCase();
+        if (words.length && !words.every((w) => text.includes(w))) continue;
+        const name = e.name || K.t("timeline.someone");
+        const say = e.kind === "leave" ? K.t("timeline.net.leave", { name }) : e.kind === "move" ? K.t("timeline.net.move", { name, to: e.to || "—" })
+          : e.new ? K.t("timeline.net.new", { name }) : K.t("timeline.net.join", { name });
+        out.push({ at: e.at, area: "network", lvl: "ok", say, src: e.to || K.t("timeline.chip.network"),
+          det: [e.wired ? K.t("timeline.net.wired") : e.ssid, e.network, e.kind === "move" && e.from ? K.t("timeline.net.from", { from: e.from }) : null, e.guest ? K.t("timeline.net.guest") : null].filter(once()).join(" · ") });
+      }
+      return out.sort((a, b) => b.at - a.at);
+    }
     if (st.chip === "all" || st.chip === "problems") {
       for (const h of HL) {
         if (h.at < from) continue;
@@ -174,14 +203,15 @@
     return out.sort((a, b) => b.at - a.at);
   }
   const dayWords = (t) => { const d = new Date(t * 1000), now = new Date(), y = new Date(Date.now() - 86400000);
-    const long = d.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+    const long = window.Fmt ? Fmt.longDate(d) : d.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });   // (v3.0.4: the house's format)
     return d.toDateString() === now.toDateString() ? K.t("timeline.dayToday", { date: long }) : d.toDateString() === y.toDateString() ? K.t("timeline.dayYesterday", { date: long }) : long; };
   const LVL_WORD = { bad: K.t("timeline.level.bad"), warn: K.t("timeline.level.warn"), ok: K.t("timeline.level.ok") };
 
   function draw() {
     if (S.route().page !== "health") return;
     const list = rows();
-    const chips = el("div.seg.tl-chips", { role: "group", "aria-label": K.t("timeline.chipsLabel") }, CHIPS.map(([k, n]) =>
+    const chipList = M.isAdmin() && M.unifiLog && NET !== false ? CHIPS.concat([["network", K.t("timeline.chip.network")]]) : CHIPS;
+    const chips = el("div.seg.tl-chips", { role: "group", "aria-label": K.t("timeline.chipsLabel") }, chipList.map(([k, n]) =>
       el("button" + (st.chip === k ? ".on" : ""), { type: "button", "aria-pressed": String(st.chip === k), onclick: () => { st.chip = k; render(); } }, n)));
     const q = el("input.md-q", { type: "search", placeholder: K.t("timeline.findPlaceholder"), value: st.q, "aria-label": K.t("timeline.find"), "data-fk": "tl-q" });
     let qt = null;
@@ -205,7 +235,7 @@
       for (const r of list) {
         const d = dayWords(r.at);
         if (d !== day) { day = d; kids.push(el("div.tl-day", {}, d)); }
-        kids.push(el("div.tl-row", {}, el("span.tl-t", {}, new Date(r.at * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })),
+        kids.push(el("div.tl-row", {}, el("span.tl-t", {}, window.Fmt ? Fmt.time(new Date(r.at * 1000)) : new Date(r.at * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })),
           r.lvl === "bad" || r.lvl === "warn" ? el("span.pill.tl-l" + (r.lvl === "bad" ? ".bad" : ".warn"), {}, LVL_WORD[r.lvl]) : el("span.tl-l"),
           el("span.tl-src", {}, ic(ICON[r.area] || "activity", 14), r.src),
           el("span.tl-m", {}, el("b", {}, r.say), r.det ? el("small", {}, r.det) : null),
@@ -232,6 +262,7 @@
   }
   async function render() {
     if (M.timelineWho) { st.who = M.timelineWho; M.timelineWho = null; st.chip = "all"; }
+    if (M.timelineChip) { st.chip = M.timelineChip; M.timelineChip = null; st.who = null; if (st.days < 7) st.days = 7; }   // (v3.0.4: Integrations → UniFi Network → Open the log)
     if (!M.$main.querySelector(".tl-page")) M.$main.replaceChildren(el("p.muted", {}, K.t("common.loading")));
     try { await load(); if (st.days > KEEP.days) { st.days = KEEP.days; await load(); } } catch (e) { if (e.message !== "login") M.$main.replaceChildren(K.empty("activity", K.t("timeline.loadFailed"), K.t("integrations.tryAgain"))); return; }
     draw();

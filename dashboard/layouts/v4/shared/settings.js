@@ -38,7 +38,6 @@
     homeAfter: 0,            // s without a touch before a room / camera page goes back to Home (0 = never; not Music)
     pinGeneralSeconds: 60,   // the panel PIN stays unlocked this long after the last touch (pinpad.js; 0 = never relocks)
     pinAlarmSeconds: 30,     // … for arm / disarm / dismissing a level 4–5: this long after the PIN (0 = never relocks)
-    arrangeOnPanel: false,   // press and hold on the panel to arrange rooms / devices (else only on the Manager page)
     pinSound: true,          // (v3.0.3) a soft tick on each PIN pad key — the same for every key (chime.js Sound.pinTick)
     showVersion: true,       // (v3.0.3) the version tag in the corner (app.js versionTag; html.no-ver-tag hides it)
     roomOrder: [],

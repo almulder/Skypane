@@ -43,7 +43,7 @@ This page — the **Manager** — is where you set it all up from a laptop or a 
 
 Enjoying Skypane? It's built in the author's spare time — a coffee helps keep it going. The link opens the author's page in a new tab; the Manager's top bar (☕) and the avatar menu have it too. [Buy me a coffee](https://buymeacoffee.com/almulder)
 
-Version: the small tag under the Skypane name at the top of the sidebar — open it with **›** (for example v3.0.0 · sha-1234567: the release number, then the exact build). The sign-in page shows it too; the tablets show theirs in the lower-left corner.
+Version: the small tag under the Skypane name at the top of the sidebar — open it with **›** (for example v3.0.4: the release number — point at it to see the exact build). The same number sits faintly in the lower-right corner of every page, and on the sign-in page; the tablets show theirs in the lower-left corner. **Send feedback** sends both the version and the build ([Sending feedback](#feedback)).
 
 See also: [Getting started](#getting-started) · [Finding your way around the Manager](#find-your-way)
 
@@ -164,6 +164,10 @@ The **Overview** is the first page after signing in: the house at a glance, and 
 - **Recent activity** — what went wrong and when it was fixed (more kinds of activity come later).
 - **Quick links** — the things you do most, for what your login may use.
 
+**What changed in 3.0.4**
+
+After the upgrade to 3.0.4, each admin sees **What changed in 3.0.4** once, on top of the Overview: every card the upgrade replaced with its newer version, panel by panel (old → new, which screen, its name), with **Open the layout** for each panel, your saved cards, and anything kept as it was. Each card kept its place, size and settings, so the panels look the same. **Got it** hides it for your login; **Quick links** → **What changed in 3.0.4** shows it again. A copy of every panel from before the upgrade is in backups/.
+
 **Acknowledge an alert from the Manager**
 
 The admin can clear an alert here — handy when you're not at home, without giving anyone the PIN.
@@ -281,7 +285,7 @@ See also: [Panels: the Status and Setup views](#panels-status) · [Safety: PIN w
 Open **Panels** → **Setup**, pick the panel on the left, then **General**.
 
 - **Name** — what the Manager calls it.
-- **Temperatures** and **Wind speed** — how this panel shows the weather: °F or °C, mph or km/h. Each panel has its own; unset is °F and mph. (A Hubitat weather device's own units are set on Integrations → Weather and converted.)
+- **Temperatures** and **Wind speed** — this panel only: °F or °C; mph, km/h, m/s or knots. Unset ("Follows the house") is the house's, set in **Display settings**. (A Hubitat weather device's own units are set on Integrations → Weather and converted.)
 - **FreeKiosk device name** — the name its FreeKiosk app uses for MQTT. Sounds, volume, spoken alerts and camera pop-ups go to the tablet with this name. Each tablet needs its own (the admin sets it).
 - **Music page** — what the panel's Music button opens, for example the Sonos Panel. Empty = the house default (Integrations → Music); with neither set the panel has no Music button. The admin sets it (the tablet opens that page full screen).
 - **LED strip** — only for a tablet with a Skypane-controlled LED strip. Leave it off.
@@ -342,15 +346,17 @@ See also: [Backgrounds](#backgrounds) · [Weather effects and the benchmark](#we
 <a id="room-bar"></a>
 ### The room bar
 
-*Where: Panels → Setup → (a panel) → Look & layout → Room bar*
+*Where: Panels → Setup → (a panel) → Room bar*
 
 The room bar holds the buttons for Home, the rooms, cameras and music.
 
-1. **Panels** → the panel → **Look & layout** → the **Room bar** card.
+1. **Panels** → the panel → **Room bar**.
 2. **Show the room bar**: **Show** or **Hide**. A new panel starts with it hidden.
-3. **Where the room buttons sit**: **Bottom**, **Top**, **Left** or **Right**.
+3. **Where it sits**: **Bottom**, **Top**, **Left** or **Right**. Or in the layout builder: point at the bar and drag it by its dots to an edge (Esc cancels), or pick the edge in its **Room bar** settings on the right.
+4. **Rooms on this panel**: switch a room off to hide it here; drag a row by its ⠿ grip, or use ▲ ▼, to change the order.
+5. The same tab has its **style**, **names** (shown or not) and **auto-hide**. In the layout builder, with no card selected, the **Room bar** section on the right has them too.
 
-Which rooms get a button, and their order: [Rooms & devices on a panel](#panel-rooms).
+The bar is only moved and arranged in the Manager. On the tablet it stays where you put it.
 
 See also: [Rooms & devices on a panel](#panel-rooms)
 
@@ -361,9 +367,8 @@ See also: [Rooms & devices on a panel](#panel-rooms)
 
 Each panel picks which rooms it shows and in what order.
 
-1. **Panels** → the panel → **Rooms & devices**.
-2. Under **Rooms on this panel**: switch a room off to hide it here. Use ▲ ▼ to change the order.
-3. Under **Devices in a room**: pick a room, then switch single devices off, add devices from other rooms, and order them.
+1. **Panels** → the panel → **Room bar** → **Rooms on this panel**: switch a room off to hide it here. Drag a row by its ⠿ grip, or use ▲ ▼, to change the order (Alt+↑ ↓ on the grip works too; Undo in the message puts it back).
+2. **Panels** → the panel → **Rooms & devices** → under **Devices in a room**: pick a room, then switch single devices off, add devices from other rooms, and order them.
 
 This only changes this panel. The rooms themselves are made on **Devices → Rooms** ([Rooms](#rooms)).
 
@@ -376,7 +381,7 @@ See also: [Rooms](#rooms) · [Devices: the Basic view](#devices)
 
 **Panels** → the panel → **Cameras**.
 
-- **Camera views on this panel** — ▲ ▼ is the order of the tabs on the camera page. Switch off views this panel shouldn't show. Type a name to rename one here.
+- **Camera views on this panel** — their order (drag by the ⠿ grip, or ▲ ▼) is the order of the tabs on the camera page. Switch off views this panel shouldn't show. Type a name to rename one here.
 - **Auto-show a camera for** — how long a camera pops up (for example when the doorbell rings).
 - **Live video up to** — more live tiles is harder work for the tablet.
 - **Bigger views: a still every** and **Camera sound off after**.
@@ -499,9 +504,9 @@ See also: [Add, move, resize and remove cards](#builder-cards) · [Undo, redo an
 
 *Where: Layout builder*
 
-1. **Add**: drag a card from the list on the left onto the screen, or click it (it goes in the first free spot). **Find a card…** searches every card.
+1. **Add**: drag a card from the list on the left onto the screen, or click it (it goes in the first free spot). A new card starts small, so it always finds room — then drag its corner to make it as big as you need. **Find a card…** searches every card.
 2. **Move**: drag the card.
-3. **Resize**: drag its bottom-right corner.
+3. **Resize**: drag any edge or corner (the cursor shows which). A selected card's settings start with its **X / Y / W / H** in cells of the panel's grid: type a number to move or size it. The arrow keys move it too.
 4. **Remove**: drag it onto the bin, press **Remove**, or click it on the screen and press Delete.
 
 - These four are on the right while no card is selected. **Snap to grid** moves in tidy steps (hold Alt to move freely). Edges that line up show a guide.
@@ -552,16 +557,42 @@ Tap a card. Its settings open on the right (hover a dotted name for a short note
 - **Shows** — its device, reading, text, room, camera or picture; title and icon. The words and icons keep the size Style gives them (**Icons**, **Text**); a bigger card only gives them room. **Grow and shrink with the card** (off at first): switched on, they grow and shrink with the card from its size at that moment; switched off, they keep the size they have then. **When it doesn't fit**: *Make it smaller* or *Fit the width, scroll*.
 - **Style** — presets (**Glass**, **Flat**, **Raised**, **Square**, **No card**), corners, how raised, see-through, border, icon and text size, color.
 - **What it does** — tap, press and hold, double tap: switch a device, lock, unlock (panel PIN), send a command, open a room, page or camera.
-- **Press and hold: the wheel** — up to 8 actions picked from what the device can do.
+- **Press and hold: the wheel** — up to 8 actions picked from what the device can do. (A Devices card's items have their own: [The Devices card](#devices-card).)
 - **Only show it when** / **Highlight it when** — up to 4 rules (device, reading, is / is not / above / below, value).
 
-**Device pickers** have a search box: type any part of the name or room, in any order (“light kit” finds “Kitchen Lights”). Enter picks the best match.
+**Device pickers** have the search as their first row: type any part of the name, room or kind, in any order (“light kit” finds “Kitchen Lights”); ↑ ↓ and Enter pick. The list is grouped by room, each device with its kind's icon.
+
+**Pop-ups** (the device, icon and color pickers) scroll on their own; Esc or a click outside closes them.
 
 **Save a card for later**
 
 **Save card** (at the bottom of its settings) keeps it under **Your cards → Saved cards**, to drag onto any page as a copy.
 
-See also: [Card types (a short list)](#card-types) · [Add, move, resize and remove cards](#builder-cards)
+See also: [Card types (a short list)](#card-types) · [Add, move, resize and remove cards](#builder-cards) · [The Devices card](#devices-card)
+
+<a id="devices-card"></a>
+### The Devices card
+
+*Where: Layout builder → Devices → Devices*
+
+One **Devices** card does what Device, Devices, Value, Button, Lock, Fan and Scene buttons did: lights, switches, readings, buttons, locks, fans and scenes as a **List**, **Tiles**, **Freeform** or one **Single big item**.
+
+1. Add a **Devices** card and click an item (or double-click the card). Its settings open with a live preview on top and four tabs: **Device** · **Actions** · **Look** · **Advanced**.
+2. **Device**: pick it (the search is the list's first row). The item kinds: Value, Switch, Button, Lock, Fan, Scene.
+3. **Actions**: a tap is on / off when the device can switch (the Dyson: Fan on / Fan off), else one of its own commands in plain words (Auto, Speed 1–10…). Another device, a room or a page is under **Something else…**. **Hold** opens a fly-out: tick which of its options show (up to 8). A double-tap is optional.
+4. **Look**: an icon (all icons, drawings, your own pictures; Animated), a motion while it's on, a round background or none, **Color when on** (Automatic or any color), **Icon size** and **Text size**, and the text on any side.
+5. **Advanced**: **Ask before doing it** — the panel asks “Turn on Desk fan?” first. A garage door always asks (then the PIN).
+
+- **Freeform**: drag an item anywhere; resize it from any edge or corner. X / Y / W / H (in % of the card) follow along; the arrow keys move it (Shift: 10 at a time).
+- **Tiles**: drag a tile's right or bottom edge to span more tiles (up to 4 × 4). **List** and **Tiles**: drag an item to a new place.
+- **Single big item** with several items: swipe left or right on the panel for the next one; dots show where you are.
+- The air purifier in Auto shows its speed: “Auto · Speed 4”.
+
+In the builder a click only picks an item: the preview shows on / off without sending anything.
+
+> **Tip:** Upgraded from 3.0.3? Your old Device, Value, Button, Lock, Fan and Scene buttons cards became Devices cards and keep their old look until you press **Use the new look** (Undo takes it back). [What changed in 3.0.4](#overview) lists them.
+
+See also: [Changing a card: Shows, Style, What it does](#card-settings) · [Card types (a short list)](#card-types)
 
 <a id="blank-card"></a>
 ### A blank card: your own pieces
@@ -570,12 +601,16 @@ See also: [Card types (a short list)](#card-types) · [Add, move, resize and rem
 
 A blank card is yours to fill with up to 16 pieces.
 
-1. Drop **Blank card** (in **Devices**, first in the list). The builder zooms in on it.
-2. **Add a piece** on the right: **Picture**, **Light**, **Switch**, **Value**, **Door**, **Lock**, **Garage** or **Text**. Click one, or drag it onto the card.
-3. Drag pieces into place and resize them from their corner. They line up on the card's own grid. The arrow keys move the selected one (Shift: four steps); Delete removes it.
-4. Give each piece its device on the right.
-5. Press **Done** (or Esc) to go back to arranging cards.
-6. To change it again: double-click the card, or **Edit inside**.
+1. Drop **Blank card** (in **Devices**, first in the list).
+2. Double-click it (or **Edit pieces**). It is edited where it is: the rest dims a little and “Editing pieces — Esc to finish” shows on top.
+3. **Add a piece** on the right: **Picture**, **Light**, **Switch**, **Value**, **Door**, **Lock**, **Garage** or **Text**. Click one, or drag it onto the card.
+4. Drag a piece anywhere on the card and resize it from any edge or corner. X / Y / W / H (in % of the card) follow along; the arrow keys move it 1 % (Shift: 10 %); Delete removes it. **Bring forward** / **Send back** stack them.
+5. Give each piece its device on the right.
+6. Esc or a click outside the card ends it.
+
+- **Alignment guides**: faint lines when an edge or a middle lines up with another piece or the card's middle. They only show; nothing snaps. On unless you switch them off (remembered in this browser).
+- Undo / Redo (Ctrl+Z / Ctrl+Y) work for every move. A piece always stays inside its card.
+- A blank card from before 3.0.4 keeps its look: its pieces move to the new places as it's opened or saved.
 
 **Save** says which piece still needs its device, and opens it.
 
@@ -586,20 +621,23 @@ See also: [Add, move, resize and remove cards](#builder-cards) · [Card types (a
 
 *Where: Layout builder → the card list*
 
-The card list has categories: This room, Devices, Climate, Security, People, Time & planning, Cameras & pictures, Info, Your cards.
+The card list has categories: This room, Devices, Climate, Security, People, Time & planning, Cameras & pictures, Network, Info, Your cards.
 
-- **Clock**, **Weather** ([Weather card: places](#weather-places)), **Calendar**, **Countdown**, **Bin day**, **Timers**.
-- **Thermostat** ([Thermostat card and its looks](#thermostat-looks)), **Inside / outside**, **Fan**.
-- **Device** (one device; tap switches it), **Devices** (several on one card), **Value** (one big reading), **Text** (your words with live values), **Button**, **Scene buttons**.
+- **Clock**, **Weather** ([Weather card: places, source and days](#weather-places)), **Calendar**, **Countdown & timers** ([Countdown & timers](#timers)), **Bins / Trash** ([Bins / Trash](#bins-trash)).
+- **Thermostat** ([Thermostat card and its looks](#thermostat-looks)), **Inside / outside**.
+- **Devices** — lights, switches, readings, buttons, locks, fans and scenes on one card ([The Devices card](#devices-card)); **Text** (your words with live values).
 - **Door locks**, **Doors & windows**, **Lock** (slide to unlock), **Garage door**, **Picture & values** ([Picture & values cards and garage doors](#picture-values)), **Alarm (HSM)**, **Safety**, **Mode**.
 - **Who's home**, **Guest Wi-Fi**, **Alert note**, **Notifications**.
 - **Camera**, **Picture**, **Photo frame**.
 - **Music player**, **Energy flow**, **Power now**, **Batteries**, **System**.
 - **List** (a shared shopping / to-do list), **Notes** (sticky notes).
+- **Network** (UniFi): Internet, Network map, Status tabs, Clients & gateway, UniFi devices, PoE power, Clients, Client log and Network values ([UniFi Network and the Network cards](#unifi-network)).
 - Room pages: **Room header**, **Room's devices**, **Doors & locks here**, **Room's cameras**, **Appliances here** — they fill themselves in.
 - **Blank card** ([A blank card: your own pieces](#blank-card)), your saved cards and cards people make ([Cards people make (install a card)](#cards-people-make)).
 
-See also: [Changing a card: Shows, Style, What it does](#card-settings) · [Thermostat card and its looks](#thermostat-looks)
+Device, Value, Button, Lock, Fan and Scene buttons are now part of the **Devices** card; Bin day is now **Bins / Trash**; Countdown and Timers are now **Countdown & timers**. The upgrade moved your old ones over by itself.
+
+See also: [Changing a card: Shows, Style, What it does](#card-settings) · [The Devices card](#devices-card) · [Thermostat card and its looks](#thermostat-looks)
 
 <a id="thermostat-looks"></a>
 ### Thermostat card and its looks
@@ -632,15 +670,62 @@ A **Picture & values** card is a picture with up to 12 rows of readings, switche
 2. Under **Add from**, pick a device. Tick its values in the dropdown, or use **+ As a value**, **+ As a switch**, **+ As a lock** or **+ As a door**.
 3. For a garage door: pick its opener. The picker lists garage door openers first, then switches and relays (never a sensor).
 4. Give a garage door a **Name** — what the PIN question calls the door.
+5. **Doors**: a set of 1 to 4 (Single to Quad), each **Single** or **Double-wide**, each with its own opener and its own open and close times. Each door is tapped on its own. A blank card's **Garage** piece works the same.
 
-Opening a garage always asks for the panel PIN. The builder shows a warning under the screen for anything that opens or unlocks.
+Opening a garage always asks first, then for the panel PIN. The builder shows a warning under the screen for anything that opens or unlocks.
+
+**A vibration or tilt sensor on a door (optional)**
+
+Moving and it starts shaking → **Closing…** before the contact says so. It stops, then shakes again with no “closed” → **Opening…** (the safety eye sent it back up). It stops with no “closed” → **Partly open**. With or without a sensor, the close time running out with no “closed” → **Not closed**, in amber. The contact saying closed always wins.
 
 See also: [Card types (a short list)](#card-types) · [The panel PIN](#panel-pin)
 
-<a id="weather-places"></a>
-### Weather card: places
+<a id="bins-trash"></a>
+### Bins / Trash
 
-*Where: Layout builder → a Weather card → Places*
+*Where: Layout builder → Time & planning → Bins / Trash*
+
+One card for every bin: wheelie, recycling and inside bins, bags, bulky items. Each is drawn a little fuller every day until pickup day. The line on top says “Tomorrow is trash day”, “Trash day today” or the next pickup.
+
+1. Add a **Bins / Trash** card and tap it. Add a bin, name it and pick its drawing (or your own picture from **Icons**), one of 10 colors (whole bin or lid only), **Still** or **Animated** (**Calm** for old tablets).
+2. Its **schedule**: weekly (one or more days), every N weeks from a known pickup day, even or odd weeks, the 1st–4th or last weekday of the month, or seasonal; and the time the truck comes.
+3. **Holidays** (one list for the house, in the card's settings): per bin, what a holiday does — nothing, next day, next work day, same day next week, the rest of that week a day later, or no pickup. The card then says “Pickup Thursday · moved (holiday)”.
+4. **The reminder**: from a set time (the evening before, 19:30 at first, or on pickup day) each due bin is a Reminder in the notification list, with its button: **Taken out**, **Emptied** or **At the curb**. Pressing it clears that bin on every panel.
+5. An optional **alarm** (21:00) chimes and says “Don't forget the bins” when one isn't out yet. Off at first.
+
+Upgraded from 3.0.3? A Bin day card became Bins / Trash with its bins and schedules (Still, no alarm).
+
+See also: [Card types (a short list)](#card-types) · [Countdown & timers](#timers)
+
+<a id="timers"></a>
+### Countdown & timers
+
+*Where: Layout builder → Time & planning → Countdown & timers*
+
+Countdowns to a date and time, and timers (one per kid, say) that start from the house's presets — Free time, Reading, Screen time, Pizza… — with **+1 min**, **Pause** / **Resume** and **Stop**. Each shows any mix of Days · HH · MM · SS (“3 days 02:19:10”, “3 days”, “74 h”).
+
+1. Add a **Countdown & timers** card and tap it. Add a countdown (its date and time) or a timer (its preset). The presets are edited in the card's settings and shared by every timer in the house; the ticked ones are buttons on an idle timer.
+2. A timer's **Sound** on “Timer up”: the chime, spoken words (**Words**: “Emma, time is up” at first) or none; and how many seconds “Timer up” stays.
+3. **Lights that flash** (none at first, up to 4): on and off twice, then back as they were — only lights this panel may switch without the PIN.
+4. **House speakers** (none at first, up to 3): Hubitat speakers that can speak (SpeechSynthesis, such as Sonos or Echo Speaks) say the timer's words. The Skypane service sends it, not the panel, so it works with every panel off. **Speaker volume** shows when a speaker can set its volume; at first it's left as it is.
+5. Connect a timer to other panels: **Linked** (it's on that panel's card too, with its buttons, or runs with its own timer of the same name) or **Notification only** (it counts down there). It goes off on both.
+
+**“Timer up”** fills the screen in the timer's color with its sound, and closes itself after its seconds. It looks like a level 5 but isn't one: no PIN, no alert level.
+
+**PIN-protect timers on this panel** (the card's settings): +1 min, Pause, Resume and Stop ask for the panel PIN (still unlocked from a moment ago: not again). **Presets still start without the PIN** is on unless you switch it off. A lock shows next to the card's title.
+
+**Start a timer from a Hubitat rule**
+
+Send the **Skypane Notifier** the notify text Timer: Emma, Free time (a preset by its name) or Timer: Pizza, 0d00:20 (days, then hours:minutes). Every timer with that name starts, on every panel. It isn't shown as an alert — Skypane clears it on the hub. No driver update is needed.
+
+Upgraded from 3.0.3? A Countdown card kept its date; a Timers card became one timer with its minute buttons as presets.
+
+See also: [Card types (a short list)](#card-types) · [The Skypane Notifier driver (Hubitat)](#notifier-driver) · [Bins / Trash](#bins-trash)
+
+<a id="weather-places"></a>
+### Weather card: places, source and days
+
+*Where: Layout builder → a Weather card*
 
 1. Add a **Weather** card and tap it.
 2. Under **Places**, press **+ Add a place**, type a town or city, press **Search** and pick the right one from the list.
@@ -648,6 +733,12 @@ See also: [Card types (a short list)](#card-types) · [The panel PIN](#panel-pin
 4. Press ✕ to remove one.
 
 A new weather card starts with none: with a weather device on the hub it shows that weather, otherwise “+ Add a place”. The search goes through your Skypane server, so the server needs internet access; “Couldn't reach the weather service” means it has none. “No place by that name” means try another spelling.
+
+- **Weather from**: **Automatic** (it says what it shows right now), **Built-in (Open-Meteo)**, **Hubitat device** or **OpenWeatherMap**. A source that isn't connected is grayed out, with a link to connect it. Automatic: the Hubitat device if it's connected (its gaps filled from Open-Meteo), else OpenWeatherMap if there's a key, else Open-Meteo. A new card starts on Automatic.
+- **Days ahead**: 7 or 14 (14 show as two rows of 7). Days OpenWeatherMap or the device doesn't have come from Open-Meteo, with a small blue dot.
+- **Tap a day for its hours** (on at first): a tap shows that day hour by hour under the days, in a row to scroll; tap it again to close. Off, the days only show.
+
+Upgraded from 3.0.3? Every weather card kept the source it showed: **Hubitat device** where “Use it for the weather card” was on, **Built-in (Open-Meteo)** where it was off.
 
 See also: [Card types (a short list)](#card-types)
 
@@ -969,7 +1060,7 @@ See also: [Guest Wi-Fi](#guest-wifi) · [Safety: PIN windows and unlocking on a 
 
 **Sidebar** → **Admin** → **Integrations** (admins only).
 
-How Skypane reaches your hub (**Home hub**), the **Message broker**, **Cameras** (UniFi Protect and the camera video), your **Guest Wi-Fi console** (UniFi), **Calendars** ([Calendars](#calendars)), **Music** and the **General** settings. Each group starts with its **Status** from the health checks.
+How Skypane reaches your hub (**Home hub**), the **Message broker**, **Cameras** (UniFi Protect and the camera video), your **Guest Wi-Fi console** (UniFi), **UniFi Network** ([UniFi Network and the Network cards](#unifi-network)), **Weather** (the Hubitat weather device and your own OpenWeatherMap key: [Weather warnings and the weather device](#weather)), **Calendars** ([Calendars](#calendars)), **Music** and the **General** settings. Each group starts with its **Status** from the health checks.
 
 1. Change what you need. A bar at the bottom counts the changes waiting.
 2. A secret (a token, a key, a password) shows only as “•••• set”: **Replace…** asks for the new one, **Clear** removes it. It is never shown again.
@@ -989,7 +1080,49 @@ A device shows on a panel but won't switch: set the container variable BRIDGE_AL
 
 **Camera video server** with a login (http://user:password@host:1984): the Manager's pictures use the login, but the panels get the address without it — they can't keep a password secret. Let the panels in without one on that go2rtc (for example its allow-list of addresses), or leave this empty and use the built-in camera video.
 
-See also: [Calendars](#calendars) · [Set up a tablet (FreeKiosk)](#tablet-setup) · [Health and the health pill](#health)
+See also: [Calendars](#calendars) · [UniFi Network and the Network cards](#unifi-network) · [Display settings: units and date formats](#display-settings) · [Set up a tablet (FreeKiosk)](#tablet-setup) · [Health and the health pill](#health)
+
+<a id="unifi-network"></a>
+### UniFi Network and the Network cards
+
+*Where: Sidebar → Admin → Integrations → UniFi Network (the admin)*
+
+With your UniFi console connected, the builder's **Network** cards show your internet lines, the gateway, switches, access points and the UPS, PoE power, the network map, clients and a client log.
+
+1. **Integrations** → **Guest Wi-Fi console**: the UniFi console address and its UniFi Network API key (UniFi Network 10 or newer, from an admin with full Network management) → **Save and restart**. The Network cards read the same console.
+2. **Integrations** → **UniFi Network** says **Connected**, or **Trouble** with what went wrong in plain words.
+3. Its settings (saved at once, no restart): rename each internet line and pick its connection type (fiber, cable, satellite…; cleared, it goes back to UniFi's name), the **“New device joined” notice** on or off and on which panels, guests hidden on the panels, the **PoE warning** (50–100 %, 80 % at first), and the **Client log** on or off, kept 1 or 7 days.
+4. In the layout builder, add cards from **Network**: Internet, Network map, Status tabs, Clients & gateway, UniFi devices, PoE power, Clients, Client log and Network values. Each has a Style (A / B / C) and its own colors. On the **Network map**, drag the parts where you want them (Snap to grid, Show ports, Reset layout).
+
+- Skypane reads the console only while someone looks — a panel with a Network card or the Manager in the last 2 minutes — then every 30 seconds.
+- No API key, IP address, MAC address or serial number goes to a panel or the Manager.
+- Client names come from UniFi itself. The UNVR and the cameras are on the map, never in the Clients list. Guests are hidden on the wall panels at first (the Manager shows them).
+- A **new device** (first time ever seen) is a small notice at the bottom of the panels, gone by itself — not one of the 1–5 alerts. Tap it for Clients.
+- The client log (joined, left, moved to another access point) is also in **Health** → **Timeline** → **Network**.
+- The Network cards stay hidden on the panels while UniFi Network isn't connected; the builder's canvas says why.
+
+> **Note:** Not yet: **Recordings & NVR** (days left, disks) needs a Protect login — Protect's API key can't read the recorder's storage.
+
+See also: [Integrations](#settings-admin) · [Guest Wi-Fi](#guest-wifi) · [Health → Timeline: what happened, and who did it](#health-timeline)
+
+<a id="display-settings"></a>
+### Display settings: units and date formats
+
+*Where: Sidebar → Admin → Display settings (the admin)*
+
+One set of units and formats for the whole house: every panel follows it, and a change shows on the panels in a few seconds.
+
+- **Temperature** °F or °C; **distance and speed** in miles, kilometers, knots or meters (wind in mph, km/h, kn or m/s); **pressure** in inHg or hPa; **rain** in inches or mm.
+- **Date and time**: Automatic, the language's own, or one of nine formats (such as dd/mm/yyyy 24 hour), with an example. The week starts on Sunday or Monday.
+- The **decimals** for temperature and wind, rain and pressure.
+
+The clock, calendar headings and the week row, events, alerts, logs, the weather card, thermostats and room temperatures follow it. Health → Timeline uses the house's date and time format for every login.
+
+A panel can keep its own temperature and wind units: a switch here, or **Follows the house** in that panel's **General** settings ([A panel's General settings](#panel-general)).
+
+After the upgrade the house took the units most panels already showed; a panel that showed others keeps them as its own. The date format starts on Automatic, the look the panels had.
+
+See also: [A panel's General settings](#panel-general) · [Weather card: places, source and days](#weather-places)
 
 ## Alerts
 
@@ -1041,7 +1174,11 @@ The device is also a button device: buttons 1–5 are pushed when someone dismis
 
 > **Tip:** Example for a leak: Trigger: kitchen leak sensor wet → Skypane: critical(“Water leak — kitchen sink”, “leak”). Trigger: sensor dry → Skypane: dismiss(“leak”).
 
-See also: [Alerts come from Hubitat](#alerts-hubitat)
+**Start a timer**
+
+notify(“Timer: Emma, Free time”) starts every Countdown & timers timer named Emma with the Free time preset; Timer: Pizza, 0d00:20 runs it for 20 minutes (days, then hours:minutes). It isn't shown as an alert ([Countdown & timers](#timers)).
+
+See also: [Alerts come from Hubitat](#alerts-hubitat) · [Countdown & timers](#timers)
 
 <a id="weather"></a>
 ### Weather warnings and the weather device
@@ -1062,7 +1199,7 @@ Skypane can use a weather device on your Hubitat hub. Its warnings (tornado, flo
 **In Skypane**
 
 1. **Integrations** → **Weather** → pick the device. (It shows up a few minutes after you tick it in Maker API.)
-2. Leave **Use it for the weather card** and **Show its warnings** on, or switch either off.
+2. Leave **Show its warnings** on, or switch it off. Which weather each card shows is now the card's own **Weather from** setting ([Weather card: places, source and days](#weather-places)).
 3. Choose the **Panels that show warnings**, and under **Warning levels** which level each kind of warning gets.
 
 The levels: tornado, flash flood, hurricane and other extreme warnings are level 5; other warnings are level 4; watches are level 3; advisories and statements are level 2. Levels 4 and 5 fill the screen, sound, and need the panel PIN to dismiss — like any alert.
@@ -1076,6 +1213,12 @@ A warning goes away by itself when the device stops reporting it. A dismissed wa
 The driver's author has marked it as no longer maintained (March 2026), but it still works. Another weather driver can work too: **How the device reports** lets you name its attributes.
 
 Only an admin can choose the weather device. Pointed at a device that isn't a weather device, Skypane only reads its values: the weather card shows whatever it reports (or Open-Meteo when it has no temperature), and nothing else changes.
+
+**Your own OpenWeatherMap key (optional)**
+
+**Integrations** → **Weather** → **OpenWeatherMap key**. With it, Skypane fetches One Call 3.0 once for the house every 15 minutes — the weather now, 48 hours, 8 days and warnings — and every panel shares it. It stays within 800 calls a day (OpenWeatherMap is free up to 1,000), even across restarts. Days 9–14 come from Open-Meteo. The key shows only as set or not set; it's never sent to a panel and never logged.
+
+With the key, OpenWeatherMap's warnings join the panels' alerts the way the weather device's do: the same levels, panels and dismissing. A warning both report shows once. Without a weather device they're the only warnings.
 
 See also: [Alerts come from Hubitat](#alerts-hubitat) · [Integrations](#settings-admin)
 
@@ -1203,6 +1346,8 @@ Pair the tablet in the browser it will keep using — for FreeKiosk, inside Free
 4. Restart FreeKiosk. It shows **Connect this panel** with a 6-character code. Approve it in the Manager under **New panel requests** ([Connect a tablet: pairing with a code](#panel-pairing)). The tablet then opens its panel by itself — the start page can stay as it is, it forwards.
 5. FreeKiosk → MQTT: broker <your server> port 1883, the user and password from **Integrations → Message broker → Login for devices** (use **Copy user** and **Copy password**), and the panel's **FreeKiosk device name** (**Panels** → **Setup** → the panel → **General** → **Set up the tablet**).
 6. Check that the version tag in the panel's lower-left corner matches the Manager's.
+
+**The PoE wall tablet's LED agent** (its LED strip and sensors) keeps MQTT settings of its own, apart from FreeKiosk's. With the built-in broker the panel page sets the agent up by itself (on the tablet, port 852): within a minute **Its tablet** shows **LED agent: Connected**. Put the 3.0.2 agent on each such tablet once (docs/panel-agent.md). On such a tablet, open Skypane by its IP address (http://192.168.1.5/, not a name): the agent connects to that address. A separate broker: the agent's agent.args is still set by hand.
 
 An iPad or any browser works too. If you skip the MQTT part, you go without screen wake, volume control and spoken alerts. On an iPad, open Skypane's address in Safari, Share → **Add to Home Screen** first, then open it from the Home Screen icon and connect it there (a Home Screen app keeps its own storage, apart from Safari) (sorry iPad users — blame Apple).
 

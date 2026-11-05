@@ -108,3 +108,21 @@ i.dot.warn, span.dot.warn { background: var(--warn); } i.dot.bad, span.dot.bad {
 .phone-note { display: flex; gap: 12px; align-items: center; padding: 14px 16px; border-radius: 12px; border: 1px dashed var(--line-2); color: var(--t2); background: var(--surface); }
 .phone-note .i { color: var(--acc); }
 .btn[aria-disabled=true] { opacity: .5; cursor: not-allowed; } .btn[aria-busy=true] { cursor: progress; }   /* (v2.4.1: still focusable — a tooltip / the focus stay) */
+
+/* ---------- (v3.0.4) drag to reorder (reorder.js): the grip, the lifted row, the drop line, the place chip, Undo ---------- */
+button.grip { flex: none; width: 20px; min-height: 26px; padding: 0; border: 0; border-radius: 6px; background: none; display: grid; place-items: center;
+  color: var(--t3); font-size: 16px; line-height: 1; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+button.grip:hover, button.grip:focus-visible { color: var(--acc); background: var(--acc-soft); }
+.rr-dragging { opacity: .45; }
+.rr-above, .rr-below { position: relative; }
+.rr-above::before, .rr-below::after { content: ""; position: absolute; left: 0; right: 0; height: 3px; border-radius: 3px; background: var(--acc);
+  box-shadow: 0 0 10px var(--acc); z-index: 3; pointer-events: none; }
+.rr-above::before { top: -2px; } .rr-below::after { bottom: -2px; }
+.rr-pick { outline: 2px dashed var(--acc); outline-offset: 1px; }
+body.rr-on, body.rr-on * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
+.rr-chip { position: fixed; z-index: var(--z-tip); pointer-events: none; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap;
+  background: var(--pop); color: var(--text); border: 1px solid var(--line-2); box-shadow: var(--shadow-lg); }
+.rr-chip[hidden] { display: none; }
+#toast.rr { display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; pointer-events: auto; }
+#toast .rr-undo { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border-radius: 7px; font-weight: 600; font-size: 12.5px;
+  color: var(--acc-text); background: var(--acc-soft); }

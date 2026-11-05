@@ -37,7 +37,7 @@
     FAN: { auto: T("thermo.mode.auto"), on: T("val.on"), circulate: T("thermo.fan.circulate") } });
   let { MODE, FAN } = words();
   addEventListener("panel-strings", () => ({ MODE, FAN } = words()));   // (another language's words arrived)
-  const LO = 50, HI = 90;   // (the dial's range: data.js clamps set points to it)
+  let LO = 50, HI = 90;   // (the dial's range, in the hub's unit: data.js clamps set points to it — set per drawing, model())
   const frac = (v) => (v == null || !Number.isFinite(+v) ? 0 : Math.max(0, Math.min(1, (v - LO) / (HI - LO))));
   const rad = (a) => (a * Math.PI) / 180;
   const P = (cx, cy, r, a) => [cx + r * Math.sin(rad(a)), cy - r * Math.cos(rad(a))];   // (a: degrees clockwise from 12 o'clock)
@@ -46,10 +46,12 @@
   // the gauge's colours: blue (cold) → purple → orange (hot), as in the mockup
   const gcol = (k) => { const m = (a, b, f) => Math.round(a + (b - a) * f), [c0, c1, c2] = [[74, 163, 255], [167, 139, 250], [251, 146, 60]], [x, y, f] = k < 0.5 ? [c0, c1, k * 2] : [c1, c2, (k - 0.5) * 2];
     return `rgb(${m(x[0], y[0], f)},${m(x[1], y[1], f)},${m(x[2], y[2], f)})`; };
-  const deg = (v) => (v == null || !Number.isFinite(+v) ? "—" : Math.round(v));
+  // (v3.0.4) a hub reading (room, set points) in the panel's unit; the dial's geometry stays in the hub's
+  const deg = (v) => (v == null || !Number.isFinite(+v) ? "—" : window.Fmt ? Fmt.hubTemp(v) : Math.round(v));
 
   // ---------- what every look shows: one thermostat, read the same way ----------
   function model(c) {
+    if (window.Fmt) ({ lo: LO, hi: HI } = Fmt.hubRange());
     const o = c.o || {}, own = Number.isInteger(o.id) && o.id > 0, t = H.thermo(own ? o.id : null);
     if (t.id == null) return null;
     const tid = own ? o.id : "null";   // (in the buttons' onclick: the card's own thermostat, or the house's)
@@ -134,12 +136,12 @@
           <div class="tl-hd"><span class="tl-name">${M.name}</span><small>${esc(M.hum != null ? T("tl.humidity", { word: M.word, h: M.hum }) : M.word)}</small></div></div>
         <div class="tl-two"><div><small>${esc(T("tl.inRoom"))}</small><b class="tl-n">${deg(M.now)}°</b></div><div class="r"><small>${M.auto ? T("thermo.mode.auto") : T("tl.setTo")}</small><b class="tl-n tl-setc">${M.tgt ? `${setNum(M)}°` : T("thermo.mode.off")}</b></div></div>
         <div class="tl-bar" data-tdrag="bar"><i class="tl-bt"></i>${M.tgt ? `<i class="tl-bf"></i>` : ""}<div class="tl-mv tl-mn"><i class="tl-tri"></i></div>${M.tgt ? `<div class="tl-mv tl-mk"><i class="tl-thumb"></i></div>` : ""}</div>
-        <div class="tl-scale"><span>${LO}°</span><span>${esc(T("tl.nowMark", { t: deg(M.now) }))}</span><span>${HI}°</span></div>${modesHtml(M, "seg")}${fansHtml(M)}`;
+        <div class="tl-scale"><span>${deg(LO)}°</span><span>${esc(T("tl.nowMark", { t: deg(M.now) }))}</span><span>${deg(HI)}°</span></div>${modesHtml(M, "seg")}${fansHtml(M)}`;
     },
     // 4 · a tall thermometer: the column is the room, the arrow the set point (drag along the tube)
     mercury(M) {
       const y = (v) => 240 - frac(v) * 210, marks = [];
-      for (let v = LO; v <= HI; v += 10) marks.push(`<line x1="50" y1="${y(v)}" x2="58" y2="${y(v)}" class="tl-mk-l"/><text x="62" y="${y(v) + 4}" class="tl-mk-t">${v}</text>`);
+      for (let v = LO; v <= HI; v += 10) marks.push(`<line x1="50" y1="${y(v)}" x2="58" y2="${y(v)}" class="tl-mk-l"/><text x="62" y="${y(v) + 4}" class="tl-mk-t">${deg(v)}</text>`);
       return `<div class="tl-tube" data-tdrag="vbar"><svg viewBox="0 0 84 300"><rect x="24" y="20" width="22" height="240" rx="11" class="tl-glass"/>
           <rect x="29" y="${y(M.now).toFixed(1)}" width="12" height="${(262 - y(M.now)).toFixed(1)}" rx="6" class="tl-merc"/><circle cx="35" cy="268" r="20" class="tl-merc tl-bulb"/>${marks.join("")}
           ${M.tgt ? `<g class="tl-vk"><path d="M4 23l14 7-14 7z" class="tl-arrow"/><line x1="18" y1="30" x2="50" y2="30" class="tl-dash"/></g>` : ""}</svg></div>
@@ -170,7 +172,7 @@
           <div class="tl-box cool"><small>${I("snow", 13)} Cool at</small><div class="tl-row"><b class="tl-n"><span data-tv="cool">${deg(t.cool)}</span>°</b>${setB(M, "cool", -1)}${setB(M, "cool", 1)}</div></div></div>
         <div class="tl-bar tl-rng" data-tdrag="range"><i class="tl-bt"></i><i class="tl-bf2"></i><div class="tl-mv tl-mn"><i class="tl-tri"></i></div>
           <div class="tl-mv tl-mh"><i class="tl-thumb heat"></i></div><div class="tl-mv tl-mc"><i class="tl-thumb cool"></i></div></div>
-        <div class="tl-scale"><span>${LO}°</span><span>${esc(T("tl.nowMark", { t: deg(M.now) }))}</span><span>${HI}°</span></div>
+        <div class="tl-scale"><span>${deg(LO)}°</span><span>${esc(T("tl.nowMark", { t: deg(M.now) }))}</span><span>${deg(HI)}°</span></div>
         <div class="tl-note">${under ? T.html("tl.under", { what: `<span class="tl-hc">${esc(T(M.run === "heat" ? "tl.heatingL" : "tl.willHeat"))}</span>` }, { t: deg(t.heat) }) : over ? T.html("tl.over", { what: `<span class="tl-cc">${esc(T(M.run === "cool" ? "tl.coolingL" : "tl.willCool"))}</span>` }, { t: deg(t.cool) }) : esc(T("tl.inRange"))}</div>
         ${modesHtml(M, "chips")}${fansHtml(M)}`;
     },
@@ -233,7 +235,10 @@
   // the outside temperature: the house's own sensor, else the weather; today's high / low from the weather
   function outside() {
     const S = H.state.outside || {}, w = window.Weather && Weather.current ? Weather.current() : null, d0 = w && w.days && w.days[0];
-    const temp = S.temp != null && !S.none ? S.temp : w && w.now ? w.now.temp : null;
+    // (in the hub's unit, as the house's own sensor reads: the weather's taken back to it — deg() and the dial's mark agree)
+    const own = S.temp != null && !S.none, u = window.Fmt ? [Fmt.units().temp, Fmt.hub()] : ["F", "F"];
+    let temp = own ? S.temp : w && w.now ? w.now.temp : null;
+    if (!own && temp != null && u[0] !== u[1]) temp = u[1] === "C" ? (temp - 32) * 5 / 9 : temp * 9 / 5 + 32;
     return { temp: Number.isFinite(+temp) && temp !== null ? +temp : null, hi: d0 ? d0.high : null, lo: d0 ? d0.low : null };
   }
 
@@ -336,7 +341,7 @@
     if (v === drag.v) return;
     drag.v = v;
     drag.root.style.setProperty(drag.kind === "range" ? (drag.which === "heat" ? "--th" : "--tc") : "--tk", frac(v).toFixed(3));
-    drag.root.querySelectorAll(`[data-tv="${drag.which}"]`).forEach((n) => { n.textContent = v; });
+    drag.root.querySelectorAll(`[data-tv="${drag.which}"]`).forEach((n) => { n.textContent = deg(v); });
   }
   document.addEventListener("pointermove", (e) => { if (drag && e.pointerId === drag.id) moveTo(e); });
   // (the drawing back to a value: the page's redraw only patches what changed since it last drew the card — a

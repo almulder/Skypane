@@ -6,7 +6,11 @@
 // hubitat/weather — is the HOUSE's own place's while it's active and fresh (v3.0.3: the house tab named after the
 // device's place, or a place with that name — never Tokyo just because it's a card's first place); the other places
 // stay on Open-Meteo, and Open-Meteo is the house's again when the device is off or its data is stale. Weather.get(id) / current() hand out
-// whichever is shown, with .source "hubitat" | "open-meteo"; numbers in the panel's units (Weather.units()).
+// whichever is shown, with .source "hubitat" | "open-meteo" | "owm"; numbers in the panel's units (Weather.units()).
+// (v3.0.4) Each weather card picks its source (o.src; a built-in layout: the panel setting weather.src): "auto" (or
+// none) | "om" | "hub" | "owm" — Weather.get(id, src), forCard(key, list, src), current(src). OpenWeatherMap (the
+// house's own key) and a day's hours come from the server (/api/weather/forecast, /api/weather/hours —
+// service/weather_sources.py: one fetch for the house, every panel shares it); Open-Meteo's 16 days stay the panel's own.
 (function () {
   const FIXED = [];
   const MAX_CUSTOM = 3;
@@ -39,12 +43,15 @@
     describe,
     hub: null,         // the Hubitat weather device's message (hubitat/weather), as it came
   };
-  // the panel's units (settings units {temp: "F"|"C", wind: "mph"|"km/h"}; °F and mph as before when not set)
-  W.units = () => { const u = (window.Settings && Settings.v && Settings.v.units) || {}; return { temp: u.temp === "C" ? "C" : "F", wind: u.wind === "km/h" ? "km/h" : "mph" }; };
-  const toT = (v, from) => { if (v == null || !Number.isFinite(+v)) return null; const to = W.units().temp; v = +v; return Math.round(from === to ? v : to === "C" ? (v - 32) * 5 / 9 : v * 9 / 5 + 32); };
-  const toW = (v, from) => { if (v == null || !Number.isFinite(+v)) return null; const to = W.units().wind; v = +v; return Math.round(from === to ? v : to === "km/h" ? v * 1.609344 : v / 1.609344); };
+  // the panel's units {temp: "F"|"C", wind: "mph"|"km/h"|"kn"|"m/s"} — (v3.0.4) the house's (Manager → Display
+  // settings) unless the panel has its own (fmt.js); numbers with the house's decimals for temperature and wind
+  // (without fmt.js — a page that doesn't load it: the panel's own units, else °F and mph, whole numbers, as before)
+  const FX = () => window.Fmt || null;
+  W.units = () => { if (FX()) return Fmt.units(); const u = (window.Settings && Settings.v && Settings.v.units) || {}; return { temp: u.temp === "C" ? "C" : "F", wind: u.wind === "km/h" ? "km/h" : "mph" }; };
+  const toT = (v, from) => { if (FX()) return Fmt.temp(v, from); if (v == null || !Number.isFinite(+v)) return null; const to = W.units().temp; v = +v; return Math.round(from === to ? v : to === "C" ? (v - 32) * 5 / 9 : v * 9 / 5 + 32); };
+  const toW = (v, from) => { if (FX()) return Fmt.speed(v, from); if (v == null || !Number.isFinite(+v)) return null; const to = W.units().wind; v = +v; return Math.round(from === to ? v : to === "km/h" ? v * 1.609344 : v / 1.609344); };
 
-  const unitsKey = () => { const u = W.units(); return `${u.temp}|${u.wind}`; };
+  const unitsKey = () => { const u = W.units(); return `${u.temp}|${u.wind}|${FX() ? Fmt.house().dT : 0}`; };
 
   // ---------- the days of a forecast ----------
   // (v3.0.3) from today on (by default the local date — "Today" moves on at midnight even when nothing new arrives), one
@@ -99,34 +106,49 @@
   // (v3.0.3) The device's weather is the HOUSE's: only the house tab, or a place (the panel's or a card's) with the
   // device's place name ("Springfield"), shows it. Any other place — Tokyo, Paris — always shows its own Open-Meteo
   // weather, first place of a card or not; the device's gaps are filled only from Open-Meteo for the same place.
+  // (v3.0.4) …and a card's first place (the builder's 🏠) under another name when it really is the house: within
+  // HOUSE_KM of the house's own coordinates (the device's lat/lon, when it reports them), else — none known — when it is
+  // the panel's home place (W.homeOf, app.js: the home screen's first weather card's 🏠). "Home" in New York and the
+  // device's "Springfield" are one house; a card for Grandma's town far away keeps that town's own weather
   const norm = (s) => String(s || "").split(",")[0].normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
+  const HOUSE_KM = 30;
+  const km = (a, b) => { const r = Math.PI / 180, s = Math.sin((b.lat - a.lat) * r / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin((b.lon - a.lon) * r / 2) ** 2;
+    return 12742 * Math.asin(Math.sqrt(s)); };
+  const firstIds = new Set();   // (each card's first place, as forCard sees them)
   W.isHouse = (id) => {
     if (!id) return false;
     if (id === HUB_ID) return true;
-    const h = W.hub && norm(W.hub.place), p = placeById(id);
-    return !!(h && p && norm(p.name) === h);
+    const hb = W.hub, h = hb && norm(hb.place), p = placeById(id);
+    if (h && p && norm(p.name) === h) return true;
+    if (!p || !firstIds.has(id)) return false;
+    if (hb && Number.isFinite(hb.lat) && Number.isFinite(hb.lon)) return km(hb, p) <= HOUSE_KM;
+    return typeof W.homeOf === "function" && W.homeOf() === id;
   };
   // the Open-Meteo place standing in for the device's gaps on the house tab: a place of the house's own, when one is loaded
-  const houseOmId = () => { for (const l of [...W.locations, ...liveSeen()]) if (W.data[l.id] && W.isHouse(l.id)) return l.id; return null; };
+  // (v3.0.4: the place named like the device's first, then a card's home place)
+  const houseOmId = () => { const all = [...W.locations, ...liveSeen()].filter((l) => W.data[l.id]), h = W.hub && norm(W.hub.place);
+    const l = (h && all.find((x) => norm(x.name) === h)) || all.find((x) => W.isHouse(x.id)); return l ? l.id : null; };
   const hhmmToday = (s) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(s || "")); if (!m) return null; const d = new Date(); d.setHours(+m[1], +m[2], 0, 0); return d; };
 
   // a place's Open-Meteo weather in the panel's units (v3.0.3: data fetched in other units is converted until the
-  // refetch in the new ones arrives — °C never shows as °F), days from today on
-  function omData(id) {
-    const d = id ? W.data[id] : null;
+  // refetch in the new ones arrives — °C never shows as °F), days from today on. (v3.0.4: the server's OpenWeatherMap
+  // weather the same way — it comes in °C and km/h with decimals: rounded here)
+  const round = (v) => (FX() ? Fmt.round(v, Fmt.house().dT) : v == null || !Number.isFinite(+v) ? null : Math.round(+v));
+  function inUnits(d, source) {
     if (!d) return null;
     const u = W.units(), du = d.units || u, cT = du.temp !== u.temp, cW = du.wind !== u.wind;
-    const t = (v) => (cT ? toT(v, du.temp) : v), w = (v) => (cW ? toW(v, du.wind) : v);
+    const t = (v) => (cT ? toT(v, du.temp) : round(v)), w = (v) => (cW ? toW(v, du.wind) : round(v));
     const days = fromToday((d.days || []).map((x) => ({ ...x, high: t(x.high), low: t(x.low) })), placeDay(d));   // (the place's own Today)
     const first = days[0] || {};
-    return { ...d, source: "open-meteo", now: { ...d.now, temp: t(d.now.temp), feels: t(d.now.feels), wind: w(d.now.wind), gusts: w(d.now.gusts) }, days,
-             sunrise: first.sunrise || d.sunrise, sunset: first.sunset || d.sunset };
+    return { ...d, source, now: { ...d.now, temp: t(d.now.temp), feels: t(d.now.feels), wind: w(d.now.wind), gusts: w(d.now.gusts) }, days,
+             sunrise: first.sunrise || d.sunrise, sunset: first.sunset || d.sunset, ...(source === "owm" ? { mixed: days.some((x) => x.om) } : {}) };
   }
+  const omData = (id) => inUnits(id ? W.data[id] : null, "open-meteo");
 
   const memo = new Map();   // Open-Meteo place id ("" for none) → {key, val}
   // the device's weather; omId: the same place's Open-Meteo data for its gaps (or none)
   function hubData(omId) {
-    const h = W.hub, u = (h && h.units) || {}, ut = u.temp === "C" ? "C" : "F", uw = u.wind === "km/h" || u.wind === "kmh" ? "km/h" : "mph";
+    const h = W.hub, u = (h && h.units) || {}, ut = u.temp === "C" ? "C" : "F", uw = FX() ? Fmt.speedUnit(u.wind) : u.wind === "km/h" || u.wind === "kmh" ? "km/h" : "mph";
     const om = omData(omId);
     // (the place the fill-in came from and the local date are in the key: two places never share one memo, and
     // "Today" moves on at midnight)
@@ -161,24 +183,53 @@
     memo.set(om ? omId : "", { key, val });
     return val;
   }
-  // what a place shows: the device's weather for the house's own place (while active and fresh), else its own
+  // what a place shows from the device: its weather for the house's own place (while active and fresh), else its own
   // Open-Meteo weather — never another place's
-  W.get = (id) => {
-    if (!id) return null;
+  const hubGet = (id) => {
     const house = W.isHouse(id), omId = id === HUB_ID ? houseOmId() : id;
     if (house && W.hubActive()) return hubData(omId);
     const d = omData(omId);
-    if (d) return d;
+    if (d) return house && !W.hubStale() ? { ...d, why: "hubOff" } : d;   // (v3.0.4: the card says the device isn't reporting)
     return house && W.hubStale() ? { ...hubData(omId), stale: true } : null;   // (never a blank card when the device has values)
+  };
+  // (v3.0.4) what a card with source src shows (weather_sources.resolve, plus the device's freshness): "hub" as before
+  // 3.0.4; "om" only Open-Meteo; "owm" the server's OpenWeatherMap weather (its days 9+ from Open-Meteo), Open-Meteo
+  // while there's none (no key, the day's calls used up); "auto" — and no source — the device for the house's own place
+  // while the house switch is on (as stored: hub.card), else OpenWeatherMap when there's a key, else Open-Meteo
+  const SRCS = ["auto", "om", "hub", "owm"];
+  W.srcOf = (src) => (SRCS.includes(src) ? src : (window.Settings && Settings.v && Settings.v.weather && SRCS.includes(Settings.v.weather.src) ? Settings.v.weather.src : "auto"));
+  W.get = (id, src) => {
+    if (!id) return null;
+    const s = SRCS.includes(src) ? src : "auto", omId = id === HUB_ID ? houseOmId() : id;
+    // (v3.0.4) "Hubitat device" on a place that isn't the home one: its own Open-Meteo weather, and the card says why
+    if (s === "hub" && !W.isHouse(id)) { const d = omData(omId); return d ? { ...d, why: "hubHome" } : null; }
+    if (s === "hub") return hubGet(id);
+    const hubOk = s === "auto" && !(W.hub && W.hub.card === false) && W.isHouse(id);
+    if (hubOk && W.hubActive()) return hubData(omId);
+    if (s !== "om") { const o = owmData(omId); if (o) return o; }
+    const d = omData(omId);
+    if (d) return d;
+    return hubOk && W.hubStale() ? { ...hubData(omId), stale: true } : null;
   };
   // the panel's tabs: its places — and the house's own tab first, from the device, while none of them is the house's
   // (v3.0.3: adding a place on a panel showing only the device's weather keeps that tab and adds the new one beside it)
-  W.tabs = () => (hubShown() && !W.locations.some((l) => W.isHouse(l.id))
+  // (v3.0.4: only while the panel's own weather — weather.src — shows the device: "hub", or Automatic with the switch on)
+  const hubForPanel = () => { const s = W.srcOf(); return s === "hub" || (s === "auto" && !(W.hub && W.hub.card === false)); };
+  W.tabs = () => (hubShown() && hubForPanel() && !W.locations.some((l) => W.isHouse(l.id))
     ? [{ id: HUB_ID, name: (W.hub && W.hub.place) || T("wx.home"), hub: true }, ...W.locations] : W.locations);
   // the tab shown: the one picked, while it's still there; else the first
   W.shownId = () => { const t = W.tabs(); return t.some((x) => x.id === W.selected) ? W.selected : t.length ? t[0].id : null; };
-  // the warnings for the weather card's ribbon (hubitat/weather "warnings": {id, lvl, title, to})
-  W.warnings = () => (W.hub && Array.isArray(W.hub.warnings) ? W.hub.warnings.filter((x) => x && typeof x.id === "string" && Number.isInteger(x.lvl)) : []);
+  // the warnings (hubitat/weather "warnings": {id, lvl, title, to}) — (v3.0.4) per place, the sources kept apart:
+  // Weather.warnings() the house's (the panels' alerts): the device's, and OpenWeatherMap's for the house's own places;
+  // warnings(id, source) a card's place: the device's when it's the home place, plus that place's OpenWeatherMap ones
+  // while the card shows OpenWeatherMap (source "owm") — Tokyo's storm stays on Tokyo's card; warnings("*") all
+  W.warnings = (id, source) => {
+    const ok = (x) => x && typeof x.id === "string" && Number.isInteger(x.lvl), had = new Set();
+    const hub = W.hub && Array.isArray(W.hub.warnings) ? W.hub.warnings : [];
+    const of = (pid) => (W.owm[pid] && Array.isArray(W.owm[pid].warnings) ? W.owm[pid].warnings : []);
+    const owm = id === "*" ? Object.keys(W.owm) : !id ? Object.keys(W.owm).filter((pid) => W.isHouse(pid)) : source === "owm" ? [id] : [];
+    return [...(id === "*" || !id || W.isHouse(id) ? hub : []), ...owm.flatMap(of)].filter((x) => ok(x) && !had.has(x.id) && had.add(x.id));
+  };
   // why a place has nothing to show (plain words; the details are in the console), else null — loading
   W.errorOf = (id) => (id && errs.get(id)) || null;
   // the weather for the System card: some place has data (a panel's or a card's), and the error when none has
@@ -204,7 +255,7 @@
     if (a !== wasActive || day !== lastDay) {
       const newDay = day !== lastDay;
       wasActive = a; lastDay = day; memo.clear();
-      if (newDay) W.refresh();   // (the new day's forecast)
+      if (newDay) { W.refresh(); dropOldHours(); }   // (the new day's forecast)
       changed();
     }
     W.unitsCheck();
@@ -214,7 +265,7 @@
   if (W.locations.length) W.selected = W.locations[0].id;
 
   W.onChange = (fn) => { listeners.push(fn); fn(W); };
-  W.current = () => W.get(W.shownId());
+  W.current = (src) => W.get(W.shownId(), W.srcOf(src));
   W.location = () => W.locations.find((l) => l.id === W.selected);
   W.select = (id) => { W.selected = id; picked = true; changed(); const l = W.location(); if (l && !W.data[id]) fetchOne(l); };
   W.isCustom = (id) => id !== HUB_ID && !FIXED.some((f) => f.id === id);   // (the house's own tab has no ×)
@@ -240,7 +291,7 @@
     return ((await r.json()).results || []).map((p) => ({ ...p, label: [p.name, p.admin1, p.country_code].filter(Boolean).join(", ") }));
   };
 
-  // (v3.0.3) 7 days (the builder's longest choice; Open-Meteo gives up to 16), given up after 15 s (never "Loading…"
+  // (v3.0.3) 7 days — v3.0.4: 16 (the 14-day view; Open-Meteo's most) —, given up after 15 s (never "Loading…"
   // forever); a failure says so in plain words on that place's card — the details go to the console only
   const FETCH_TIMEOUT_MS = 15000;
   async function fetchOne(loc) {
@@ -250,7 +301,7 @@
       + `?latitude=${loc.lat}&longitude=${loc.lon}`
       + "&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_gusts_10m,is_day"
       + "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset"
-      + `&temperature_unit=${units.temp === "C" ? "celsius" : "fahrenheit"}&wind_speed_unit=${units.wind === "km/h" ? "kmh" : "mph"}&timezone=auto&forecast_days=7`;
+      + `&temperature_unit=${units.temp === "C" ? "celsius" : "fahrenheit"}&wind_speed_unit=${{ "km/h": "kmh", "m/s": "ms", kn: "kn" }[units.wind] || "mph"}&timezone=auto&forecast_days=16`;
     const ctl = typeof AbortController === "function" ? new AbortController() : null;
     const timer = ctl ? setTimeout(() => ctl.abort(), FETCH_TIMEOUT_MS) : null;
     try {
@@ -300,14 +351,89 @@
   });
   // a card's places and its selected one: {places, sel, data, error} (its own place's weather only — v3.0.3: never
   // another place's while its own is loading or failed)
-  W.forCard = (key, list) => {
-    const places = W.placesOf(list);
+  // (v3.0.4: src — the card's source; data.source says what it shows now)
+  W.forCard = (key, list, src) => {
+    const places = W.placesOf(list), s = SRCS.includes(src) ? src : "auto";
+    if (places[0]) firstIds.add(places[0].id);   // (the card's 🏠: the house's own when it is the house — W.isHouse)
     W.need(places);
+    if (s === "owm" || s === "auto") places.forEach(owmNeed);
     let sel = cardSel.get(key);
     if (!places.some((l) => l.id === sel)) sel = places.length ? places[0].id : null;
-    return { places, sel, data: sel ? W.get(sel) : null, error: W.errorOf(sel) };
+    return { places, sel, src: s, data: sel ? W.get(sel, s) : null, error: W.errorOf(sel) };
   };
   W.cardSelect = (key, id) => { cardSel.set(key, id); changed(); };
+
+  // ---------- (v3.0.4) from the server: OpenWeatherMap, a day's hours ----------
+  // OpenWeatherMap: asked for a place at most every refresh (the server fetches once for every panel — its own budget);
+  // an answer without it (no key, "budget", "places") keeps the place on Open-Meteo: asked again after the refresh time
+  W.owm = {};   // place id → the server's answer as the panel keeps it (°C, km/h — inUnits converts)
+  W.owmKey = null;   // (true: the house has a key; false: the last answer said none)
+  const owmAsked = new Map();
+  const serverDay = (x) => { const [kind, text] = describe(x.wmo); return { date: new Date(`${x.ymd}T12:00`), ymd: x.ymd, kind, text, high: x.high, low: x.low,
+    rain: round(x.rainPct), sunrise: x.sunrise ? new Date(x.sunrise * 1000) : null, sunset: x.sunset ? new Date(x.sunset * 1000) : null, om: x.from === "om" }; };
+  async function owmFetch(loc) {
+    try {
+      // (home=1: the house's own place — only its warnings join the panels' alerts, weather_sources.alerts_doc)
+      const r = await fetch(`/api/weather/forecast?lat=${encodeURIComponent(loc.lat)}&lon=${encodeURIComponent(loc.lon)}&src=owm${W.isHouse(loc.id) ? "&home=1" : ""}`, { cache: "no-store" });
+      const j = r.ok ? await r.json() : null;
+      if (!j || !j.ok) throw new Error(`HTTP ${r.status}`);
+      if (j.source !== "owm") { if (j.fallback === "no-key") W.owmKey = false; delete W.owm[loc.id]; changed(); return; }
+      W.owmKey = true;
+      const n = j.now || {}, [kind, text] = describe(n.wmo);
+      const days = (j.days || []).map(serverDay), first = days[0] || {};
+      W.owm[loc.id] = { now: { temp: n.temp, feels: n.feels, humidity: round(n.humidity), wind: n.wind, gusts: n.gusts, code: n.wmo, kind, text, isDay: n.isDay !== false },
+        days, sunrise: first.sunrise || null, sunset: first.sunset || null, updated: new Date((j.updatedAt || Date.now() / 1000) * 1000), units: j.units || { temp: "C", wind: "km/h" },
+        utcOffset: Number.isFinite(j.utcOffset) ? j.utcOffset : null, today: j.today || null, hoursTo: j.hoursTo || null, warnings: Array.isArray(j.warnings) ? j.warnings : [] };
+    } catch (e) {
+      try { console.warn(`[weather] OpenWeatherMap for ${loc.name || loc.id}: ${(e && e.message) || e}`); } catch {}
+    }
+    changed();
+  }
+  const owmNeed = (l) => {
+    if (!l || !Number.isFinite(l.lat) || !Number.isFinite(l.lon)) return;
+    if (W.owmKey === false && Date.now() - (owmAsked.get("") || 0) < REFRESH_MS) return;   // (no key: one ask a refresh)
+    if (Date.now() - (owmAsked.get(l.id) || 0) < REFRESH_MS) return;
+    owmAsked.set(l.id, Date.now()); owmAsked.set("", Date.now());
+    setTimeout(() => owmFetch(l), 0);   // (not while the page is drawing)
+  };
+  const owmData = (id) => (id && W.owm[id] ? inUnits(W.owm[id], "owm") : null);
+
+  // A day's hours, fetched only when asked for (a day tapped) and kept until that day is over — the place's
+  // OpenWeatherMap hours (its 48) when the card shows OpenWeatherMap, Open-Meteo's for the rest.
+  // Weather.hoursOf(id, ymd, src) → null (being fetched: Weather.onChange tells when they're here) | {hours: [{at, temp,
+  // kind, text, rain, wind, isDay, om}], source, error?} in the panel's units
+  const hrs = new Map();   // `${place id}|${ymd}|${"owm"|"om"}` → {at, hours, source} | {asking: true} | {error, at}
+  W.hoursOf = (id, ymd, src) => {
+    const l = placeById(id === HUB_ID ? houseOmId() : id), shown = W.get(id, src);
+    if (!l || !/^\d{4}-\d{2}-\d{2}$/.test(String(ymd || ""))) return { hours: [], source: "open-meteo", error: T("wx.unavailableNow") };
+    const s = shown && shown.source === "owm" ? "owm" : "om", k = `${l.id}|${ymd}|${s}`, h = hrs.get(k);
+    if (h && h.hours) {
+      const u = W.units(), cT = u.temp !== "C", cW = u.wind !== "km/h";
+      return { source: h.source, hours: h.hours.map((x) => ({ ...x, temp: cT ? toT(x.temp, "C") : round(x.temp), wind: cW ? toW(x.wind, "km/h") : round(x.wind) })) };
+    }
+    if (h && h.error && Date.now() - h.at < 5 * 60 * 1000) return { hours: [], source: "open-meteo", error: h.error };
+    if (!h || !h.asking) {
+      hrs.set(k, { asking: true });
+      setTimeout(async () => {
+        try {
+          const r = await fetch(`/api/weather/hours?lat=${encodeURIComponent(l.lat)}&lon=${encodeURIComponent(l.lon)}&date=${ymd}&src=${s}`, { cache: "no-store" });
+          const j = r.ok ? await r.json() : null;
+          if (!j || !j.ok || !Array.isArray(j.hours)) throw new Error(`HTTP ${r.status}`);
+          hrs.set(k, { at: Date.now(), source: j.source === "owm" ? "owm" : "open-meteo", hours: j.hours.map((x) => {
+            const [kind, text] = describe(x.wmo);
+            return { at: new Date(x.t * 1000), temp: x.temp, kind, text, rain: round(x.rainPct), wind: x.wind, isDay: x.isDay !== false, om: x.from === "om" };
+          }) });
+        } catch (e) {
+          try { console.warn(`[weather] hours for ${l.name || l.id}: ${(e && e.message) || e}`); } catch {}
+          hrs.set(k, { error: T("wx.unavailableNow"), at: Date.now() });
+        }
+        changed();
+      }, 0);
+    }
+    return null;
+  };
+  // (a new day: the days before it are forgotten)
+  const dropOldHours = () => { const today = localDay(); for (const k of [...hrs.keys()]) if (k.split("|")[1] < today) hrs.delete(k); };
 
   W.refresh = () => Promise.all([...new Map([...W.locations, ...liveSeen()].map((l) => [l.id, l])).values()].map(fetchOne));
   // (v3.0.3) the panel's units changed (Manager → the panel's settings): fetched again at once in the new ones (until

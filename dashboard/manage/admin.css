@@ -231,3 +231,7 @@ html.phone .fb-acts .btn { flex: 1 1 45%; min-height: 48px; }
 .wx-box > p.gf.bad { color: var(--bad, #d14343); }
 .ov-wx { margin-left: 8px; font-size: 11px; vertical-align: middle; }
 @media (max-width: 640px) { .wx-box .grp-row { flex-wrap: wrap; gap: 8px 16px; } .wx-box .grp-row .rl { flex-basis: 100%; } .wx-box .grp-row .rc { flex: 1 1 100%; justify-content: flex-start; } .wx-pns, .wx-now { justify-content: flex-start; } }
+/* (v3.0.4) Integrations → UniFi Network (unifinet.js): a line's name and its type side by side */
+.un-wan { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center; }
+.un-wan > input[type="text"] { width: 200px; }
+@media (max-width: 640px) { .un-wan { justify-content: flex-start; } }

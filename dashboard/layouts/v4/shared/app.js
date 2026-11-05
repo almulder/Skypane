@@ -43,12 +43,15 @@
     const c = firstWx(customGrid());
     if (c) {
       const p = Weather.placesOf(c.o.locs)[0];
-      try { if (window.PANEL_DESIGN !== true) localStorage.setItem(HOMEP(), JSON.stringify(p)); } catch {}
+      try { const s = JSON.stringify(p); if (window.PANEL_DESIGN !== true && localStorage.getItem(HOMEP()) !== s) localStorage.setItem(HOMEP(), s); } catch {}
       return p;
     }
     let p = null; try { p = JSON.parse(localStorage.getItem(HOMEP()) || "null"); } catch {}
     return p && typeof p.id === "string" && Number.isFinite(p.lat) && Number.isFinite(p.lon) ? Weather.placesOf([p])[0] : null;
   };
+  // (v3.0.4) the house's place for weather.js while it knows no coordinates for the house: a card's 🏠 under another
+  // name than the device's place shows the device's weather only when it is this one
+  Weather.homeOf = () => { const p = homePlace(); return p ? p.id : null; };
   App.skyPlace = () => {
     const g = App.view === "home" ? customGrid() : App.view !== "cameras" && H.rooms().some((r) => r.id === App.view) ? roomGrid(App.view) : null;
     const c = firstWx(g);
@@ -378,23 +381,44 @@
   function weather(solo, o, key) {
     // a grid card shows only its own places (builder → Places → + Add a place), with its own tabs; none: the panel's own
     // weather, as the built-in layouts show it (a starting layout's card is never empty)
-    const cw0 = o ? { key, ...Weather.forCard(key, o.locs) } : null, cw = cw0 && cw0.places.length ? cw0 : null;
-    const d0 = cw ? cw.data : Weather.current(), cls = `card glass wx${solo ? " solo" : ""}`;
-    // (a custom grid card may list fewer days, or none, or 7: o.days; "All" and the built-in layouts: 5 as before —
-    // v3.0.3 fetches 7 so the builder's 7 really shows 7)
-    const d = d0 ? { ...d0, days: d0.days.slice(0, o && o.days != null ? o.days : 5) } : d0;
+    const cw0 = o ? { key, ...Weather.forCard(key, o.locs, o.src) } : null, cw = cw0 && cw0.places.length ? cw0 : null;
+    const d0 = cw ? cw.data : Weather.current(o && o.src), cls = `card glass wx${solo ? " solo" : ""}`;
+    // (a custom grid card may list fewer days, or none, or 7 or 14: o.days; the built-in layouts: 5 as before — v3.0.3
+    // fetches 7 so the builder's 7 really shows 7; v3.0.4 Open-Meteo's 16, and a grid card's "All": every day there is, to 14)
+    const d = d0 ? { ...d0, days: d0.days.slice(0, o ? (o.days != null ? Math.min(14, o.days) : 14) : 5) } : d0;
     // (no place yet — a new install has none built in: one button to add the first)
     if (!d && !cw && !Weather.tabs().length) return `<section class="${cls}"><span class="label">${UI.esc(T("wx.title"))}</span><div class="loc"><button class="loc-t add"${Acts.on("ui.addPlace")}>${icon("plus", 16)} ${UI.esc(T("wx.addFirst"))}</button></div></section>`;
     if (!d) return `<section class="${cls}"><span class="label gz-t">${UI.esc(T("wx.title"))}</span>${UI.locTabs(cw)}<div class="muted gz-t">${UI.esc(Weather.errorOf(cw ? cw.sel : Weather.shownId()) || T("common.loading"))}</div></section>`;   // (that place's own state: v3.0.3)
     const n = d.now, u = Weather.units ? Weather.units() : { temp: "F", wind: "mph" }, num = (v) => (v == null ? "—" : v);
-    const ribbon = window.HubAlerts && HubAlerts.weatherRibbon ? HubAlerts.weatherRibbon() : "";
+    const tap = !!o && o.hours !== false;   // (v3.0.4: "Tap a day for its hours", on unless the builder switched it off)
+    const ribbon = window.HubAlerts && HubAlerts.weatherRibbon ? HubAlerts.weatherRibbon(cw ? cw.sel : Weather.shownId(), d.source) : "";   // (v3.0.4: this place's)
     const src = `<div class="wx-src${d.stale ? " stale" : ""}">${UI.esc(d.stale ? T("wx.staleSince", { time: d.updated && Date.now() - d.updated < 864e5 && new Date().toDateString() === d.updated.toDateString() ? T.time(d.updated) : T.dateTime(d.updated) })
-      : T(d.source === "hubitat" ? (d.mixed ? "wx.fromHubitatAndOpenMeteo" : "wx.fromHubitat") : "wx.fromOpenMeteo"))}</div>`;
+      : T(d.why === "hubHome" ? "wx.hubHomeOnly" : d.why === "hubOff" ? "wx.hubOff" : d.source === "hubitat" ? (d.mixed ? "wx.fromHubitatAndOpenMeteo" : "wx.fromHubitat") : d.source === "owm" ? (d.mixed ? "wx.fromOwmAndOpenMeteo" : "wx.fromOwm") : "wx.fromOpenMeteo"))}</div>`;
     return `<section class="${cls}"><div class="card-head gz-t"><span class="label">${UI.esc(T("wx.title"))}</span>${UI.locTabs(cw)}${ribbon}</div>
       <div class="wx-now">${wxIcon(n.kind, 104, WX, !n.isDay)}<div class="gz-t"><div class="t num">${num(n.temp)}<sup>°${u.temp}</sup></div><div class="muted">${UI.esc(n.text)}</div>${src}</div>
         <div class="wx-meta gz-t">${UI.esc(T("wx.feels", { t: num(n.feels) }))}<br>${UI.esc(T("wx.humidity", { n: num(n.humidity) }))}<br>${UI.esc(T("wx.windUnit", { n: num(n.wind), unit: u.wind }))}</div></div>
-      <div class="wx-days gz-t">${d.days.map((x, i) => `<div class="wx-day ${i ? "" : "today"}"><span class="d">${UI.esc(x.day)}</span>${wxIcon(x.kind, 56, WX)}
-        <div class="hl"><b class="num">${num(x.high)}°</b><span class="num">${num(x.low)}°</span></div><span class="rain">${UI.esc(x.rain == null ? "—" : T("wx.rain", { n: x.rain }))}</span></div>`).join("")}</div></section>`;
+      <div class="wx-days gz-t"${o && d.days.length > 5 ? ` style="grid-template-columns:repeat(${Math.min(7, d.days.length)},minmax(0,1fr))"` : ""}>${d.days.map((x, i) => {
+        // (v3.0.4) a grid card's day is a button: its hours below (wxHours); a day filled from Open-Meteo has a dot
+        const tag = tap ? "button" : "div", y = tap ? dayYmd(x) : "", dot = x.om && d.source !== "open-meteo" ? `<i class="wx-om" title="${UI.esc(T("wx.fromOpenMeteo"))}"></i>` : "";
+        return `<${tag} class="wx-day ${i ? "" : "today"}${y && wxDays.get(key) === y ? " sel" : ""}"${tap ? ` type="button"${Acts.on("app.wxDay", key, y)}` : ""}>${dot}<span class="d">${UI.esc(x.day)}</span>${wxIcon(x.kind, 56, WX)}
+        <div class="hl"><b class="num">${num(x.high)}°</b><span class="num">${num(x.low)}°</span></div><span class="rain">${UI.esc(x.rain == null ? "—" : T("wx.rain", { n: x.rain }))}</span></${tag}>`; }).join("")}</div>${tap ? wxHours(key, d, cw ? cw.sel : Weather.shownId(), o.src) : ""}</section>`;
+  }
+  // (v3.0.4) a grid weather card's tapped day: its hours, fetched once (Weather.hoursOf — null while fetching), as a
+  // row to scroll; tapped again, closed. wxDays: card key → the day ("YYYY-MM-DD") open on it
+  const wxDays = new Map();
+  const dayYmd = (x) => (typeof x.ymd === "string" ? x.ymd : x.date ? `${x.date.getFullYear()}-${String(x.date.getMonth() + 1).padStart(2, "0")}-${String(x.date.getDate()).padStart(2, "0")}` : "");
+  function wxHours(key, d, id, src) {
+    const y = wxDays.get(key), day = y && d.days.find((x) => dayYmd(x) === y);
+    if (!day || !id) return "";
+    const h = Weather.hoursOf(id, y, src), when = UI.esc(T.date(day.date || new Date(`${y}T12:00`)));
+    if (!h) return `<div class="wx-hours gz-t"><div class="wx-hl">${when} · ${UI.esc(T("wx.hoursLoading"))}</div></div>`;
+    const now = Date.now() - 36e5, list = h.hours.filter((x) => +x.at >= now);
+    // (v3.0.4) each hour on the place's own clock (its utcOffset, as its days are dated) — not the panel's
+    const off = Number.isFinite(d.utcOffset) && d.source !== "hubitat" ? d.utcOffset : null, hr = (at) => (off == null ? at.getHours() : new Date(+at + off * 1000).getUTCHours());
+    const row = h.error || !list.length ? `<div class="muted">${UI.esc(h.error || T("wx.hoursNone"))}</div>`
+      : `<div class="wx-hrow">${list.map((x) => `<div class="wx-hr"><span class="t">${UI.esc(T.hour(hr(x.at)))}</span>${wxIcon(x.kind, 28, WX, !x.isDay)}<b class="num">${x.temp == null ? "—" : x.temp}°</b><span class="p">${x.rain >= 20 ? UI.esc(T("wx.rainPct", { n: x.rain })) : "&nbsp;"}</span></div>`).join("")}</div>`;
+    return `<div class="wx-hours gz-t"><div class="wx-hl">${when} · ${UI.esc(T("wx.hourByHour"))}</div>${row}
+      ${h.error || !list.length ? "" : `<div class="wx-hsrc">${UI.esc(T(h.source === "owm" ? "wx.hoursFromOwm" : "wx.hoursFromOm"))}</div>`}</div>`;   // (no "remembered for the day" for hours that didn't come)
   }
 
   // the thermostat's mode buttons (and its fan's, when the card shows them): a grid card shows only the modes the
@@ -645,68 +669,10 @@
     return rs.map((r, i) => [pos(r, i), r]).sort((a, b) => a[0] - b[0]).map(([, r]) => r);
   };
 
-  // ---------- rearranging the room buttons: press and hold one → panel PIN → they wiggle; drag; Done ----------
-  let reorder = false, reorderDrag = null, holdTimer = null, eatClickUntil = 0, reorderTouched = 0;
-  // left alone (no PIN set / "Ask every time" means no unlock window to end it): stop wiggling after 60 s untouched
-  setInterval(() => { if (reorder && !reorderDrag && Date.now() - reorderTouched > 60000) App.endReorder(); }, 5000);
-  App.endReorder = () => {
-    if (!reorder) return;
-    reorder = false; reorderDrag = null;
-    const el = document.getElementById("dock"); el.classList.remove("reorder");
-    dockHtml = ""; dock();
-  };
-  async function startReorder() {
-    if (reorder || !(await Settings.unlockWithPin(T("dock.arrange")))) return;
-    reorder = true; reorderTouched = Date.now();
-    document.getElementById("dock").classList.add("reorder");
-    dockHtml = ""; dock();
-  }
-  const saveOrder = () => {
-    const ids = [...document.querySelectorAll("#dock .dock-rooms button[data-room]")].map((b) => b.dataset.room);
-    // rooms hidden in Settings aren't on the dock: they keep their old place
-    (Settings.v.roomOrder || []).forEach((id, i) => { if (!ids.includes(id) && H.state.rooms.some((r) => r.id === id)) ids.splice(Math.min(i, ids.length), 0, id); });
-    if (ids.length && JSON.stringify(ids) !== JSON.stringify(Settings.v.roomOrder || [])) Settings.set("roomOrder", ids);
-  };
-  document.addEventListener("pointerdown", (e) => {
-    eatClickUntil = 0; // a new touch: whatever click follows is its own
-    const b = e.target.closest && e.target.closest("#dock .dock-rooms button[data-room]");
-    clearTimeout(holdTimer);
-    if (reorder) reorderTouched = Date.now();
-    if (!b) return;
-    if (reorder) {   // pick the button up: it follows the finger along the row
-      e.preventDefault();
-      reorderDrag = { b, id: e.pointerId, x: e.clientX, y: e.clientY };
-      b.classList.add("lifted");
-      try { b.setPointerCapture(e.pointerId); } catch {}
-      return;
-    }
-    if (Settings.v.arrangeOnPanel !== true) return;   // (arranging: Manager → Panels → Rooms & devices; on the wall only if allowed)
-    const x0 = e.clientX, y0 = e.clientY;
-    const cancel = (ev) => { if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > 12) { clearTimeout(holdTimer); off(); } };
-
-    const off = () => { removeEventListener("pointermove", cancel, true); removeEventListener("pointerup", cancelAll, true); removeEventListener("pointercancel", cancelAll, true); };
-    const cancelAll = () => { clearTimeout(holdTimer); off(); };
-    addEventListener("pointermove", cancel, true); addEventListener("pointerup", cancelAll, true); addEventListener("pointercancel", cancelAll, true);
-    holdTimer = setTimeout(() => { off(); eatClickUntil = Date.now() + 1500; startReorder(); }, 650);
-  }, true);
-  document.addEventListener("pointermove", (e) => {
-    const g = reorderDrag; if (!g || e.pointerId !== g.id) return;
-    const row = g.b.parentElement, r = row.getBoundingClientRect();
-    // (a room bar on the left / right is a column: up and down instead of left and right)
-    const vert = document.documentElement.classList.contains("dock-left") || document.documentElement.classList.contains("dock-right");
-    if (vert) { if (e.clientY < r.top + 60) row.scrollTop -= 14; else if (e.clientY > r.bottom - 60) row.scrollTop += 14; }
-    else if (e.clientX < r.left + 60) row.scrollLeft -= 14; else if (e.clientX > r.right - 60) row.scrollLeft += 14;
-    // the button under the finger: put the dragged one before / after it
-    const over = [...row.querySelectorAll("button[data-room]")].find((x) => { const q = x.getBoundingClientRect();
-      return x !== g.b && (vert ? e.clientY >= q.top && e.clientY <= q.bottom : e.clientX >= q.left && e.clientX <= q.right); });
-    if (over) { const q = over.getBoundingClientRect(); row.insertBefore(g.b, (vert ? e.clientY < q.top + q.height / 2 : e.clientX < q.left + q.width / 2) ? over : over.nextSibling); }
-  }, true);
-  const drop = (e) => {
-    const g = reorderDrag; if (!g || e.pointerId !== g.id) return;
-    g.b.classList.remove("lifted"); reorderDrag = null; saveOrder();
-  };
-  document.addEventListener("pointerup", drop, true);
-  document.addEventListener("pointercancel", drop, true);
+  // (v3.0.4) the room bar is never arranged or moved on the wall: its rooms, order and edge are the Manager's (the layout
+  // builder's Room bar, Panels → Room bar)
+  let eatClickUntil = 0;
+  document.addEventListener("pointerdown", () => { eatClickUntil = 0; }, true);   // (a new touch: whatever click follows is its own)
   // the tap that ended a press-and-hold or a swipe must not also press what's under the finger
   document.addEventListener("click", (e) => { if (Date.now() < eatClickUntil) { e.stopPropagation(); e.preventDefault(); eatClickUntil = 0; } }, true);
   // a room page's light / switch tile (Tiles and List): press and hold → a light's pop-up (on / off, brightness, white,
@@ -716,16 +682,15 @@
     const t = e.target.closest && e.target.closest("main.roomview .tile[data-dev]"); if (!t || !window.Grid || !Grid.longPress) return;
     const id = +t.dataset.dev; if (Grid.holdable(id)) Grid.longPress(e, t, () => Grid.holdDev(t, id));
   }, true);
-  PinPad.onLock(() => App.endReorder());
 
   // ---------- swipe left / right on a room page = next / previous room (the dock's order) ----------
   // Not when the swipe starts on something that drags itself (dimmer orb, sliders, colour wheel, scene buttons, a
-  // scrolling row, the thermostat dial) or while a sheet / popup is open.
-  const OWN_DRAG = ".rlG-ow, .rlG-sl, .rlG-wheel, .rlG-scr, .rlG-sheet, [data-scene], [data-nest], input, select, textarea, #dock";
+  // scrolling row, the thermostat dial, a "Single big item" Devices card of several) or while a sheet / popup is open.
+  const OWN_DRAG = ".rlG-ow, .rlG-sl, .rlG-wheel, .rlG-scr, .rlG-sheet, [data-scene], [data-nest], .dv-swipe, input, select, textarea, #dock";
   let swipe = null;
   document.addEventListener("pointerdown", (e) => {
     swipe = null;
-    if (!H.rooms().some((r) => r.id === App.view) || reorder || !e.isPrimary) return;
+    if (!H.rooms().some((r) => r.id === App.view) || !e.isPrimary) return;
     if (e.target.closest && e.target.closest(OWN_DRAG)) return;
     if (document.querySelector(".popup-host.show, .cam-full") || (window.Settings && Settings.open)) return;
     swipe = { x: e.clientX, y: e.clientY, t: Date.now(), id: e.pointerId };
@@ -769,16 +734,15 @@
         ${testViews().filter(([, t]) => t.fixed).map(([id, t]) => nav(id, t.icon, t.name)).join("")}</div>
       <span class="sep"></span>
       <div class="dock-end">
-      ${reorder ? `<button class="reorder-done"${Acts.on("app.endReorder")}${tip(T("dock.done"))}>${icon("check", 28)}<span class="dl">${UI.esc(T("dock.done"))}</span></button>` : ""}
-      <div class="dock-rail">${dockMore("prev", vert)}<div class="dock-rooms">${reorder ? "" : testViews().filter(([, t]) => !t.fixed).map(([id, t]) => `<button class="test ${App.view === id ? "cur" : ""}"${Acts.on("app.go", id)}${tip(t.name)}>${icon(t.icon || "sun", 28)}<span class="dl">${t.name}</span></button>`).join("")}
-        ${App.rooms().map((r) => `<button data-room="${r.id}" class="${App.view === r.id ? "cur" : ""}" ${reorder ? "" : Acts.on("app.go", r.id)}${tip(r.name)}>${icon(r.icon, 28)}<span class="dl">${UI.esc(r.name)}</span>
+      <div class="dock-rail">${dockMore("prev", vert)}<div class="dock-rooms">${testViews().filter(([, t]) => !t.fixed).map(([id, t]) => `<button class="test ${App.view === id ? "cur" : ""}"${Acts.on("app.go", id)}${tip(t.name)}>${icon(t.icon || "sun", 28)}<span class="dl">${t.name}</span></button>`).join("")}
+        ${App.rooms().map((r) => `<button data-room="${r.id}" class="${App.view === r.id ? "cur" : ""}" ${Acts.on("app.go", r.id)}${tip(r.name)}>${icon(r.icon, 28)}<span class="dl">${UI.esc(r.name)}</span>
         ${H.lightsOn(r) ? `<span class="n">${H.lightsOn(r)}</span>` : ""}</button>`).join("")}</div>${dockMore("next", vert)}</div>
       ${dockBell()}<button class="dock-gear"${Acts.on("app.settings")} title="${UI.esc(T("dock.settings"))}" aria-label="${UI.esc(T("dock.settings"))}">${icon("settings", 22)}</button></div>
       ${auto ? dockHandle(alert ? "alarm" : away ? "bad2" : armed ? "bad" : Alarm.live ? "ok" : "unk", aIc, aName) : ""}`;
     if (!auto) dockOpen = false;
     el.classList.toggle("collapsed", auto && !dockOpen);
-    // unchanged / a button being dragged / rearranging (a rebuild would restart every wiggle): leave it
-    if (html === dockHtml || reorderDrag || (reorder && dockHtml)) { dockEdges(); dockAfter(el); return; }
+    // unchanged: leave it
+    if (html === dockHtml) { dockEdges(); dockAfter(el); return; }
     const scroller = el.querySelector(".dock-rooms"); if (scroller) dockScroll = [scroller.scrollLeft, scroller.scrollTop];
     el.innerHTML = dockHtml = html;
     { const sc = el.querySelector(".dock-rooms"); if (Array.isArray(dockScroll)) [sc.scrollLeft, sc.scrollTop] = dockScroll; }
@@ -799,7 +763,11 @@
     const el = document.getElementById("dock"), root = document.documentElement, s = root.style;
     if (!el || root.classList.contains("dock-off") || root.classList.contains("not-set-up")) { for (const k of "trbl") s.removeProperty(`--dock-${k}`); return; }
     if (dockOpen) return;
-    const r = el.getBoundingClientRect(); if (!r.width || !r.height) return;
+    const r0 = el.getBoundingClientRect(); if (!r0.width || !r0.height) return;
+    // (v3.0.4: the layout builder holding the bar under the pointer — style.translate, builder.js: where it sits, not
+    // where it's held; the page reflows as its edge changes)
+    const [tx = 0, ty = 0] = (el.style.translate || "").split(" ").map((v) => parseFloat(v) || 0);
+    const r = { top: r0.top - ty, bottom: r0.bottom - ty, left: r0.left - tx, right: r0.right - tx };
     const at = ["top", "left", "right"].find((k) => root.classList.contains(`dock-${k}`)) || "bottom";
     const st = parseFloat(getComputedStyle(root).getPropertyValue("--st-h")) || 0;   // (a status bar above a bar on top: status.css adds it)
     const px = { t: at === "top" ? r.bottom - st : 0, r: at === "right" ? innerWidth - r.left : 0, b: at === "bottom" ? innerHeight - r.top : 0, l: at === "left" ? r.right : 0 };
@@ -828,7 +796,7 @@
   App.dockFold = () => {
     clearTimeout(dockFold);
     if (!dockOpen) return;
-    if (reorder || reorderDrag || dockDrag) { dockLater(6000); return; }   // (never while rearranging or dragging the rooms)
+    if (dockDrag) { dockLater(6000); return; }   // (never while dragging the rooms)
     dockOpen = false;
     const el = document.getElementById("dock");
     if (el && document.documentElement.classList.contains("dock-autohide")) el.classList.add("collapsed");
@@ -925,7 +893,7 @@
   // drag with a mouse (touch and pen scroll by themselves)
   document.addEventListener("pointerdown", (e) => {
     dockDrag = null;
-    if (reorder || e.pointerType !== "mouse" || e.button !== 0) return;
+    if (e.pointerType !== "mouse" || e.button !== 0) return;
     const sc = e.target.closest && e.target.closest("#dock .dock-rooms"); if (!sc) return;
     dockDrag = { sc, id: e.pointerId, x: e.clientX, y: e.clientY, l: sc.scrollLeft, t: sc.scrollTop, moved: false };
   });
@@ -1189,18 +1157,20 @@
     "app.lock": (id) => H.lock(id), "app.unlock": (id) => H.unlock(id), "app.toggle": (id) => H.toggle(id),
     "app.windowsPopup": () => UI.windowsPopup(), "app.doorsPopup": () => UI.doorsPopup(),
     "app.setFan": (id, s) => H.setFan(id, s), "app.setShade": (id, l) => H.setShade(id, l), "app.roomOptions": (rid) => Settings.roomOptions(rid),
-    "app.go": (id) => App.go(id), "app.endReorder": () => App.endReorder(), "app.settings": () => Settings.show(),
+    "app.go": (id) => App.go(id), "app.settings": () => Settings.show(),
     "app.dockOpen": () => App.dockOpen(), "app.setRoomLayout": (k) => App.setRoomLayout(k),
+    "app.wxDay": (key, y) => { if (!y) return; if (wxDays.get(key) === y) wxDays.delete(key); else wxDays.set(key, y); App.render(); },
   });
   App.checkCameraFile = checkCameraFile;
 
-  // the version running (the container's image tag), small in the lower-left corner — to check a panel got an update
+  // the version running, small in the lower-left corner — to check a panel got an update: just the numbered release
+  // ("v3.0.4": every upload raises it, v3.0.4); the container's image tag only when there's no release number
   function versionTag() {
     const v = window.PANEL_CONFIG && PANEL_CONFIG.version;
     if (!v || window.PANEL_DESIGN === true || document.getElementById("ver-tag")) return;
     const t = document.createElement("div");
-    const rel = /^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(String(PANEL_CONFIG.release || "")) ? `v${PANEL_CONFIG.release} · ` : "";
-    t.id = "ver-tag"; t.textContent = rel + String(v).slice(0, 40);
+    const rel = /^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(String(PANEL_CONFIG.release || "")) ? `v${PANEL_CONFIG.release}` : "";
+    t.id = "ver-tag"; t.textContent = rel || String(v).slice(0, 40);
     document.body.append(t);
   }
   // A panel address the Manager hasn't set up (round 2): only the Manager creates panels, so the service answers
@@ -1293,13 +1263,13 @@
     // Settings → Panel → "Back to Home after": a room / camera page left alone goes back to Home (never Music, and
     // not while Settings, a popup, a full-screen camera or a thermostat drag is up — those have their own endings)
     // (v3.0.2: never in the builder's canvas or the Manager's live view — the touches are in the Manager, not this page:
-    // the room being edited went to Home after N s; nor while the room bar or a room's devices are being arranged)
+    // the room being edited went to Home after N s)
     setInterval(() => {
       const after = +Settings.v.homeAfter || 0;
-      if (!after || window.PANEL_DESIGN === true || window.PANEL_LIVE || App.view === "home" || App.view === "music" || App.dragging || App.thermoEdit || reorder || (window.Settings && Settings.open) || testing()) return;
+      if (!after || window.PANEL_DESIGN === true || window.PANEL_LIVE || App.view === "home" || App.view === "music" || App.dragging || App.thermoEdit || (window.Settings && Settings.open) || testing()) return;
       if (document.querySelector(".cam-full, .popup-host.show, .gwheel, [class*=arranging]")) return;
       // (from the later of the last touch and when this page opened: a page opened by a rule or a swipe gets its time)
-      if (Date.now() - Math.max(touched, App.viewAt || 0) >= after * 1000) { App.endReorder(); App.go("home"); }
+      if (Date.now() - Math.max(touched, App.viewAt || 0) >= after * 1000) App.go("home");
     }, 1000);
     const reloadedFor = () => { try { return sessionStorage.getItem("panel.reloadedForModel"); } catch { return null; } };
     // an update is ready (a new version on the service, or devices changed in Hubitat): a "Refresh" button on screen at

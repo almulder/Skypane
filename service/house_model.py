@@ -119,6 +119,12 @@ def caps(d):
     return out
 
 
+def is_speaker(d):
+    """(v3.0.4) SpeechSynthesis, and "speak" in the device's own command list (strings or {"command"} maps)."""
+    cl = d.get("commands") if isinstance(d.get("commands"), list) else []
+    return "SpeechSynthesis" in caps(d) and "speak" in {c.get("command") if isinstance(c, dict) else c for c in cl}
+
+
 def attr(d, k):
     return (d.get("attributes") or {}).get(k)
 
@@ -159,6 +165,8 @@ def can_do(d):
         return [x for x in v if isinstance(x, str) and x in MODE_WORDS][:12] if isinstance(v, list) else []
     cmds = {c.get("command") if isinstance(c, dict) else c for c in d.get("commands") or []}
     out = {"caps": sorted(caps(d) & WHEEL_CAPS), "cmds": sorted(c for c in cmds if c in WHEEL_CMDS)}
+    if is_speaker(d):   # (v3.0.4) a speaker a timer may speak on ("Timer up": the server asks, the bridge checks it again)
+        out["speak"] = True
     try:   # a button device: how many buttons (1..20)
         n = int(float(attr(d, "numberOfButtons")))
         if 1 <= n <= 20 and "PushableButton" in out["caps"]:

@@ -58,6 +58,7 @@ ACL = {
         "topic read dashboard/panel/+/changed",
         # (the service's other announcements: cards added / changed, a performance test, the shared lists)
         "topic read dashboard/cards/changed", "topic read dashboard/panel/+/perftest", "topic read dashboard/panel/+/bench", "topic read dashboard/lists/changed",
+        "topic read dashboard/bins/changed", "topic read dashboard/timers/changed",   # (v3.0.4: a bin taken out, a timer pressed)
         "topic read dashboard/calendars/changed",   # (the house's calendars changed / new events fetched: data.js loads them again)
     ],
 }

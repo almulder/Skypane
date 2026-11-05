@@ -1019,12 +1019,6 @@
   .rlG-mc{flex:none;width:180px;height:250px;display:flex;flex-direction:column;gap:4px;padding:10px 12px 12px;overflow:hidden}
   .rlG-art{position:relative;flex:1;min-height:0;min-width:0}
   .rlG-upic{display:block;object-fit:contain;pointer-events:none}
-  .rlG-arranging [data-light], .rlG-arranging .rlG-dev[data-dev]{animation:rlG-wig .28s ease-in-out infinite alternate;touch-action:none}
-  .rlG-arranging [data-light]:nth-child(2n), .rlG-arranging .rlG-dev[data-dev]:nth-child(2n){animation-delay:-.14s}
-  .rlG-arranging .lifted{animation:none;transform:scale(1.08);z-index:3;filter:drop-shadow(0 8px 18px rgba(0,0,0,.5))}
-  @keyframes rlG-wig{from{transform:rotate(-1.6deg)}to{transform:rotate(1.6deg)}}
-  .rlG-arrdone{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);z-index:50;padding:14px 36px;border-radius:999px;
-    font:600 20px/1 inherit;color:#fff;background:linear-gradient(135deg,#a78bfa,#7c3aed);box-shadow:0 10px 30px rgba(0,0,0,.45)}
   .rlG-art > .rlG-upic{position:absolute;inset:0}
   .rlG-art > svg{position:absolute;inset:0;width:100%;height:100%;display:block}
   .rlG-solo > .rlG-art{align-self:stretch} /* (the trap's drawing on its own: .rlG-trap is also a room row's centred column — it was 0 px wide) */
@@ -2060,101 +2054,12 @@
   }
   const scrOf = (el) => el && el.closest && el.closest(`.${P}-scr`);
   function paintDrag() { if (last) paintLights(last); }
-  // ---------- arranging this room's lights / devices (stage 4c): hold one still → panel PIN → they wiggle; drag
-  // within its group; Done. The order is this panel's (Settings deviceOrder, data.js Home.devices). ----------
-  const ARR_HOLD = 650, ARR_IDLE = 60000;
-  let arrange = false, arrDrag = null, arrHold = null, arrHoldAt = null, arrTouched = 0, arrDone = null, arrLockHooked = false;
-  const ARR_ITEM = `[data-light], .${P}-dev[data-dev]`;
-  function saveArrange() {
-    if (!root || !curRoom || !window.Settings) return;
-    const ids = [...root.querySelectorAll(ARR_ITEM)].map((x) => Number(x.dataset.light || x.dataset.dev)).filter((n) => Number.isFinite(n));
-    const all = { ...(Settings.v.deviceOrder || {}) };
-    if (ids.length && JSON.stringify(all[curRoom] || []) !== JSON.stringify(ids)) { all[curRoom] = ids; Settings.set("deviceOrder", all); }
-  }
-  function endArrange(save = true) {
-    clearTimeout(arrHold); arrHold = null;
-    if (!arrange) return;
-    if (save) saveArrange();
-    arrange = false; arrDrag = null;
-    if (root) root.classList.remove(`${P}-arranging`);
-    if (arrDone) { arrDone.remove(); arrDone = null; }
-    key = ""; safeUpdate();
-  }
-  async function startArrange() {
-    if (arrange || !window.Settings || !Settings.unlockWithPin) return;
-    if (!(await Settings.unlockWithPin(T("rg.arrangeThisRoom"))) || !root) return;
-    if (!arrLockHooked && window.PinPad && PinPad.onLock) { arrLockHooked = true; PinPad.onLock(() => endArrange(true)); }
-    arrange = true; arrTouched = Date.now();
-    root.classList.add(`${P}-arranging`);
-    arrDone = document.createElement("button");
-    arrDone.className = `${P}-arrdone`; arrDone.textContent = T("rg.done2");
-    arrDone.addEventListener("click", () => endArrange(true));
-    document.body.appendChild(arrDone);
-  }
-  setInterval(() => { if (arrange && !arrDrag && Date.now() - arrTouched > ARR_IDLE) endArrange(true); }, 5000);
-  // a finger let go anywhere (outside the room page too) ends a drag
-  const arrRelease = (e) => { if (arrDrag && e.pointerId === arrDrag.pid) arrUp(e); };
-  addEventListener("pointerup", arrRelease, true);
-  addEventListener("pointercancel", arrRelease, true);
-  // returns true when the press belongs to arranging (the normal handling is skipped)
-  function arrDown(e) {
-    const item = e.target.closest && e.target.closest(ARR_ITEM);
-    clearTimeout(arrHold); arrHold = null;
-    if (sheetFor || demo) return false;   // (a press that only closes the sheet; the demo saves nothing)
-    if (arrange) {
-      arrTouched = Date.now();
-      if (!item || !root.contains(item)) return true;
-      e.preventDefault();
-      arrDrag = { el: item, pid: e.pointerId };
-      item.classList.add("lifted");
-      try { item.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
-      return true;
-    }
-    // (arranging is on the Manager page; on the wall only if that panel allows it)
-    if (item && root.contains(item) && window.Settings && Settings.v.arrangeOnPanel === true) {
-      const x0 = e.clientX, y0 = e.clientY, pid = e.pointerId;
-      arrHold = setTimeout(() => {
-
-        arrHold = null;
-        if (drag && drag.pid === pid) drag = null;   // (a press that stayed still: no dimming, no toggle)
-        eatClick = Date.now();
-        startArrange();
-      }, ARR_HOLD);
-      arrHoldAt = { x0, y0, pid };
-    }
-    return false;
-  }
-  function arrMove(e) {
-    if (arrHold && arrHoldAt && e.pointerId === arrHoldAt.pid && Math.hypot(e.clientX - arrHoldAt.x0, e.clientY - arrHoldAt.y0) > 12) {
-      clearTimeout(arrHold); arrHold = null;
-    }
-    const g = arrDrag; if (!g || e.pointerId !== g.pid) return false;
-    const box = g.el.parentElement;
-    const over = [...box.children].find((x) => x !== g.el && x.matches(ARR_ITEM) && (() => {
-      const q = x.getBoundingClientRect(); return e.clientX >= q.left && e.clientX <= q.right && e.clientY >= q.top && e.clientY <= q.bottom; })());
-    if (over) {
-      const q = over.getBoundingClientRect(), wide = q.width >= q.height * 1.6;   // a row (top / bottom half) or an orb (left / right)
-      const before = wide ? e.clientY < q.top + q.height / 2 : e.clientX < q.left + q.width / 2;
-      box.insertBefore(g.el, before ? over : over.nextSibling);
-      try { g.el.setPointerCapture(g.pid); } catch (err) { /* moving it dropped the capture: take it again */ }
-    }
-    const scr = box.closest(`.${P}-scr`);
-    if (scr) { const r = scr.getBoundingClientRect(); if (e.clientX < r.left + 50) scr.scrollLeft -= 12; else if (e.clientX > r.right - 50) scr.scrollLeft += 12; }
-    return true;
-  }
-  function arrUp(e) {
-    if (arrHold && arrHoldAt && e.pointerId === arrHoldAt.pid) { clearTimeout(arrHold); arrHold = null; }
-    const g = arrDrag; if (!g || e.pointerId !== g.pid) return false;
-    g.el.classList.remove("lifted"); arrDrag = null; arrTouched = Date.now();
-    return true;
-  }
 
   function onDown(e) {
     if (!root || (e.button != null && e.button > 0)) return;
-    if (arrDown(e)) return;
     // (v3.0.2) hold an orb still = the light's pop-up (on / off, brightness, white, colour: grid.js), as on every room look;
-    // a tap still switches it, a slide still dims it. Not where arranging is allowed on this panel: there a hold arranges.
-    const ho = !arrHold && !sheetFor && window.Grid && Grid.longPress && e.target.closest && e.target.closest("[data-light]");
+    // a tap still switches it, a slide still dims it. (v3.0.4: arranging is in the Manager only — Panels → Rooms & devices)
+    const ho = !sheetFor && window.Grid && Grid.longPress && e.target.closest && e.target.closest("[data-light]");
     // (v3.0.2: not on the ring band of a light that dims — there the press is the ring drag ("arm" below), a still finger included)
     const ow0 = ho && e.target.closest(`.${P}-ow`), rw0 = ow0 && ow0.closest(`.${P}-rw`), r0 = ow0 && ow0.getBoundingClientRect();
     const ring = !!(r0 && !(rw0 && rw0.classList.contains("ovf")) && onRingBand({ r: r0, cx: r0.left + r0.width / 2, cy: r0.top + r0.height / 2 }, e.clientX, e.clientY));
@@ -2208,7 +2113,6 @@
     paintDrag();
   }
   function onMove(e) {
-    if (arrMove(e)) return;
     if (sceneHold && e.pointerId === sceneHold.pid && Math.hypot(e.clientX - sceneHold.x0, e.clientY - sceneHold.y0) > TAP_SLOP) { clearTimeout(sceneHold.timer); sceneHold.b.classList.remove("hold"); sceneHold = null; }
     const g = drag; if (!g || e.pointerId !== g.pid) return;
     if (g.type === "orb") {
@@ -2246,8 +2150,8 @@
     }
     if (last) paintLights(last);
   }
-  function onUp(e) { if (arrUp(e)) return; if (sceneHold && e.pointerId === sceneHold.pid) { clearTimeout(sceneHold.timer); sceneHold.b.classList.remove("hold"); sceneHold = null; } endDrag(e, false); }
-  function onCancel(e) { if (arrUp(e)) return; if (sceneHold && e.pointerId === sceneHold.pid) { clearTimeout(sceneHold.timer); sceneHold.b.classList.remove("hold"); sceneHold = null; } endDrag(e, true); }
+  function onUp(e) { if (sceneHold && e.pointerId === sceneHold.pid) { clearTimeout(sceneHold.timer); sceneHold.b.classList.remove("hold"); sceneHold = null; } endDrag(e, false); }
+  function onCancel(e) { if (sceneHold && e.pointerId === sceneHold.pid) { clearTimeout(sceneHold.timer); sceneHold.b.classList.remove("hold"); sceneHold = null; } endDrag(e, true); }
   // a click inside a side-scrolling row that scrolled since the press (or was flinging) is not a tap
   function clickScrolled(t) {
     const scr = scrOf(t); if (!scr) return false;
@@ -2256,7 +2160,6 @@
   }
   function onClick(e) {
     if (!root) return;
-    if (arrange) { e.preventDefault(); e.stopPropagation(); return; }   // (arranging: taps don't switch anything)
     if (eatClick) { const fresh = Date.now() - eatClick < 1500; eatClick = 0; if (fresh) return; } // the click that ends a hold-to-save press
     if (sheetFor && !e.target.closest(`.${P}-sheet`)) { closeSheet(); return; } // a tap outside the sheet = cancel
     if (clickScrolled(e.target)) return;
@@ -2366,18 +2269,7 @@
     timers.clock = setInterval(safeUpdate, 15000); // clock, "x min ago"
     if (demo) timers.demo = setInterval(safeUpdate, 1000); // demo progress (text + classes only)
   }
-  // leaving the room while arranging: keep the order — saved once the page has switched (not inside the switch)
-  function leaveArrange() {
-    clearTimeout(arrHold); arrHold = null;
-    if (!arrange) return;
-    const room = curRoom, ids = root ? [...root.querySelectorAll(ARR_ITEM)].map((x) => Number(x.dataset.light || x.dataset.dev)).filter((n) => Number.isFinite(n)) : [];
-    arrange = false; arrDrag = null;
-    if (root) root.classList.remove(`${P}-arranging`);
-    if (arrDone) { arrDone.remove(); arrDone = null; }
-    if (room && ids.length && window.Settings) setTimeout(() => Settings.set("deviceOrder", { ...(Settings.v.deviceOrder || {}), [room]: ids }), 0);
-  }
   function unmount() {
-    leaveArrange();
     Object.values(timers).forEach((t) => clearInterval(t)); timers = {};
     clearTimeout(toastT); clearTimeout(dockT);
     if (sceneHold) clearTimeout(sceneHold.timer);
@@ -2394,8 +2286,8 @@
   }
   function update(roomId) {
     if (!root) return;
-    if (roomId != null && roomId !== curRoom) { leaveArrange(); curRoom = roomId; key = ""; dockId = null; demoOv.clear(); demoScenes.clear(); closeSheet(); }
-    if (drag || arrange) { try { const m = model(curRoom); if (m && structKey(m) === key) patch(m); } catch (e) { /* keep dragging */ } return; } // no rebuild under a finger / while arranging
+    if (roomId != null && roomId !== curRoom) { curRoom = roomId; key = ""; dockId = null; demoOv.clear(); demoScenes.clear(); closeSheet(); }
+    if (drag) { try { const m = model(curRoom); if (m && structKey(m) === key) patch(m); } catch (e) { /* keep dragging */ } return; } // no rebuild under a finger
     safeUpdate();
   }
 

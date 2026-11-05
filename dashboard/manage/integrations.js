@@ -54,7 +54,7 @@
   // says Connected too; "Working" one moment and "Connected" the next read as two different states)
   const pill = (st, name) => (!st ? null : el("span.pill" + tone(st), {}, el("span.dot" + tone(st), { "aria-hidden": "true" }),
     st.state === "problem" ? K.t("integrations.pill.trouble") : st.state === "off" ? K.t("integrations.pill.notSetUp")
-      : st.state === "waiting" ? K.t("integrations.pill.checking") : st.needsSetup || name === "Guest Wi-Fi" ? K.t("guest.unifi.connected") : K.t("integrations.pill.working")));   // i18n-ok (status name)
+      : st.state === "waiting" ? K.t("integrations.pill.checking") : st.needsSetup || name === "Guest Wi-Fi" || name === "UniFi Network" ? K.t("guest.unifi.connected") : K.t("integrations.pill.working")));   // i18n-ok (status name)
   const fineWords = (st, short) => (st.state === "waiting" ? K.t("integrations.status.waiting")
     : st.needsSetup ? (short ? K.t("integrations.status.needsSetupShort") : K.t("integrations.status.needsSetup"))   // (v3.0.3: connected, the guest network still to set up)
       : short ? K.t("integrations.status.fineShort") : K.t("integrations.status.fine"));
@@ -165,7 +165,7 @@
       const paint = () => {
         const p = pending[f.key];
         st.replaceChildren(...[p === undefined ? (f.set ? el("code", {}, K.t("integrations.secret.isSet")) : el("span.muted", {}, K.t("integrations.notSet"))) : p === "" ? el("span.pill.warn", {}, K.t("integrations.secret.cleared"))
-          : el("span.pill.acc", {}, f.set ? K.t("integrations.secret.replaced") : K.t("integrations.secret.setWhenSaved")),
+          : el("span.pill.acc", {}, f.set ? K.t("integrations.secret.replaced") : K.t("integrations.secret.setWhenSaved")),   // ("Set when saved": not in use before Save and restart)
           may ? el("button.btn.sm", { type: "button", onclick: () => replaceDialog(f, paint) }, f.set ? K.t("integrations.secret.replace") : K.t("integrations.secret.set")) : null,
           may && f.set && pending[f.key] === undefined ? el("button.btn.sm.ghost", { type: "button", onclick: () => { mark(f.key, ""); paint(); } }, K.t("control.clear")) : null,
           pending[f.key] !== undefined ? el("button.btn.sm.ghost", { type: "button", onclick: () => { delete pending[f.key]; drawBar(); paint(); } }, K.t("integrations.secret.undo")) : null].filter(Boolean));
@@ -181,6 +181,8 @@
     input.defaultValue = f.value || "";
     return K.row(...labelOf(f), input);
   }
+  // (v3.0.4) a group's settings as rows, for a group drawn elsewhere (weatherdev.js: the OpenWeatherMap key)
+  M.settingRowsOf = (g) => (DATA ? fieldsOf(g).map(settingRow) : []);
   function mqttRows() {
     if (!MQ || !MQ.builtin) return [];
     const pw = el("code", {}, "••••••••••••");
@@ -243,11 +245,11 @@
     return b;
   }
   function side() {
-    const lines = [["server", TITLE.hub, "Hubitat"], ["broker", TITLE.broker, "MQTT broker"], ["camera", K.t("integrations.status.protect"), "UniFi Protect"], ["camera", TITLE.cameras, "Cameras"], ["wifi", TITLE.guest, "Guest Wi-Fi"],   // i18n-ok (status names)
+    const lines = [["server", TITLE.hub, "Hubitat"], ["broker", TITLE.broker, "MQTT broker"], ["camera", K.t("integrations.status.protect"), "UniFi Protect"], ["camera", TITLE.cameras, "Cameras"], ["wifi", TITLE.guest, "Guest Wi-Fi"], ["activity", K.t("integrations.status.unifiNet"), "UniFi Network"],   // i18n-ok (status names; v3.0.4: the UniFi cards' reads)
       ["calendar", TITLE.calendars, "Calendars"], ["sun", K.t("weather.title"), "Weather"], ["zap", TITLE.music, "Music"]].map(([i, n, k]) => {   // i18n-ok (status names)
       const st = stateOf(k);
       // (v3.0.0: the weather device — its name and last change, or why the panels use Open-Meteo)
-      const wx = k === "Weather" && st && st.state !== "off" ? (st.reason === "stale" ? K.t("weather.side.stale", { ago: st.updatedAt ? ago(st.updatedAt) : "—" })
+      const wx = k === "Weather" && st && st.state !== "off" ? (String(st.reason || "").startsWith("owm") ? K.t(st.reason === "owm" ? "weather.side.owm" : "weather.side.owmProblem") : st.reason === "stale" ? K.t("weather.side.stale", { ago: st.updatedAt ? ago(st.updatedAt) : "—" })
         : st.reason === "no-data" ? K.t("weather.side.noData") : st.reason === "waiting" ? K.t("weather.side.waiting")
           : K.t("weather.side.ok", { name: st.device || K.t("weather.thisDevice"), ago: st.updatedAt ? ago(st.updatedAt) : "—" })) : null;
       return el("div.nl", {}, el("span.ni" + (st && st.state === "problem" ? ".bad" : st && (st.state === "off" || st.state === "waiting") ? "" : ".ok"), {}, ic(i, 16)),
@@ -270,7 +272,7 @@
       el("div.in-lines", {}, ...lines), el("div.cm-acts.foot", {}, check),
       recent.length ? el("h3.ch", {}, K.t("integrations.side.recent")) : null,
       recent.length ? el("div.in-recent", {}, recent.map((e) => el("div.nl", {}, el("div", {}, el("b", {}, (words[e.kind] || (() => K.t("integrations.recent.other")))(e)),
-        el("small", {}, [new Date(e.at * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }), e.who].filter(Boolean).join(" · ")))))) : null);
+        el("small", {}, [window.Fmt ? Fmt.dateTime(new Date(e.at * 1000)) : new Date(e.at * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }), e.who].filter(Boolean).join(" · ")))))) : null);   // (v3.0.4: the house's format)
   }
   function draw() {
     if (!DATA || S.route().page !== "integrations") return;
@@ -278,6 +280,7 @@
     const cal = M.calendarsCard ? M.calendarsCard() : null;
     const main = el("div.in-main", { "data-unsaved": K.t("integrations.unsavedName"), "data-save": K.t("integrations.bar.save") }, marker,
       ...GROUPS.slice(0, 4).map(group),
+      M.unifiGroup ? M.unifiGroup() : null,   // (v3.0.4: what the panels' UniFi cards show — unifinet.js)
       cal ? el("section.in-group", { "aria-label": TITLE.calendars }, el("div.gh", {}, ic("calendar", 15), ` ${TITLE.calendars}`),
         el("div.grp", {}, statusRow("Calendars"), el("div.grp-row.in-det", {}, cal)), el("p.gf", {}, K.t("integrations.group.calendarsWhat"))) : null,
       M.weatherGroup ? M.weatherGroup() : null,   // (v3.0.0: a Hubitat weather device — weatherdev.js)

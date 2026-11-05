@@ -15,7 +15,7 @@
   // [type, name, icon, what it is, default size, default style, default options, group]
   const TYPES = [
     ["clock", Kit.t("builder.type.clock.name"), "clock", Kit.t("builder.type.clock.desc"), 4, 2, { a: 0, b: false, e: 0 }, {}, "home"],
-    ["weather", Kit.t("builder.type.weather.name"), "sun", Kit.t("builder.type.weather.desc"), 4, 3, {}, {}, "home"],
+    ["weather", Kit.t("builder.type.weather.name"), "sun", Kit.t("builder.type.weather.desc"), 4, 3, {}, { src: "auto" }, "home"],
     ["calendar", Kit.t("builder.type.calendar.name"), "calendar", Kit.t("builder.type.calendar.desc"), 4, 5, {}, { days: 3 }, "home"],
     ["thermostat", Kit.t("builder.type.thermostat.name"), "thermo", Kit.t("builder.type.thermostat.desc"), 4, 4, {}, {}, "home"],
     ["locks", Kit.t("builder.type.locks.name"), "lock", Kit.t("builder.type.locks.desc"), 4, 2, {}, {}, "home"],
@@ -24,7 +24,10 @@
     ["temps", Kit.t("builder.type.temps.name"), "thermo", Kit.t("builder.type.temps.desc"), 4, 1, {}, {}, "home"],
     ["guest", Kit.t("builder.type.guest.name"), "wifi", Kit.t("builder.type.guest.desc"), 4, 2, {}, {}, "home"],
     ["alerts", Kit.t("builder.type.alerts.name"), "shield", Kit.t("builder.type.alerts.desc"), 4, 1, {}, {}, "home"],
-    ["blank", Kit.t("builder.type.blank.name"), "plus", Kit.t("builder.type.blank.desc"), 4, 3, {}, { parts: [] }, "dev"],
+    ["blank", Kit.t("builder.type.blank.name"), "plus", Kit.t("builder.type.blank.desc"), 4, 3, {}, { fr: 1, parts: [] }, "dev"],
+    // (v3.0.4) one Devices card for every device — Device, Devices, Value, Button, Lock, Fan and Scene buttons below are
+    // no longer offered (OLD_T); kept so a card of theirs still opens (service/devices_card.py moved the saved ones over)
+    ["devices", Kit.t("builder.type.devices.name"), "grid", Kit.t("builder.type.devices.desc"), 4, 3, {}, { look: "list", items: [] }, "dev"],
     ["device", Kit.t("builder.type.device.name"), "bulb", Kit.t("builder.type.device.desc"), 3, 1, {}, { motion: "auto" }, "dev"],
     ["group", Kit.t("builder.type.group.name"), "grid", Kit.t("builder.type.group.desc"), 3, 3, {}, { items: [] }, "dev"],
     ["value", Kit.t("builder.type.value.name"), "thermo", Kit.t("builder.type.value.desc"), 2, 2, {}, {}, "dev"],
@@ -48,9 +51,23 @@
     ["modes", Kit.t("builder.type.modes.name"), "moon", Kit.t("builder.type.modes.desc"), 6, 2, {}, {}, "home"],
     ["safety", Kit.t("builder.type.safety.name"), "shield", Kit.t("builder.type.safety.desc"), 4, 1, {}, {}, "home"],
     ["notices", Kit.t("builder.type.notices.name"), "bell", Kit.t("builder.type.notices.desc"), 4, 3, {}, {}, "home"],
+    // (v3.0.4) Bins / Trash and Countdown & timers; Bin day, Countdown and Timers below are no longer offered (OLD_T),
+    // kept so a card of theirs still opens (service/time_cards.py moved the saved ones over)
+    ["trash", Kit.t("builder.type.trash.name"), "trashBin", Kit.t("builder.type.trash.desc"), 5, 3, {}, { rem: { when: "before", at: "19:30" }, alarm: "21:00", items: [] }, "home"],
+    ["timers", Kit.t("builder.type.timers.name"), "hourglass", Kit.t("builder.type.timers.desc"), 4, 3, {}, { items: [] }, "home"],
     ["countdown", Kit.t("builder.type.countdown.name"), "hourglass", Kit.t("builder.type.countdown.desc"), 3, 2, {}, {}, "home"],
     ["bins", Kit.t("builder.type.bins.name"), "trashBin", Kit.t("builder.type.bins.desc"), 4, 1, {}, { items: [] }, "home"],
     ["timer", Kit.t("builder.type.timer.name"), "clock", Kit.t("builder.type.timer.desc"), 4, 3, {}, {}, "home"],
+    // (v3.0.4) the UniFi cards (the panel's unifi.js; hidden on the panels while UniFi isn't connected)
+    ["netwan", Kit.t("builder.type.netwan.name"), "router", Kit.t("builder.type.netwan.desc"), 8, 4, {}, {}, "home"],
+    ["netmap", Kit.t("builder.type.netmap.name"), "router", Kit.t("builder.type.netmap.desc"), 8, 5, {}, {}, "home"],
+    ["netstrip", Kit.t("builder.type.netstrip.name"), "chartBar", Kit.t("builder.type.netstrip.desc"), 12, 1, {}, {}, "home"],
+    ["netchips", Kit.t("builder.type.netchips.name"), "users", Kit.t("builder.type.netchips.desc"), 8, 1, {}, {}, "home"],
+    ["netdevs", Kit.t("builder.type.netdevs.name"), "list", Kit.t("builder.type.netdevs.desc"), 4, 4, {}, {}, "home"],
+    ["netpoe", Kit.t("builder.type.netpoe.name"), "bolt", Kit.t("builder.type.netpoe.desc"), 4, 4, {}, {}, "home"],
+    ["netclients", Kit.t("builder.type.netclients.name"), "users", Kit.t("builder.type.netclients.desc"), 8, 5, {}, {}, "home"],
+    ["netlog", Kit.t("builder.type.netlog.name"), "clock", Kit.t("builder.type.netlog.desc"), 4, 5, {}, {}, "home"],
+    ["netvals", Kit.t("builder.type.netvals.name"), "gauge", Kit.t("builder.type.netvals.desc"), 4, 2, {}, {}, "home"],
     ["camera", Kit.t("builder.type.camera.name"), "film", Kit.t("builder.type.camera.desc"), 4, 3, { r: 18 }, {}, "media"],
     ["picture", Kit.t("builder.type.picture.name"), "image", Kit.t("builder.type.picture.desc"), 3, 3, { a: 0 }, {}, "media"],
     // a room's own page: they fill themselves in for the room they're on (one layout can serve every room)
@@ -62,20 +79,24 @@
   ];
   // the card picker's categories (research: the research notes §1); a card may sit in several
   const CATS = [["room", Kit.t("builder.cat.room"), "home"], ["devices", Kit.t("builder.cat.devices"), "bulb"], ["climate", Kit.t("builder.cat.climate"), "thermo"], ["security", Kit.t("builder.cat.security"), "shield"],
-    ["people", Kit.t("builder.cat.people"), "user"], ["time", Kit.t("builder.cat.time"), "clock"], ["media", Kit.t("builder.cat.media"), "film"], ["info", Kit.t("builder.cat.info"), "edit"], ["yours", Kit.t("builder.cat.yours"), "grid"]];
+    ["people", Kit.t("builder.cat.people"), "user"], ["time", Kit.t("builder.cat.time"), "clock"], ["media", Kit.t("builder.cat.media"), "film"], ["info", Kit.t("builder.cat.info"), "edit"], ["network", Kit.t("builder.cat.network"), "router"], ["yours", Kit.t("builder.cat.yours"), "grid"]];
   const CAT_OF = { roomhead: ["room"], roomdevs: ["room", "devices"], roomopen: ["room", "security"], roomcams: ["room", "security", "media"], roomthings: ["room", "devices"],
     timer: ["time"], clock: ["time"], scenes: ["devices", "time"], modes: ["security", "time"], safety: ["security"], notices: ["info", "security"],
-    countdown: ["time"], bins: ["time"], alarm: ["security"], lock: ["security", "devices"], garage: ["security", "devices"], spot: ["devices", "security", "info"], status: ["info"], photos: ["media", "info"], player: ["media", "devices"], fan: ["climate", "devices"], energy: ["info", "climate"], todo: ["time"], notes: ["time", "info"],
+    countdown: ["time"], bins: ["time"], trash: ["time"], timers: ["time"], alarm: ["security"], lock: ["security", "devices"], garage: ["security", "devices"], spot: ["devices", "security", "info"], status: ["info"], photos: ["media", "info"], player: ["media", "devices"], fan: ["climate", "devices"], energy: ["info", "climate"], todo: ["time"], notes: ["time", "info"],
     batteries: ["info", "devices"], power: ["info", "devices"], weather: ["climate", "time"], calendar: ["time"], thermostat: ["climate"], locks: ["security"], openings: ["security"], people: ["people"],
-    temps: ["climate"], guest: ["info"], alerts: ["security", "info"], device: ["devices"], group: ["devices"], value: ["devices", "climate", "info"],
+    temps: ["climate"], guest: ["info"], alerts: ["security", "info"], devices: ["devices", "climate", "security"], device: ["devices"], group: ["devices"], value: ["devices", "climate", "info"],
+    netwan: ["network"], netmap: ["network"], netstrip: ["network", "info"], netchips: ["network"], netdevs: ["network"], netpoe: ["network"], netclients: ["network"], netlog: ["network"], netvals: ["network", "info"],
     button: ["devices"], room: ["devices"], text: ["info"], blank: ["devices", "security", "climate", "info"], camera: ["security", "media"], picture: ["media"] };
   const T = Object.fromEntries(TYPES.map((t) => [t[0], t]));
+  const OLD_T = new Set(["device", "group", "value", "button", "lock", "fan", "scenes", "bins", "countdown", "timer"]);
   // a card type: a built-in one, or "card:<id>" — one people made (Manager → Cards)
   const userCard = (type) => (/^card:/.test(type) && st ? (st.cards || []).find((c) => c.id === type.slice(5)) : null);
   // "tpl:<id>": a card saved from this editor (Save card) — dropped, it's a copy of that card
   // the fine grid, toFine, the card helper and the built-in layouts: layoutmaps.js (v2.8.0 — shared with the
   // Panels maps and the phone, which never loads this file)
-  const { FC, FR, F, SNAP, toFine, card, CLOCK, HEAD, PRESETS, ROOM_PRESETS } = window.LayoutMaps;
+  const { FC, FR, F, SNAP, toFine: fine0, card, CLOCK, HEAD, PRESETS, ROOM_PRESETS } = window.LayoutMaps;
+  // (v3.0.4) and a blank card's pieces from the old 24 × 24 grid to thousandths of the card, as it's opened (bkFree)
+  const toFine = (g) => { const f = fine0(g); return f && Array.isArray(f.cards) && f.cards.some(bkOld) ? { ...f, cards: f.cards.map(bkFree) } : f; };
   const tplOf = (type) => (/^tpl:/.test(type) && st ? (st.tpls || []).find((t) => t.id === type.slice(4)) : null);
   const tdef = (type) => {
     if (T[type]) return T[type];
@@ -91,10 +112,11 @@
   const DEF_SHARE = { card: 0.01, live: 0.005, art: 0.06, css: 0.015, tile: 0.15, full: 0.35 };
   const DEF_FX = [0, 0.05, 0.15, 0.3, 0.55], DEF_LIVEMAX = 4;
   const LIVE_RATE = 0.3;   // a live card changes about once every 3 s (the benchmark measures 20 changes a second)
-  const LIVE_T = new Set(["device", "group", "value", "thermostat", "people", "energy", "player", "timers", "status", "power", "batteries", "fan", "alarm",
+  const LIVE_T = new Set(["devices", "device", "group", "value", "thermostat", "people", "energy", "player", "timers", "status", "power", "batteries", "fan", "alarm",
     "lock", "garage", "modes", "scenes", "roomdevs", "roomhead", "roomopen", "roomthings", "locks", "openings", "temps", "todo", "notes", "clock", "notices",
-    "safety", "countdown", "alerts", "blank"]);
+    "safety", "countdown", "alerts", "blank", "trash", "netwan", "netmap", "netstrip", "netchips", "netdevs", "netpoe", "netclients", "netlog", "netvals"]);
   const presets = () => (st && st.ctx.room ? ROOM_PRESETS : PRESETS);
+  const EDGES = ["bottom", "top", "left", "right"];   // (v3.0.4) the room bar's edges (app.js dockAtNow)
 
 
   const SCREENS = [["1280x800", "1280 × 800 (10″ tablet)"], ["1920x1200", "1920 × 1200"], ["1920x1080", "1920 × 1080 (TV, monitor)"], ["1024x600", "1024 × 600 (7″)"],
@@ -145,7 +167,8 @@
   // the panel's automatic press-and-hold wheel (grid.js Grid.autoWheel): fans, shades, dimmers, white and colour lights
   const autoWheels = (id) => { const d = devices().find((x) => x.id === id); if (!d || /lock|garage/.test(d.kind)) return false;
     return /^(fan|shade)$/.test(d.kind) || (rawDev(id).caps || d.caps).some((x) => ["SwitchLevel", "ColorTemperature", "ColorControl"].includes(x)); };
-  const switches = (d) => d.caps.includes("Switch") || (rawDev(d.id).cmds || []).includes("on");
+  // (v3.0.4: an air purifier too — the panel sends it fanOn / off, grid.js run())
+  const switches = (d) => d.caps.includes("Switch") || (rawDev(d.id).cmds || []).includes("on") || /purifier/.test(d.kind || "");
   // a search: every word somewhere in the name, room or kind, in any order, parts of words too ("light kit" →
   // "Kitchen Lights"; "v" → everything with a v); apostrophes and accents don't count
   const fold = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/['’‘`]/g, "");
@@ -201,6 +224,25 @@
   const CONTACT_FIRST = { first: (d) => /door|contact/.test(d.kind) || /contact|door sensor|tilt/i.test(`${d.label} ${d.type}`), firstLabel: Kit.t("builder.dev.contactFirst") };
   // a row whose name explains itself on hover (the name is underlined with dots: there is a note)
   const tipRow = (label, tip, ...kids) => el("div.bld-row", { title: tip }, el("span.bld-l.bld-tip2", {}, label), ...kids);
+  const VIB_FIRST = { first: (d) => /vibration|accel|tilt|multi/i.test(`${d.label} ${d.type} ${d.kind}`), firstLabel: Kit.t("builder.dev.vibFirst") };
+  // (v3.0.4) a garage set's doors (a Picture & values card, a blank card's piece): how many (Single to Quad), then each
+  // door's opener, name, contact, vibration / tilt sensor, width and its open and close times; save() after each change
+  function garageDoorRows(doors, save, named) {
+    const out = [], secs = (dr, k, ph, unit) => el("span", {}, el("input", { type: "number", min: "3", max: "60", step: "1", placeholder: ph, value: dr[k] ?? "",
+      onchange: (e) => { const n = Math.round(+e.target.value); if (n >= 3 && n <= 60) dr[k] = n; else delete dr[k]; save(); } }), el("span.muted", {}, Kit.t(unit)));
+    out.push(row(Kit.t("builder.garage.doors"), seg(["single", "double", "triple", "quad"].map((w, n) => [String(n + 1), Kit.t(`builder.garage.n.${w}`)]), String(doors.length),
+      (v) => { while (doors.length < +v) doors.push({}); doors.length = +v; save(); })));
+    doors.forEach((dr, k) => out.push(el("div.bld-gitem", {}, el("b", {}, doors.length > 1 ? Kit.t(k === 0 ? "builder.garage.doorLeft" : k === doors.length - 1 ? "builder.garage.doorRight" : "builder.garage.doorMiddle", { n: k + 1 }) : Kit.t("builder.garage.theDoor")),
+      row(Kit.t(named ? "builder.spot.buttonOpener" : "builder.garage.opener"), devSelect(dr.id ?? null, (v) => { if (v) dr.id = v; else delete dr.id; save(); }, Kit.t("builder.garage.pickOpener"), GARAGE_FIRST)),
+      named ? tipRow(Kit.t("builder.f.name"), Kit.t("builder.spot.doorNameTip"),
+        el("input", { type: "text", maxlength: "30", value: dr.label || "", placeholder: dr.id ? devName(dr.id) : Kit.t("builder.spot.openerNamePh"), onchange: (e) => { const v = e.target.value.trim(); if (v) dr.label = v; else delete dr.label; save(); } })) : null,
+      tipRow(Kit.t("builder.garage.contact"), Kit.t("builder.garage.contactTip"), devSelect(dr.contact ?? null, (v) => { if (v) dr.contact = v; else delete dr.contact; save(); }, Kit.t("builder.garage.noContact"), CONTACT_FIRST)),
+      dr.contact != null ? tipRow(Kit.t("builder.garage.vib"), Kit.t("builder.garage.vibTip"), devSelect(dr.vib ?? null, (v) => { if (v) dr.vib = v; else delete dr.vib; save(); }, Kit.t("builder.garage.noVib"), VIB_FIRST)) : null,
+      row(Kit.t("builder.garage.width"), seg([["1", Kit.t("builder.garage.single")], ["2", Kit.t("builder.garage.wide")]], dr.wide ? "2" : "1", (v) => { if (v === "2") dr.wide = true; else delete dr.wide; save(); })),
+      tipRow(Kit.t("builder.garage.takes"), Kit.t("builder.garage.takesTip"), secs(dr, "travel", "15", "builder.garage.sToOpen"), secs(dr, "tclose", dr.travel ? String(dr.travel) : "15", "builder.garage.sToClose")))));
+    if (doors.some((dr) => dr.vib != null)) out.push(el("small.muted", {}, Kit.t("builder.garage.vibNote")));
+    return out;
+  }
 
   // ---------- warnings: what a card can do that the owner should know (they decide —) ----------
   function warnings(g) {
@@ -251,7 +293,10 @@
     // (the room bar's style, names and auto-hide too: what the canvas draws is what the wall shows)
     const m = ctx.managed, dockStyle = (M.DOCK_STYLES || []).some(([k]) => k === m.dockStyle) ? m.dockStyle : "pill";
     const look = { theme: m["look.theme"] || "purple", background: m["look.background"] || "mountains", dockStyle,
-      dockLabels: typeof m.dockLabels === "boolean" ? m.dockLabels : dockStyle !== "rail", dockAutoHide: m.dockAutoHide === true };
+      dockLabels: typeof m.dockLabels === "boolean" ? m.dockLabels : dockStyle !== "rail", dockAutoHide: m.dockAutoHide === true,
+      // (v3.0.4) its edge (dragged on the canvas, or the edge picker) and its rooms: which, in what order
+      dockAt: EDGES.includes(m.dockAt) ? m.dockAt : "bottom", roomOrder: Array.isArray(m.roomOrder) ? [...m.roomOrder] : [],
+      hiddenRooms: Object.fromEntries(Object.entries(m.hiddenRooms || {}).filter(([, v]) => v === true)) };
     st = { g, sel: null, ctx, gs: null, dirty: false, mode: "arrange", rect: null, sig: "", cams: [], pics: [], bgs: [], cards: [], look, look0: { ...look }, open: new Set(["shows"]),
       grids, key, view: ctx.room ? (key !== "*" ? key : (rooms[0] || {}).id || "") : "home", edited: new Set(),
       snap: (() => { try { return localStorage.getItem("bld.snap") !== "0"; } catch { return true; } })(),
@@ -373,7 +418,8 @@
   const roomNow = (k) => (k === st.key && st.touched ? st.g : st.grids[k]);
   const roomDiffers = (k) => { const v = roomNow(k);
     return v === "" ? !!(st.saved[k] && Array.isArray(st.saved[k].cards)) : v != null && norm(v) !== st.orig.get(k); };
-  const lookChanged = () => Object.keys(st.look).some((k) => st.look[k] !== st.look0[k]);
+  const lookDiff = (k) => JSON.stringify(st.look[k]) !== JSON.stringify(st.look0[k]);   // (the rooms' order and hidden ones: lists)
+  const lookChanged = () => Object.keys(st.look).some(lookDiff);
   const unsaved = () => lookChanged()
     || (st.ctx.room ? [...st.edited].some(roomDiffers) : st.orig.has("home") && norm(st.g) !== st.orig.get("home"));
   // ---------- a draft in this browser (v2.7.0): a reload, a crash or an ended session doesn't lose the layout ----------
@@ -453,7 +499,7 @@
       dockBoxes();
     }
     if (!st.g.cards.some((c) => c.i === st.sel)) st.sel = null;
-    if (st.inner) { const ic = innerCard(); if (!ic) st.inner = null; else if (st.inner.sel != null && !(ic.o.parts || [])[st.inner.sel]) st.inner.sel = null; }
+    if (st.inner) { const ic = innerCard(); if (!ic) st.inner = null; else if (st.inner.sel != null && !(ic.o[ic.t === "devices" ? "items" : "parts"] || [])[st.inner.sel]) st.inner.sel = null; }
     st.touched = true;
     if (st.ctx.room) st.edited.add(st.key);
     dirtyNow();
@@ -612,7 +658,8 @@
     const over = el("div.bld-over");
     // (editing inside a blank card: around it is dimmed — a click there is "Done")
     const mask = el("div.bld-inmask", { title: Kit.t("builder.inner.maskTip"), onclick: () => leaveInner() });
-    const screen = el("div.bld-screen" + (st.mode === "try" ? ".trying" : ""), {}, frame, mask, over, dockProxyEl(), fsbar, el("div.bld-wait", {}, Kit.t("builder.frame.loading")));
+    const hint = el("div.bk-hint", { role: "status" }, el("i"), Kit.t("builder.inner.hint"));
+    const screen = el("div.bld-screen" + (st.mode === "try" ? ".trying" : ""), {}, frame, mask, over, hint, dockBoxEl(), dockProxyEl(), fsbar, el("div.bld-wait", {}, Kit.t("builder.frame.loading")));
     const ptabs = el("div.bld-ptabs", { role: "tablist", "aria-label": Kit.t("builder.pal.paneAria") }, [["cards", Kit.t("builder.pal.cards"), "cards"], ["layers", Kit.t("builder.pal.layers"), "layers"]].map(([k, n, i]) =>
       el("button" + ((st.ptab || "cards") === k ? ".on" : ""), { type: "button", role: "tab", "aria-selected": String((st.ptab || "cards") === k), "data-ptab": k,
         onclick: () => { st.ptab = k; for (const b of ptabs.children) { const on = b.dataset.ptab === k; b.classList.toggle("on", on); b.setAttribute("aria-selected", String(on)); } palette(); } }, Kit.icon(i, 15), n)));
@@ -656,11 +703,8 @@
         // (the spacing kept between cards that snap next to each other — cards are always drawn at the size they're given)
         line(Kit.t("builder.page.spacing"), sel([0, 4, 6, 10, 14, 20, 28].map((x) => [x, Kit.t("builder.page.px", { n: x })]), g.gap, (v) => { st.g.gap = +v; changed(false); }, Kit.t("builder.page.spacingAria")), ".bld-gap")),
       sec2(Kit.t("builder.look.title"), themes.length ? line(Kit.t("builder.look.theme"), sel(themes, st.look.theme, (v) => setLook({ theme: v }), Kit.t("builder.look.theme")), ".bld-theme") : null, line(Kit.t("builder.look.background"), bgSel)),
-      // the room bar's look (its place: Panels → Look & layout → Room bar); a style starts with its own names setting
-      sec2(Kit.t("builder.dock.title"),
-        line(Kit.t("builder.dock.style"), sel((M.DOCK_STYLES || []).map(([k, x]) => [k, x]), st.look.dockStyle, (v) => setLook({ dockStyle: v, dockLabels: v !== "rail" }), Kit.t("builder.dock.styleAria")), ".bld-dock"),
-        check(".bld-dlab", Kit.t("builder.dock.names"), st.look.dockLabels, (e) => setLook({ dockLabels: e.target.checked }), Kit.t("builder.dock.namesTip")),
-        check(".bld-dauto", Kit.t("builder.dock.autoHide"), st.look.dockAutoHide, (e) => setLook({ dockAutoHide: e.target.checked }), Kit.t("builder.dock.autoHideTip"))),
+      // (v3.0.4) the room bar: everything about it in one place (as on Panels → Room bar)
+      dockSec(),
       el("div.bld-empty", {}, el("span.ei", {}, Kit.icon("cards", 18)), el("b", {}, Kit.t("builder.empty.title")),
         el("p", {}, Kit.t("builder.empty.text")),
         el("p", {}, Kit.t("builder.empty.try"))));
@@ -701,7 +745,7 @@
   function bgOptions(select) {
     select.replaceChildren(
       el("optgroup", { label: Kit.t("builder.look.builtIn") }, BUILT_BG.map(([k, n]) => el("option", { value: k, selected: st.look.background === k }, n))),
-      st.bgs.length ? el("optgroup", { label: Kit.t("builder.look.yourPictures") }, st.bgs.map((u) => el("option", { value: "up:" + u.id, selected: st.look.background === "up:" + u.id }, u.name))) : null);
+      ...(st.bgs.length ? [el("optgroup", { label: Kit.t("builder.look.yourPictures") }, st.bgs.map((u) => el("option", { value: "up:" + u.id, selected: st.look.background === "up:" + u.id }, u.name)))] : []));
     return select;
   }
   function setLook(patch) {
@@ -712,11 +756,50 @@
     const f = $(".bld-frame"); if (f && f.contentWindow) f.contentWindow.postMessage({ t: "look", look: { ...st.look } }, location.origin);
     dockBoxes();
   }
-  // the room bar's boxes show the look as it is now (a style picked resets its names; Undo)
+  // the room bar's section shows the look as it is now (a style picked resets its names; a drag; Undo) — drawn again,
+  // the focus kept where it was
   function dockBoxes() {
-    const s = $(".bld-dock select");
-    if (s) s.value = st.look.dockStyle;
-    setSw($(".bld-dlab .sw"), st.look.dockLabels); setSw($(".bld-dauto .sw"), st.look.dockAutoHide);
+    const old = $(".bld-dsec"); if (!old) return;
+    const fk = document.activeElement && old.contains(document.activeElement) ? document.activeElement.dataset.fk : null;
+    const now = dockSec(); old.replaceWith(now);
+    const f = fk && now.querySelector(`[data-fk="${fk}"]`); if (f) f.focus({ preventScroll: true });
+  }
+  // (v3.0.4) the room bar's settings: its edge (a 4-way picker — the arrow keys, or a click on a side; the same as
+  // dragging it on the canvas), its style, names, auto-hide, and its rooms (which, in what order: ▲ ▼ and a switch)
+  const EDGE_KEYS = { ArrowUp: "top", ArrowDown: "bottom", ArrowLeft: "left", ArrowRight: "right" };
+  const edgeName = (k) => Kit.t(`panels.look.${k}`);
+  const fkd = (n, fk) => { n.dataset.fk = fk; return n; };
+  function dockSec() {
+    const L = st.look, line = (label, ctl, cls = "") => el(`label.bld-f.bld-pl${cls}`, {}, el("span", {}, label), ctl);
+    const check = (cls, label, on, onchange, tip, fk) => el(`div.bld-f.bld-pl.bld-pck${cls}`, { title: tip || "" }, el("span", {}, label), fkd(Kit.sw(on, onchange, label), fk));
+    const pick = el("div.bld-edges", { role: "radiogroup", "aria-label": Kit.t("builder.dock.edgeAria"),
+      onkeydown: (e) => { const k = EDGE_KEYS[e.key]; if (!k) return; e.preventDefault(); setEdge(k); const n = $(`.bld-edges .e-${k}`); if (n) n.focus(); } },
+    EDGES.map((k) => el(`button.e-${k}`, { type: "button", role: "radio", "aria-checked": String(L.dockAt === k), tabindex: L.dockAt === k ? "0" : "-1",
+      "aria-label": edgeName(k), title: edgeName(k), "data-fk": `edge:${k}`, onclick: () => setEdge(k) })), el("span.c", { "aria-hidden": "true" }));
+    const rooms = dockRooms(), shown = rooms.filter((r) => !L.hiddenRooms[r.id]).length;
+    const move = (i, d) => { const ids = rooms.map((r) => r.id); [ids[i], ids[i + d]] = [ids[i + d], ids[i]]; setLook({ roomOrder: ids }); };
+    const hide = (id, on) => setLook({ hiddenRooms: on ? Object.fromEntries(Object.entries(L.hiddenRooms).filter(([k]) => k !== id)) : { ...L.hiddenRooms, [id]: true } });
+    return el("div.bld-psec.bld-dsec", {}, el("h4", {}, Kit.t("builder.dock.title")),
+      el("div.bld-f.bld-pl.bld-dedge", {}, el("span", {}, Kit.t("builder.dock.edge"), el("small", {}, edgeName(L.dockAt))), pick),
+      el("p.bld-dnote", {}, Kit.t("builder.dock.edgeHint")),
+      line(Kit.t("builder.dock.style"), sel((M.DOCK_STYLES || []).map(([k, x]) => [k, x]), L.dockStyle, (v) => setLook({ dockStyle: v, dockLabels: v !== "rail" }), Kit.t("builder.dock.styleAria")), ".bld-dock"),
+      check(".bld-dlab", Kit.t("builder.dock.names"), L.dockLabels, (v) => setLook({ dockLabels: v }), Kit.t("builder.dock.namesTip"), "names"),
+      check(".bld-dauto", Kit.t("builder.dock.autoHide"), L.dockAutoHide, (v) => setLook({ dockAutoHide: v }), Kit.t("builder.dock.autoHideTip"), "auto"),
+      rooms.length ? el("div.bld-drooms", { role: "list", "aria-label": Kit.t("builder.dock.rooms") },
+        el("div.bld-dgh", {}, el("b", {}, Kit.t("builder.dock.rooms")), el("small", {}, Kit.t("builder.dock.shownN", { n: shown, all: rooms.length }))),
+        rooms.map((r, i) => el("div.bld-droom" + (L.hiddenRooms[r.id] ? ".off" : ""), { role: "listitem" }, el("span.nm", {}, r.name),
+          el("button.bld-dmv", { type: "button", disabled: i === 0, "aria-label": Kit.t("panels.order.up", { name: r.name }), "data-fk": `up:${r.id}`, onclick: () => move(i, -1) }, Kit.icon("chevU", 14)),
+          el("button.bld-dmv", { type: "button", disabled: i === rooms.length - 1, "aria-label": Kit.t("panels.order.down", { name: r.name }), "data-fk": `down:${r.id}`, onclick: () => move(i, 1) }, Kit.icon("chevD", 14)),
+          fkd(Kit.sw(!L.hiddenRooms[r.id], (on) => hide(r.id, on), Kit.t("panels.shownHere", { name: r.name })), `eye:${r.id}`)))) : null);
+  }
+  // the panel's rooms in the bar's order (as Panels → Room bar lists them)
+  function dockRooms() {
+    const order = st.look.roomOrder, rank = (r, i) => { const k = order.indexOf(r.id); return k < 0 ? order.length + i : k; };
+    return (st.ctx.rooms || []).map((r, i) => [r, rank(r, i)]).sort((a, b) => a[1] - b[1]).map(([r]) => r);
+  }
+  function setEdge(k) {
+    if (!st || !EDGES.includes(k) || k === st.look.dockAt) return;
+    setLook({ dockAt: k });
   }
   // a kit switch shown on / off without running its change
   function setSw(n, on) { if (!n) return; n.classList.toggle("on", !!on); n.setAttribute("aria-checked", String(!!on)); }
@@ -768,6 +851,7 @@
       if (lookChanged()) setLook({});
     }
     else if (m.t === "rect" && [m.x, m.y, m.w, m.h].every(Number.isFinite)) { st.rect = m; place(); }
+    else if (m.t === "netPos" && typeof m.i === "string" && m.pos && typeof m.pos === "object") netPos(m.i, m.pos);
   }
   // the layout being edited → the panel page (while dragging: the cards where they are right now)
   let postQueued = false;
@@ -833,7 +917,8 @@
   // the layout as the panel should show it right now (a card being moved: where it would land)
   const live = () => {
     const pd = st.pdrag, ic = pd && innerCard();
-    if (ic) return { ...st.g, cards: st.g.cards.map((c) => (c === ic ? { ...c, o: { ...c.o, parts: (c.o.parts || []).map((p, k) => (k === pd.n ? { ...p, ...pd.r } : p)) } } : c)) };
+    const pk = ic && ic.t === "devices" ? "items" : "parts";   // (v3.0.4: a Devices card's item, as a blank card's piece)
+    if (ic) return { ...st.g, cards: st.g.cards.map((c) => (c === ic ? { ...c, o: { ...c.o, [pk]: (c.o[pk] || []).map((p, k) => (k === pd.n ? { ...p, ...pd.r } : p)) } } : c)) };
     const d = st.drag;
     if (!d || !d.moved || !d.id) return st.g;
     return { ...st.g, cards: st.g.cards.map((c) => (c.i === d.id ? { ...c, ...d.rect, z: 99 } : c)) };
@@ -929,20 +1014,100 @@
       if (st.dockKeep && d.sc.querySelector("button[data-room]")) { [d.sc.scrollLeft, d.sc.scrollTop] = st.dockKeep; st.dockKeep = null; }
       if (!st.dockObs || st.dockObs.doc !== d.doc) {   // (the bar moving or growing without the grid moving)
         if (st.dockObs) st.dockObs.ro.disconnect();
-        try { const ro = new d.win.ResizeObserver(() => { if (st) dockProxy(); }); ro.observe(d.doc.getElementById("dock")); ro.observe(d.rail); st.dockObs = { doc: d.doc, ro }; } catch { st.dockObs = null; }
+        try { const ro = new d.win.ResizeObserver(() => { if (st) { barPlace(); dockProxy(); } }); ro.observe(d.doc.getElementById("dock")); ro.observe(d.rail); st.dockObs = { doc: d.doc, ro }; } catch { st.dockObs = null; }
       }
     }
     px.hidden = !r;
+    const bx = $(".bld-dockbox");
+    if (bx) bx.hidden = !r;
     if (!r) return;
     const sb = screen.getBoundingClientRect();
+    if (bx) {   // (the whole bar, its grip at the side facing the page)
+      const dr = d.doc.getElementById("dock").getBoundingClientRect();
+      Object.assign(bx.style, { left: `${d.fr.left - sb.left - screen.clientLeft + dr.left * d.k}px`, top: `${d.fr.top - sb.top - screen.clientTop + dr.top * d.k}px`,
+        width: `${dr.width * d.k}px`, height: `${dr.height * d.k}px` });
+      bx.dataset.at = st.bar && st.bar.moved ? st.bar.at : st.look.dockAt;
+    }
     Object.assign(px.style, { left: `${d.fr.left - sb.left - screen.clientLeft + r.left * d.k}px`, top: `${d.fr.top - sb.top - screen.clientTop + r.top * d.k}px`,
       width: `${r.width * d.k}px`, height: `${r.height * d.k}px` });
   }
+
+  // ---------- (v3.0.4) moving the room bar: only here, never on the wall ----------
+  // A box over the whole bar: pointed at, its grip dots show; dragged (by the dots or the bar itself — not its rooms,
+  // they scroll), the panel's real bar follows the pointer, on the nearest edge as it goes (along the top / bottom,
+  // down a side), the page reflowing around it; let go, it settles on that edge (saved with the layout; Undo). Esc
+  // cancels. The grip takes the arrow keys too, as the edge picker does.
+  function dockBoxEl() {
+    const bx = el("div.bld-dockbox", { hidden: true },
+      el("button.bld-dgrip", { type: "button", title: Kit.t("builder.dock.gripTip"), "aria-label": Kit.t("builder.dock.gripAria"),
+        onkeydown: (e) => { const k = EDGE_KEYS[e.key]; if (!k) return; e.preventDefault(); e.stopPropagation(); setEdge(k); } }, el("span.gi")));
+    bx.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || !st || st.mode !== "arrange" || st.bar) return;
+      const d = dockInfo(); if (!d) return;
+      e.preventDefault(); e.stopPropagation();
+      const r = d.doc.getElementById("dock").getBoundingClientRect(), p = framePt(e, d);
+      st.bar = { id: e.pointerId, x: e.clientX, y: e.clientY, from: st.look.dockAt, at: st.look.dockAt, moved: false, tx: 0, ty: 0, p,
+        off: { x: p.x - (r.left + r.width / 2), y: p.y - (r.top + r.height / 2) } };
+      try { bx.setPointerCapture(e.pointerId); } catch {}
+    });
+    bx.addEventListener("pointermove", (e) => {
+      const b = st && st.bar; if (!b || e.pointerId !== b.id) return;
+      if (!b.moved) { if (Math.hypot(e.clientX - b.x, e.clientY - b.y) <= 6) return; b.moved = true; $(".bld-screen").classList.add("bar-moving"); }
+      const d = dockInfo(); if (!d) return;
+      b.p = framePt(e, d);
+      const ne = nearEdge(b.p, b.at, d);
+      if (ne !== b.at) {   // (the live bar to that edge — not saved yet; turned the other way: held by its middle)
+        if ((ne === "left" || ne === "right") !== (b.at === "left" || b.at === "right")) b.off = { x: 0, y: 0 };
+        b.at = ne; postLook({ ...st.look, dockAt: ne });
+      }
+      barPlace(); dockProxy();
+    });
+    bx.addEventListener("pointerup", (e) => { if (st && st.bar && e.pointerId === st.bar.id) barEnd(false); });
+    bx.addEventListener("pointercancel", (e) => { if (st && st.bar && e.pointerId === st.bar.id) barEnd(true); });
+    return bx;
+  }
+  const framePt = (e, d) => ({ x: (e.clientX - d.fr.left) / d.k, y: (e.clientY - d.fr.top) / d.k });
+  // the edge nearest the pointer (a little past halfway before it switches: no flicker on the diagonal)
+  function nearEdge(p, cur, d) {
+    const W = d.frame.offsetWidth || 1, H = d.frame.offsetHeight || 1;
+    const by = { left: p.x / W, right: 1 - p.x / W, top: p.y / H, bottom: 1 - p.y / H };
+    const best = EDGES.reduce((a, k) => (by[k] < by[a] ? k : a), cur);
+    return by[best] < by[cur] - 0.03 ? best : cur;
+  }
+  // the real bar held under the pointer (style.translate — app.js dockSafe still measures where it sits), on screen
+  function barPlace() {
+    const b = st && st.bar, d = b && b.moved && dockInfo(); if (!d) return;
+    const dk = d.doc.getElementById("dock"); if (!dk) return;
+    const r = dk.getBoundingClientRect(), W = d.frame.offsetWidth, H = d.frame.offsetHeight;
+    const l = r.left - b.tx, t = r.top - b.ty;   // (where it sits)
+    b.tx = Math.round(Math.max(-l, Math.min(W - l - r.width, b.p.x - b.off.x - (l + r.width / 2))));
+    b.ty = Math.round(Math.max(-t, Math.min(H - t - r.height, b.p.y - b.off.y - (t + r.height / 2))));
+    const v = `${b.tx}px ${b.ty}px`; if (dk.style.translate !== v) dk.style.translate = v;   // i18n-ok (CSS)
+  }
+  // let go: it settles on its edge (one change; Undo takes it back) — Esc / cancelled: back where it was
+  function barEnd(cancel) {
+    const b = st && st.bar; if (!b) return;
+    st.bar = null;
+    $(".bld-screen").classList.remove("bar-moving");
+    if (!b.moved) return;
+    const d = dockInfo(), dk = d && d.doc.getElementById("dock");
+    if (cancel || b.at === b.from) postLook(st.look); else setLook({ dockAt: b.at });
+    if (dk) {
+      dk.style.transition = "translate .32s cubic-bezier(.2, .8, .3, 1)"; dk.style.translate = "0px 0px";   // i18n-ok (CSS)
+      setTimeout(() => { dk.style.transition = ""; dk.style.translate = ""; if (st) dockProxy(); }, 340);
+    }
+    if (cancel && b.at !== b.from) toast(Kit.t("builder.dock.cancelled"));
+    dockProxy();
+  }
+  const postLook = (look) => { const f = $(".bld-frame"); if (f && f.contentWindow) f.contentWindow.postMessage({ t: "look", look: { ...look } }, location.origin); };
 
   // ---------- the handles: one box per card, at the panel's cells ----------
   function place() {
     const over = $(".bld-over"); if (!over) return;
     const r = st.rect, g = st.g, k = st.k || 1;
+    // (v3.0.4) "Arrange the parts" of a Network map: the screen lets the drag through to the panel's card (unifi.js)
+    if (st.netArr && (st.sel !== st.netArr || st.mode !== "arrange")) netArrange(null);
+    over.classList.toggle("bld-pass", !!st.netArr);
     dockProxy();
     over.hidden = !r || !r.home;
     if (!r || !r.home) return;
@@ -952,8 +1117,18 @@
     if (st.inner && !ic) st.inner = null;
     if (screen) screen.classList.toggle("inner", !!ic);
     over.classList.toggle("bld-inner", !!ic);
-    if (ic && screen && frame) {   // editing inside a blank card: the panel zoomed so the card fills the screen
+    const here = !!ic && ic.t === "blank";   // (v3.0.4: a blank card's pieces are edited where the card is — no zoom)
+    over.classList.toggle("bld-inplace", here); if (screen) screen.classList.toggle("inplace", here);
+    if (here) {
+      const { cw, ch } = st.cell;
+      st.inner.box = { x0: r.x + (ic.x * r.w) / g.cols, y0: r.y + (ic.y * r.h) / g.rows, w0: (ic.w * r.w) / g.cols, h0: (ic.h * r.h) / g.rows };
+      Object.assign(over.style, { left: `${off.x + r.x * k + ic.x * cw}px`, top: `${off.y + r.y * k + ic.y * ch}px`, width: `${ic.w * cw}px`, height: `${ic.h * ch}px` });
+      if (!st.pdrag) drawInner();
+      return;
+    }
+    if (ic && screen && frame) {   // editing inside a Devices card: the panel zoomed so the card fills the screen
       const cw = r.w / g.cols, ch = r.h / g.rows, x0 = r.x + ic.x * cw, y0 = r.y + ic.y * ch, w0 = ic.w * cw, h0 = ic.h * ch;
+      st.inner.box = { x0, y0, w0, h0 };   // (v3.0.4: a Devices card's items are measured against it — dvMeasure)
       const SW = screen.clientWidth, SH = screen.clientHeight, pad = 30;
       // (a tiny card too fills the screen — no cap on the zoom; the panel is moved so it covers the screen where it can,
       // not centred on the card with the empty space beside the panel showing as a dark strip)
@@ -985,16 +1160,30 @@
     const label = c.t === "blank" ? (np ? Kit.t("builder.canvas.blankPieces", { type: t[1], n: np }) : Kit.t("builder.canvas.blankEmpty", { type: t[1] })) : c.o.title || (c.o.id ? devName(c.o.id) : "") || t[1];
     const box = el("div.bld-item", { "data-id": c.i, style: boxStyle(c) },
       el("div.bld-card" + (st.sel === c.i ? ".sel" : "") + (c.show ? ".cond" : ""), {},
-        el("span.bld-name", {}, iconEl(/^(art|up):/.test(c.o.icon || "") ? t[2] : c.o.icon || t[2], 14), label)),
-      el("i.bld-rz", { title: Kit.t("builder.canvas.resize") }));
-    // (the grip's rounded-off corner too: a press within its square of the corner resizes — never moves the card; a tiny
-    // card's square is a third of it, so most of the card still moves it)
-    box.addEventListener("pointerdown", (e) => { const r = box.getBoundingClientRect(), z = Math.min(18, r.width / 3, r.height / 3), corner = r.right - e.clientX <= z && r.bottom - e.clientY <= z;
-      startDrag(e, c.i, e.target.classList.contains("bld-rz") || corner ? "resize" : "move"); });
+        el("span.bld-name", {}, iconEl(/^(art|up):/.test(c.o.icon || "") ? t[2] : c.o.icon || t[2], 14), label)));
+    // (v3.0.4: no marks — a press on any edge or corner resizes from there, the cursor says which; anywhere else moves it)
+    const zoneAt = (e) => { const r = box.getBoundingClientRect(); return DE().zone(e.clientX - r.left, e.clientY - r.top, r.width, r.height); };
+    box.addEventListener("pointermove", (e) => { if (!st.drag) { const z = zoneAt(e); box.firstElementChild.style.cursor = z === "move" ? "" : DE().CURSOR[z]; } });
+    box.addEventListener("pointerdown", (e) => startDrag(e, c.i, zoneAt(e)));
     return box;
   }
   const trashHit = (e) => { const t = $(".bld-trash"), r = t && t.getBoundingClientRect(); return !!r && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
-  // pick a card up (or its corner): it follows the pointer; the panel shows where it would land; let go = it lands there
+  // a card resized from its left or top edge (or a corner with one): that edge follows the pointer (the grid's steps with
+  // Snap to grid), the opposite one stays; the right / bottom edges alone go through settle (its guides)
+  function edgeRect(z, fx, fy, fw, fh, free) {
+    const g = st.g, grid = st.snap && !free, q = (v) => (grid ? Math.round(v / SNAP) * SNAP : Math.round(v)), min = grid ? SNAP : 1;
+    let L = Math.round(fx), T = Math.round(fy), R = Math.round(fx + fw), B = Math.round(fy + fh);
+    if (z.includes("w")) L = cl(q(fx), 0, R - Math.min(min, R));
+    if (z.includes("e")) R = cl(q(fx + fw), L + Math.min(min, g.cols - L), g.cols);
+    if (z.includes("n")) T = cl(q(fy), 0, B - Math.min(min, B));
+    if (z.includes("s")) B = cl(q(fy + fh), T + Math.min(min, g.rows - T), g.rows);
+    guides([]);
+    return { x: L, y: T, w: R - L, h: B - T };
+  }
+  // the card's X / Y / W / H boxes follow a drag (cells of the panel's grid)
+  const cardSync = (r) => document.querySelectorAll(".bld-side .bld-cxywh input[data-k]").forEach((x) => { if (r[x.dataset.k] != null) x.value = String(r[x.dataset.k]); });
+  // pick a card up (mode "move"), or resize it from an edge or a corner ("n", "se"…): it follows the pointer; the panel
+  // shows where it would land; let go = it lands there
   function startDrag(e, id, mode) {
     if (e.button !== 0 || st.mode !== "arrange" || !st.cell) return;
     const c = st.g.cards.find((x) => x.i === id); if (!c) return;
@@ -1012,10 +1201,14 @@
       const dx = ev.clientX - s0.px, dy = ev.clientY - s0.py;
       if (!d.moved && Math.hypot(dx, dy) < 4) return;
       if (!d.moved) { d.moved = true; document.body.classList.add("bld-dragging"); if (mode === "move" && trash) trash.classList.add("armed"); }
-      const { cw, ch } = st.cell;
-      const fx = mode === "move" ? s0.x + dx / cw : s0.x, fy = mode === "move" ? s0.y + dy / ch : s0.y;
-      const fw = mode === "resize" ? Math.max(1, s0.w + dx / cw) : s0.w, fh = mode === "resize" ? Math.max(1, s0.h + dy / ch) : s0.h;
-      d.rect = settle(id, mode, fx, fy, fw, fh, ev.altKey);
+      const { cw, ch } = st.cell, z = mode === "move" ? "" : mode;
+      let fx = z ? s0.x : s0.x + dx / cw, fy = z ? s0.y : s0.y + dy / ch, fw = s0.w, fh = s0.h;
+      if (z.includes("e")) fw = Math.max(1, s0.w + dx / cw);
+      if (z.includes("s")) fh = Math.max(1, s0.h + dy / ch);
+      if (z.includes("w")) { fx = Math.min(s0.x + dx / cw, s0.x + s0.w - 1); fw = s0.w + s0.x - fx; }
+      if (z.includes("n")) { fy = Math.min(s0.y + dy / ch, s0.y + s0.h - 1); fh = s0.h + s0.y - fy; }
+      d.rect = !z ? settle(id, "move", fx, fy, fw, fh, ev.altKey) : /^(e|s|se)$/.test(z) ? settle(id, "resize", fx, fy, fw, fh, ev.altKey) : edgeRect(z, fx, fy, fw, fh, ev.altKey);
+      cardSync(d.rect);
       const onBin = mode === "move" && trashHit(ev);
       node.style.cssText = boxStyle({ x: fx, y: fy, w: fw, h: fh, z: 98 });   // (the handle follows the pointer exactly)
       node.classList.toggle("bad", !onBin && !fits(d.rect, id));
@@ -1028,7 +1221,7 @@
       if (trash) trash.classList.remove("armed", "hot");
       const d = st.drag; st.drag = null;
       if (!d || !d.moved) {   // (a blank card clicked twice: open it)
-        const now = Date.now(), two = c.t === "blank" && st.lastClick && st.lastClick.id === id && now - st.lastClick.at < 500;
+        const now = Date.now(), two = (c.t === "blank" || c.t === "devices") && st.lastClick && st.lastClick.id === id && now - st.lastClick.at < 500;
         st.lastClick = two ? null : { id, at: now };
         if (two) return enterInner(c);
         drawHandles(); return;
@@ -1038,7 +1231,7 @@
         if (ev.type === "pointerup") toast(Kit.t("builder.drag.overlapMove"), true);
         drawHandles(); post(); return;
       }
-      Object.assign(c, d.rect); changed(false); drawHandles();
+      Object.assign(c, d.rect); changed(false); drawHandles(); cardSync(c);
     };
     node.addEventListener("pointermove", move); node.addEventListener("pointerup", up); node.addEventListener("pointercancel", up);
   }
@@ -1109,7 +1302,8 @@
   // Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z): undo / redo — not while typing in a box (that box's own undo then);
   // Delete / Backspace: remove the selected card — only while the screen has the focus, not a box or a button beside it
   function onKey(e) {
-    if (!st) return;
+    if (st && st.bar && st.bar.moved && e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); return barEnd(true); }   // (moving the room bar)
+    if (!st || document.querySelector(".dve-shade")) return;   // (v3.0.4: a pop-up open — devedit.js — has its own keys)
     const t = e.target, typing = t.closest && t.closest("input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]), textarea, [contenteditable]");   // i18n-ok
     const k = (e.key || "").toLowerCase();
     if ((e.ctrlKey || e.metaKey) && !e.altKey && (k === "z" || k === "y") && !typing) { e.preventDefault(); undoRedo(k === "z" && !e.shiftKey); return; }
@@ -1208,13 +1402,15 @@
     if (c.t === "blank" && !(c.o.parts || []).length) enterInner(c);   // (a new blank card: straight in, to fill it)
   }
 
-  // ---------- a blank card: "Edit inside" (the owner's most wanted) ----------
-  // Its pieces sit on the card's own small grid (24 × 24 cells, whatever the card's size: they move and grow with it).
-  // While editing inside, the panel is zoomed so the card fills the screen (the rest dimmed): the pieces are dragged
-  // into place and resized from their corner, always landing on the grid; the settings on the right are the selected
-  // piece's. "Done", Esc or a click outside goes back to arranging the cards. Every change is one undo step.
+  // ---------- a blank card: "Edit pieces" (the owner's most wanted) ----------
+  // (v3.0.4) Its pieces sit anywhere on the card, in thousandths of it (devedit.js FREE — as a Devices card's Freeform
+  // items; they move and grow with the card). Editing them happens right where the card is — nothing zooms: around it
+  // is dimmed, a quiet "Editing pieces — Esc to finish" shows on top. No borders and no grid: a piece is dragged
+  // anywhere and resized from any edge or corner (the cursor says which), dashed only while selected; faint guides
+  // show when edges or middles line up (nothing snaps). "Done", Esc or a click outside goes back to arranging the
+  // cards. Every change is one undo step. A card from before (cells of a 24 × 24 grid) is moved over as it's opened.
   const IN = 24;
-  // [kind, name, icon, what it is, default width, height (cells of 24)]
+  // [kind, name, icon, what it is, default width, height (cells of 24 — a new piece's size, in thousandths by from24)]
   const PIECE_T = [["icon", Kit.t("builder.piece.icon.name"), "image", Kit.t("builder.piece.icon.desc"), 8, 10],
     ["light", Kit.t("builder.piece.light.name"), "bulb", Kit.t("builder.piece.light.desc"), 8, 10],
     ["switch", Kit.t("builder.piece.switch.name"), "toggle", Kit.t("builder.piece.switch.desc"), 12, 4],
@@ -1224,88 +1420,115 @@
     ["garage", Kit.t("builder.piece.garage.name"), "garage", Kit.t("builder.piece.garage.desc"), 10, 12],
     ["text", Kit.t("builder.piece.text.name"), "edit", Kit.t("builder.piece.text.desc"), 16, 4]];
   const PT = Object.fromEntries(PIECE_T.map((x) => [x[0], x]));
-  const innerCard = () => (st && st.inner ? st.g.cards.find((c) => c.i === st.inner.id && c.t === "blank") || null : null);
+  const innerCard = () => (st && st.inner ? st.g.cards.find((c) => c.i === st.inner.id && (c.t === "blank" || c.t === "devices")) || null : null);   // (v3.0.4: a Devices card opens too)
   const pieceName = (p) => {
     const t = PT[p.t] || ["", Kit.t("builder.piece.fallback")], dev = p.id ? devName(p.id) : p.t === "garage" ? ((p.doors || [])[0] || {}).id && devName(p.doors[0].id) : "";
     return p.t === "text" ? Kit.t("builder.piece.textName", { text: String(p.text || "").replace(/\s+/g, " ").slice(0, 24) || Kit.t("builder.piece.emptyText") }) : p.label || dev ? Kit.t("builder.piece.named", { type: t[1], name: p.label || dev }) : t[1];
   };
-  // the zoom goes smoothly (only while going in or out — not while the window is resized)
+  // the zoom goes smoothly (only while going in or out — not while the window is resized; a blank card doesn't zoom)
   const zooming = () => { const sc = $(".bld-screen"); if (!sc) return; sc.classList.add("zooming"); clearTimeout(st.zoomT); st.zoomT = setTimeout(() => sc.classList.remove("zooming"), 400); };
+  // a blank card from before: its pieces on the 24 × 24 grid (no "fr") → thousandths, edges where they were
+  function bkOld(c) { return !!c && c.t === "blank" && !!c.o && c.o.fr !== 1; }
+  function bkFree(c) { return bkOld(c) ? { ...c, o: { ...c.o, fr: 1, parts: (Array.isArray(c.o.parts) ? c.o.parts : []).map((q) => DE().from24(q)) } } : c; }
+  const bkParts = (c) => { if (bkOld(c)) { c.o = bkFree(c).o; return true; } if (!Array.isArray(c.o.parts)) c.o.parts = []; return false; };
   function enterInner(c, sel = null) {
     if (st.mode !== "arrange") setMode("arrange");
-    innerCss(); zooming();
+    innerCss(); if (c.t !== "blank") zooming();
+    if (c.t === "devices" && dvLook(c.o) === "free" && DE().autoPlace(c.o.items || [])) changed(false);   // (v3.0.4: placed before it's dragged)
+    if (c.t === "blank" && bkParts(c)) changed(false);   // (a card added from a saved one of before)
     st.sel = c.i; st.inner = { id: c.i, sel };
     fit(); side();
   }
   function leaveInner() {
     if (!st.inner) return;
-    zooming(); st.inner = null; fit(); drawHandles(); side();
+    if (!(innerCard() && innerCard().t === "blank")) zooming();
+    st.inner = null; fit(); drawHandles(); side();
   }
-  // a piece's box over the card, at its cells
+  // a new piece's drop spot over the card, in cells of 24 (the button's drag)
   const inStyle = (p, n) => `left:${(100 * p.x) / IN}%;top:${(100 * p.y) / IN}%;width:${(100 * p.w) / IN}%;height:${(100 * p.h) / IN}%;z-index:${n + 2}`;
+  // (the alignment guides: on unless switched off — remembered in this browser)
+  const guidesOn = () => { try { return localStorage.getItem("skypane.bld.guides") !== "0"; } catch { return true; } };
+  const setGuides = (on) => { try { localStorage.setItem("skypane.bld.guides", on ? "1" : "0"); } catch { /* (no storage: on again next time) */ } };
   function drawInner() {
     const over = $(".bld-over"), c = innerCard(); if (!over || !c) return;
-    const parts = Array.isArray(c.o.parts) ? c.o.parts : (c.o.parts = []), sel = st.inner.sel;
-    const grid = el("div.bk-ed-grid", { title: Kit.t("builder.inner.gridTip") });
-    grid.addEventListener("pointerdown", (e) => { if (e.button === 0 && st.inner.sel != null) { st.inner.sel = null; drawInner(); side(); } });
-    over.replaceChildren(grid, ...parts.map((p, n) => {
-      // (the selected one, and its corner, above the others — a piece later in the list can't cover it)
-      const b = el("div.bk-ed-it" + (sel === n ? ".sel" : "") + (pieceProblem(p) ? ".todo" : ""), { "data-n": String(n), style: inStyle(p, sel === n ? 40 : n), title: pieceProblem(p) ? Kit.t("builder.piece.todo", { piece: pieceName(p), problem: pieceProblem(p) }) : pieceName(p) },
-        el("span.bk-ed-name", {}, iconEl((PT[p.t] || [])[2] || "grid", 12), pieceName(p)), el("i.bk-ed-rz", { title: Kit.t("builder.canvas.resize") }));
-      b.addEventListener("pointerdown", (e) => startPieceDrag(e, n, e.target.classList.contains("bk-ed-rz") ? "resize" : "move"));
+    if (c.t === "devices") return drawDvInner(c);
+    bkParts(c);
+    const parts = c.o.parts, sel = st.inner.sel;
+    const bg = el("div.bk-ed-bg");   // (a click on the card beside the pieces: none selected)
+    bg.addEventListener("pointerdown", (e) => { if (e.button === 0 && st.inner.sel != null) { st.inner.sel = null; drawInner(); side(); } });
+    over.replaceChildren(bg, ...parts.map((p, n) => {
+      // (the selected one above the others — a piece later in the list can't cover it; no marks: the cursor says
+      // where a press moves it and where it resizes it)
+      const b = el("div.bk-ed-it" + (sel === n ? ".sel" : "") + (pieceProblem(p) ? ".todo" : ""), { "data-n": String(n), style: `${freeBox(p)};z-index:${sel === n ? 42 : n + 2}`, title: pieceProblem(p) ? Kit.t("builder.piece.todo", { piece: pieceName(p), problem: pieceProblem(p) }) : pieceName(p) },
+        el("span.bk-ed-name", {}, iconEl((PT[p.t] || [])[2] || "grid", 12), pieceName(p)));
+      const zoneAt = (e) => { const r = b.getBoundingClientRect(); return DE().zone(e.clientX - r.left, e.clientY - r.top, r.width, r.height); };
+      b.addEventListener("pointermove", (e) => { if (!st.pdrag) b.style.cursor = DE().CURSOR[zoneAt(e)]; });
+      b.addEventListener("pointerdown", (e) => startPieceDrag(e, n, zoneAt(e)));
       return b;
-    }), el("div.bk-ed-tip", {}, parts.length ? Kit.t("builder.inner.tip")
-      : Kit.t("builder.inner.empty")));
+    }), el("div.bk-guides"), ...(parts.length ? [] : [el("div.bk-ed-tip", {}, Kit.t("builder.inner.empty"))]));
   }
-  // move a piece (or its corner): it follows the pointer in whole cells of the card's grid; the panel shows it as it goes
-  function startPieceDrag(e, n, mode) {
+  // the faint lines where the piece being moved lines up with another, or with the card's middle (nothing snaps)
+  function bkGuides(c, n, r) {
+    const box = $(".bld-over .bk-guides"); if (!box) return;
+    const O = $(".bld-over").getBoundingClientRect(), others = guidesOn() && r ? c.o.parts.filter((q, k) => k !== n) : null;
+    const lines = others ? DE().aligned(r, others, (3 / Math.max(1, O.width)) * DE().FREE, (3 / Math.max(1, O.height)) * DE().FREE) : [];
+    box.replaceChildren(...lines.map(([d, at, a, b]) => el("i." + d, { style: d === "v" ? `left:${at / 10}%;top:${a / 10}%;height:${(b - a) / 10}%` : `top:${at / 10}%;left:${a / 10}%;width:${(b - a) / 10}%` })));
+  }
+  // the X / Y / W / H boxes follow a drag (in % of the card)
+  const bkSync = (r) => document.querySelectorAll(".bld-side .bk-xywh input[data-k]").forEach((x) => { if (r[x.dataset.k] != null) x.value = String(r[x.dataset.k] / 10); });
+  // move a piece (z "move"), or resize it from an edge or a corner ("n", "se"…): it follows the pointer anywhere on the
+  // card (thousandths, devedit.js dragRect: it stays on the card); the panel shows it as it goes
+  function startPieceDrag(e, n, z) {
     if (e.button !== 0) return;
     const c = innerCard(), p = c && (c.o.parts || [])[n]; if (!p) return;
     e.preventDefault(); e.stopPropagation();
     if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
-    const node = e.currentTarget, over = $(".bld-over"), R = over.getBoundingClientRect(), cw = R.width / IN, ch = R.height / IN;
+    const node = e.currentTarget, over = $(".bld-over"), R = over.getBoundingClientRect();
     try { node.setPointerCapture(e.pointerId); } catch {}
     if (st.inner.sel !== n) { st.inner.sel = n; over.querySelectorAll(".bk-ed-it").forEach((b) => { b.classList.toggle("sel", +b.dataset.n === n); b.style.zIndex = String(+b.dataset.n === n ? 42 : +b.dataset.n + 2); }); side(); }
-    const s0 = { px: e.clientX, py: e.clientY, x: p.x, y: p.y, w: p.w, h: p.h };
+    const s0 = { px: e.clientX, py: e.clientY }, r0 = { x: p.x, y: p.y, w: p.w, h: p.h };
     let moved = false;
     const move = (ev) => {
-      const dx = (ev.clientX - s0.px) / cw, dy = (ev.clientY - s0.py) / ch;
       if (!moved && Math.hypot(ev.clientX - s0.px, ev.clientY - s0.py) < 4) return;
-      moved = true;
-      const r = mode === "move" ? { x: cl(Math.round(s0.x + dx), 0, IN - s0.w), y: cl(Math.round(s0.y + dy), 0, IN - s0.h), w: s0.w, h: s0.h }
-        : { x: s0.x, y: s0.y, w: cl(Math.round(s0.w + dx), 1, IN - s0.x), h: cl(Math.round(s0.h + dy), 1, IN - s0.y) };
+      if (!moved) { moved = true; document.body.classList.add("bld-dragging"); }
+      const r = DE().dragRect(r0, z, ((ev.clientX - s0.px) / R.width) * DE().FREE, ((ev.clientY - s0.py) / R.height) * DE().FREE);
       st.pdrag = { n, r };
-      node.style.cssText = inStyle(r, 40);
+      node.style.cssText = `${freeBox(r)};z-index:42`; bkSync(r); bkGuides(c, n, r);
       post();
     };
     const up = (ev) => {
       node.removeEventListener("pointermove", move); node.removeEventListener("pointerup", up); node.removeEventListener("pointercancel", up);
+      st.dragEsc = null; try { node.releasePointerCapture(e.pointerId); } catch {}
+      document.body.classList.remove("bld-dragging"); bkGuides(c, n, null);
       const d = st.pdrag; st.pdrag = null;
       if (!moved || !d) return drawInner();
       if (ev.type === "pointerup") { Object.assign(p, d.r); changed(false, null); }
-      drawInner(); post();
+      drawInner(); bkSync(p); post();
     };
     node.addEventListener("pointermove", move); node.addEventListener("pointerup", up); node.addEventListener("pointercancel", up);
+    st.dragEsc = () => up({ type: "pointercancel" });   // (Esc mid-drag: back where it was, nothing saved — innerKey)
   }
-  // where a new piece of w × h cells fits on the card (top-left first); none free: smaller; still none: null
+  // where a new piece of w × h cells (of 24) fits on the card (top-left first); none free: smaller; still none: null
+  // → its box in thousandths
   function freeInner(parts, W, H) {
-    const hit = (x, y, w, h) => parts.some((q) => x < q.x + q.w && x + w > q.x && y < q.y + q.h && y + h > q.y);
+    const hit = (r) => parts.some((q) => r.x < q.x + q.w && r.x + r.w > q.x && r.y < q.y + q.h && r.y + r.h > q.y);
     for (let w = W, h = H; w >= 2 && h >= 2; w = Math.max(2, w - 2), h = Math.max(2, h - 2)) {
-      for (let y = 0; y + h <= IN; y++) for (let x = 0; x + w <= IN; x++) if (!hit(x, y, w, h)) return { x, y, w, h };
+      for (let y = 0; y + h <= IN; y++) for (let x = 0; x + w <= IN; x++) { const r = DE().from24({ x, y, w, h }); if (!hit(r)) return r; }
       if (w === 2 && h === 2) break;
     }
     return null;
   }
-  // a new piece (at = where it was dropped, in cells); it's selected, and its first box (its device) has the focus
+  // a new piece (at = where it was dropped, in cells of 24); it's selected, and its first box (its device) has the focus
   function addPiece(t, at) {
     const c = innerCard(); if (!c) return;
-    const parts = Array.isArray(c.o.parts) ? c.o.parts : (c.o.parts = []);
+    bkParts(c);
+    const parts = c.o.parts;
     if (parts.length >= 16) return toast(Kit.t("builder.piece.max"), true);
     const [, , , , W, H] = PT[t];
-    let r = at ? { x: cl(at.x - Math.floor(W / 2), 0, IN - W), y: cl(at.y - Math.floor(H / 2), 0, IN - H), w: W, h: H } : freeInner(parts, W, H);
-    if (!r) { r = { x: 0, y: 0, w: W, h: H }; toast(Kit.t("builder.piece.noRoom"), true); }
+    let r = at ? DE().from24({ x: cl(at.x - Math.floor(W / 2), 0, IN - W), y: cl(at.y - Math.floor(H / 2), 0, IN - H), w: W, h: H }) : freeInner(parts, W, H);
+    if (!r) { r = DE().from24({ x: 0, y: 0, w: W, h: H }); toast(Kit.t("builder.piece.noRoom"), true); }
     // (a text piece that only fits smaller than it should: medium-sized text, so its words still show)
-    const fresh = { garage: { doors: [{}] }, text: r.h < H ? { text: Kit.t("builder.piece.yourText"), bold: true } : { text: Kit.t("builder.piece.yourText"), size: "l", bold: true } }[t] || {};
+    const fresh = { garage: { doors: [{}] }, text: r.h < DE().from24({ x: 0, y: 0, w: 1, h: H }).h ? { text: Kit.t("builder.piece.yourText"), bold: true } : { text: Kit.t("builder.piece.yourText"), size: "l", bold: true } }[t] || {};
     parts.push({ t, ...r, ...structuredClone(fresh) });
     st.inner.sel = parts.length - 1;
     changed(true); drawInner();
@@ -1354,19 +1577,19 @@
     });
     return b;
   }
-  // Esc / Done: back to the cards; Delete: remove the selected piece; the arrow keys: move it a cell (Shift: four)
+  // Esc / Done: back to the cards; Delete: remove the selected piece; the arrow keys: move it 1 % of the card (Shift: 10 %)
   function innerKey(e, t, typing) {
     const onStage = onScreen(t);
+    if (e.key === "Escape" && st.dragEsc) { e.preventDefault(); return st.dragEsc(); }   // (a piece mid-drag: Esc cancels the drag first)
+    if (innerCard() && innerCard().t === "devices") return dvKey(e, t, typing, innerCard());
     if (e.key === "Escape" && !typing && !(t.closest && t.closest("select"))) { e.preventDefault(); return leaveInner(); }
     const c = innerCard(), n = st.inner.sel, p = c && n != null ? (c.o.parts || [])[n] : null;
     if (!p || !onStage || (t.closest && t.closest("input, textarea, select, button, [contenteditable]"))) return;   // i18n-ok
     if (["Delete", "Backspace"].includes(e.key)) { e.preventDefault(); return removePiece(c, n); }   // i18n-ok
-    const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
-    if (!d) return;
+    if (!/^Arrow/.test(e.key)) return;
     e.preventDefault();
-    const k = e.shiftKey ? 4 : 1;
-    p.x = cl(p.x + d[0] * k, 0, IN - p.w); p.y = cl(p.y + d[1] * k, 0, IN - p.h);
-    changed(false, `nudge:${c.i}:${n}`); drawInner();
+    Object.assign(p, DE().nudge(p, e.key, e.shiftKey));
+    changed(false, `nudge:${c.i}:${n}`); drawInner(); bkSync(p);
   }
   function removePiece(c, n) {
     c.o.parts.splice(n, 1);
@@ -1374,7 +1597,9 @@
   }
   // the right side while editing inside: the pieces to add, the ones on the card, the selected one's settings
   function innerSide(c) {
-    const parts = Array.isArray(c.o.parts) ? c.o.parts : (c.o.parts = []), n = st.inner.sel, p = n != null ? parts[n] : null;
+    if (c.t === "devices") return dvSide(c);
+    bkParts(c);
+    const parts = c.o.parts, n = st.inner.sel, p = n != null ? parts[n] : null;
     const list = parts.length ? el("div.bk-list", {}, parts.map((q, k) => el("button.ghost.small.bk-li" + (k === n ? ".cur" : ""), { type: "button", title: pieceProblem(q) ? Kit.t("builder.piece.stillToDo", { problem: pieceProblem(q) }) : Kit.t("builder.piece.selectIt"),
       onclick: () => { st.inner.sel = k; drawInner(); side(); } }, iconEl((PT[q.t] || [])[2] || "grid", 14), el("span", {}, pieceName(q)), pieceProblem(q) ? el("b.bk-todo", {}, "!") : null))) : null;
     return el("div.card.bld-insp.bk-insp", {},
@@ -1384,7 +1609,23 @@
       el("b.bk-h", {}, Kit.t("builder.inner.addPiece")),
       el("div.bk-addrow", {}, PIECE_T.map(([t]) => pieceBtn(t, (at) => addPiece(t, at), parts.length >= 16))),
       parts.length ? el("b.bk-h", {}, Kit.t("builder.inner.onCard", { n: parts.length })) : null, list,
-      p ? pieceEditor(c, p, n) : el("small.muted", {}, parts.length ? Kit.t("builder.inner.clickPiece") : ""));
+      p ? piecePlace(c, p, n) : null, p ? pieceEditor(c, p, n) : el("small.muted", {}, parts.length ? Kit.t("builder.inner.clickPiece") : ""),
+      el("label.bk-gsw", { title: Kit.t("builder.inner.guidesTip") }, el("span", {}, Kit.t("builder.inner.guides")),
+        el("span.switch", {}, el("input", { type: "checkbox", checked: guidesOn(), onchange: (e) => { setGuides(e.target.checked); toast(Kit.t(e.target.checked ? "builder.inner.guidesOn" : "builder.inner.guidesOff")); } }), el("span"))));
+  }
+  // the selected piece's place (in % of the card — as a Devices card's Freeform item; they follow a drag, and set it
+  // as they're typed) and its layer: later pieces lie in front
+  function piecePlace(c, p, n) {
+    const parts = c.o.parts;
+    const num = (k) => el("label.dve-num", {}, el("span", {}, Kit.t(`builder.dve.${k}`)), el("input", { type: "number", min: "0", max: "100", step: "any", value: String(p[k] / 10), "data-k": k, "aria-label": Kit.t(`builder.dve.${k}Long`),
+      oninput: (e) => { const v = parseFloat(e.target.value); if (!Number.isFinite(v)) return; Object.assign(p, DE().fixRect({ ...p, [k]: v * 10 })); changed(false, `bkpos:${c.i}:${n}:${k}`); drawInner(); },
+      onchange: () => side() }));
+    const layer = (to) => { parts.splice(to, 0, parts.splice(n, 1)[0]); st.inner.sel = to; changed(true); drawInner(); toast(Kit.t(to > n ? "builder.inner.forwardDone" : "builder.inner.backDone")); };
+    return el("div.bk-place", {}, el("b.bk-h", {}, Kit.t("builder.dve.place")), el("div.dve-xywh.bk-xywh", {}, num("x"), num("y"), num("w"), num("h")),
+      el("small.muted", {}, Kit.t("builder.inner.placeNote")),
+      el("div.bk-order", {}, el("button.ghost.small.bk-fwd", { type: "button", disabled: n === parts.length - 1, onclick: () => layer(n + 1) }, Kit.t("builder.inner.forward")),
+        el("button.ghost.small.bk-bwd", { type: "button", disabled: n === 0, onclick: () => layer(n - 1) }, Kit.t("builder.inner.back"))),
+      el("small.muted", {}, Kit.t("builder.inner.layer", { n: n + 1, of: parts.length })));
   }
   // one piece's settings
   function pieceEditor(c, p, n) {
@@ -1437,12 +1678,7 @@
     }
     if (p.t === "garage") {
       const doors = Array.isArray(p.doors) && p.doors.length ? p.doors : (p.doors = [{}]);
-      out.push(row(Kit.t("builder.garage.doors"), seg([["1", "1"], ["2", "2"], ["3", "3"]], String(doors.length), (v) => { while (doors.length < +v) doors.push({}); doors.length = +v; put(); })));
-      doors.forEach((dr, k) => out.push(el("div.bld-gitem", {}, el("b", {}, doors.length > 1 ? Kit.t(k === 0 ? "builder.garage.doorLeft" : k === doors.length - 1 ? "builder.garage.doorRight" : "builder.garage.doorMiddle", { n: k + 1 }) : Kit.t("builder.garage.theDoor")),
-        row(Kit.t("builder.garage.opener"), devSelect(dr.id ?? null, (v) => { if (v) dr.id = v; else delete dr.id; put(); }, Kit.t("builder.garage.pickOpener"), GARAGE_FIRST)),
-        tipRow(Kit.t("builder.garage.contact"), Kit.t("builder.garage.contactTip"), devSelect(dr.contact ?? null, (v) => { if (v) dr.contact = v; else delete dr.contact; put(); }, Kit.t("builder.garage.noContact"), CONTACT_FIRST)),
-        tipRow(Kit.t("builder.garage.takes"), Kit.t("builder.garage.takesTip"), el("input", { type: "number", min: "3", max: "60", step: "1", placeholder: "15", value: dr.travel ?? "",
-          onchange: (e) => { const v = Math.round(+e.target.value); if (v >= 3 && v <= 60) dr.travel = v; else delete dr.travel; put(); } }), el("span.muted", {}, Kit.t("builder.garage.sToOpen"))))));
+      out.push(...garageDoorRows(doors, put, false));
       out.push(nameRow(Kit.t("builder.f.nonePh")), el("small.muted", {}, Kit.t("builder.garage.tapNote")));
     }
     if (p.t === "text") {
@@ -1465,7 +1701,7 @@
       el("button.ghost.small", { type: "button", title: Kit.t("builder.piece.backTip"), disabled: n === 0, onclick: () => { parts.unshift(parts.splice(n, 1)[0]); st.inner.sel = 0; put(); } }, Kit.t("builder.f.toBack")),
       el("button.ghost.small", { type: "button", onclick: () => {
         if (parts.length >= 16) return toast(Kit.t("builder.piece.maxShort"), true);
-        const q = structuredClone(p), r = freeInner(parts, p.w, p.h) || { x: cl(p.x + 1, 0, IN - p.w), y: cl(p.y + 1, 0, IN - p.h), w: p.w, h: p.h };
+        const q = structuredClone(p), r = DE().dragRect(p, "move", 30, 30);   // (a little down and to the right)
         parts.push({ ...q, ...r }); st.inner.sel = parts.length - 1; put(); } }, Kit.t("builder.f.duplicate")),
       el("button.ghost.small.bad", { type: "button", onclick: () => removePiece(c, n) }, Kit.t("builder.piece.remove"))));
     return el("div.bk-pe", {}, ...out.filter(Boolean));
@@ -1479,18 +1715,11 @@
 .bld-screen.zooming .bld-frame { transition: transform .32s ease; }
 .bld-screen.zooming .bld-over { transition: left .32s ease, top .32s ease, width .32s ease, height .32s ease; }
 .bld-over.bld-inner { box-shadow: 0 0 0 4000px rgba(6, 4, 18, .62); outline: 2px dashed #fbbf24; outline-offset: 3px; border-radius: 4px; }
-.bk-ed-grid { position: absolute; inset: 0; background-size: calc(100% / 24) calc(100% / 24);
-  background-image: linear-gradient(to right, rgba(255, 255, 255, .09) 1px, transparent 1px), linear-gradient(to bottom, rgba(255, 255, 255, .09) 1px, transparent 1px); }
-.bk-ed-it { position: absolute; box-sizing: border-box; border: 1px dashed rgba(255, 255, 255, .5); border-radius: 6px; cursor: grab; touch-action: none; user-select: none; }
-.bk-ed-it:hover { border: 1px solid #fff; background: color-mix(in srgb, var(--accent) 12%, transparent); }
-.bk-ed-it.sel { border: 2px solid #fbbf24; background: rgba(251, 191, 36, .08); }
-.bk-ed-it.todo { border-color: #fb923c; }
+.bk-ed-bg { position: absolute; inset: 0; }
 .bk-ed-name { position: absolute; left: 4px; top: -10px; display: none; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 7px; font-size: 11px; line-height: 16px;
   background: var(--surface, #1a1238); border: 1px solid rgba(255, 255, 255, .3); color: var(--text); white-space: nowrap; max-width: calc(100% + 40px); overflow: hidden; text-overflow: ellipsis; z-index: 3; pointer-events: none; }
 .bk-ed-it:hover .bk-ed-name, .bk-ed-it.sel .bk-ed-name, .bk-ed-it.todo .bk-ed-name { display: inline-flex; }
 .bk-ed-it.sel .bk-ed-name { background: #fbbf24; color: #1a1238; border-color: #fbbf24; } .bk-ed-it.sel .bk-ed-name .ic { color: #1a1238; }
-.bk-ed-rz { position: absolute; right: 1px; bottom: 1px; width: 16px; height: 16px; background: #fbbf24; border-radius: 4px 0 6px 0; cursor: nwse-resize; opacity: 0; z-index: 3; }
-.bk-ed-it:hover .bk-ed-rz, .bk-ed-it.sel .bk-ed-rz { opacity: .95; }
 .bk-ed-tip { position: absolute; left: -200px; right: -200px; top: calc(100% + 8px); text-align: center; font-size: 12px; color: #fde68a; pointer-events: none; white-space: nowrap; }
 .bk-addrow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .bk-add { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 9px 2px; font-size: 12px; cursor: grab; touch-action: none; }
@@ -1520,11 +1749,13 @@
       ...(() => {
         const cat = st.cat || (st.ctx.room ? "room" : "devices"), q = (st.find || "").toLowerCase();
         const hit = (n, d) => !q || `${n} ${d}`.toLowerCase().includes(q);
-        const types = TYPES.filter(([k, n, , d]) => (k.startsWith("room") && k !== "room" ? st.ctx.room : true) && (q ? hit(n, d) : (CAT_OF[k] || []).includes(cat)));
+        const types = TYPES.filter(([k, n, , d]) => !OLD_T.has(k) && (k.startsWith("room") && k !== "room" ? st.ctx.room : true) && (q ? hit(n, d) : (CAT_OF[k] || []).includes(cat)));
         const mine = st.cards.filter((u) => (q ? hit(u.name, u.description || "") : cat === "yours"));
         const saved = (st.tpls || []).filter((s) => (!/^room./.test(s.card.t) || st.ctx.room) && (q ? hit(s.name, tdef(s.card.t)[1]) : cat === "yours"));
         return [
           types.length ? el("div.bld-pal", {}, types.map(([k, n, ic, d]) => btn(k, n, ic, d))) : null,
+          // (v3.0.4) Protect's storage (Recordings & NVR): the server can't read it yet — said here, never on a panel
+          cat === "network" && !q ? el("div.bld-soon", {}, iconEl("nas", 18), el("span", {}, el("b", {}, Kit.t("builder.net.nvrName")), el("small", {}, Kit.t("builder.net.nvrSoon")))) : null,
           saved.length ? el("h4.bld-palh", {}, Kit.t("builder.pal.saved")) : null,
           saved.length ? el("div.bld-pal", {}, saved.map((s) => btn("tpl:" + s.id, s.name, tdef(s.card.t)[2], tdef("tpl:" + s.id)[3]))) : null,
           saved.length && !q ? el("details.bld-saved", {}, el("summary", {}, Kit.t("builder.pal.manageSaved")),
@@ -1679,7 +1910,7 @@
     const curPic = cur && withMotion && curMotion && !/^(art|up):/.test(cur) && window.Motion ? (() => { const s = el("span"); s.innerHTML = Motion.wrap(icon(cur, 18), curMotion, true, 18); return s; })() : cur ? picEl(cur, 26) : null;
     const now = el("div.bld-icnow", {}, curPic || el("span.muted", {}, auto), el("span", {}, picName(cur) + (withMotion && curMotion && cur && !/^(art|up):/.test(cur) ? ` · ${curMotion}` : "")));
     return el("div.bld-iconwrap", {}, now,
-      el("div.bld-icbtns", {}, el("button.ghost.small.bld-icbtn", { type: "button", onclick: () => show(panel) }, Kit.t("builder.icon.icons")),
+      el("div.bld-icbtns", {}, opts.picsOnly ? null : el("button.ghost.small.bld-icbtn", { type: "button", onclick: () => show(panel) }, Kit.t("builder.icon.icons")),   // (picsOnly: the owner's pictures only)
         el("button.ghost.small", { type: "button", onclick: () => show(ppanel) }, ups.length ? Kit.t("builder.icon.picturesN", { n: ups.length }) : Kit.t("builder.icon.pictures"))),
       panel, ppanel);
   }
@@ -1757,6 +1988,25 @@
     d.addEventListener("toggle", () => { if (d.open) st.open.add(key); else st.open.delete(key); });
     return d;
   }
+  // (v3.0.4) a card's X / Y / W / H, in cells of the panel's grid (192 × 128 on any screen): they follow a drag, and move
+  // it as they're typed — not onto another card while "Allow overlap" is off
+  function cardPlace(c) {
+    const g = st.g;
+    // (a box typed in: kept on the screen — a size too big takes the room left, the card stays where it is; onto another
+    // card → "overlap", nothing moves)
+    const put = (k, v) => {
+      const r = { x: c.x, y: c.y, w: c.w, h: c.h, [k]: v };
+      if (k === "w" || k === "h") { r.w = cl(r.w, 1, g.cols - r.x); r.h = cl(r.h, 1, g.rows - r.y); }
+      r.w = cl(r.w, 1, g.cols); r.h = cl(r.h, 1, g.rows); r.x = cl(r.x, 0, g.cols - r.w); r.y = cl(r.y, 0, g.rows - r.h);
+      if (!fits(r, c.i)) return "overlap";
+      if (["x", "y", "w", "h"].some((q) => r[q] !== c[q])) { Object.assign(c, r); changed(false, `cpos:${c.i}:${k}`); drawHandles(); }
+      return "ok";
+    };
+    const num = (k) => el("label.dve-num", {}, el("span", {}, Kit.t(`builder.dve.${k}`)), el("input", { type: "number", min: k === "w" || k === "h" ? "1" : "0", max: String(k === "x" || k === "w" ? g.cols : g.rows), step: "1", value: String(c[k]), "data-k": k, "aria-label": Kit.t(`builder.cpos.${k}Long`),
+      oninput: (e) => { const v = Math.round(parseFloat(e.target.value)); if (Number.isFinite(v)) put(k, v); },
+      onchange: (e) => { const v = Math.round(parseFloat(e.target.value)); if (Number.isFinite(v) && put(k, v) === "overlap") toast(Kit.t("builder.drag.overlap"), true); e.target.value = String(c[k]); } }));
+    return el("div.bld-cpos", {}, el("div.dve-xywh.bld-cxywh", {}, num("x"), num("y"), num("w"), num("h")), el("small.muted", {}, Kit.t("builder.cpos.note", { cols: g.cols, rows: g.rows })));
+  }
   function inspector(c) {
     const t = tdef(c.t), o = c.o, s = c.s, u = userCard(c.t);
     const set = (k, v, redraw = true) => { if (v == null || v === "" || (Array.isArray(v) && !v.length && k !== "items")) delete o[k]; else o[k] = v; refreshItem(c); changed(redraw); };
@@ -1772,6 +2022,7 @@
     const sub = c.t === "blank" && (o.parts || []).length ? Kit.t("builder.insp.blankSub") : t[3];
     const parts = [el("div.bld-head", {}, picEl(o.icon || t[2], 22), el("h3", {}, t[1]), el("small.muted", {}, sub),
       el("button.btn.ghost.bld-desel", { type: "button", "aria-label": Kit.t("builder.insp.letGo"), title: Kit.t("builder.insp.letGo"), onclick: () => select(null) }, Kit.icon("x", 15)))];
+    parts.push(cardPlace(c));
 
     // what it shows
     const what = [];
@@ -1832,6 +2083,7 @@
       what.push(tipRow(Kit.t("builder.value.decimals"), Kit.t("builder.value.decimalsTip"), el("select", { onchange: (e) => set("dec", e.target.value === "" ? null : +e.target.value) }, optList([[0, "0"], [1, "1"], [2, "2"]], o.dec, Kit.t("builder.f.automatic")))));
     }
     if (c.t === "group") what.push(...groupEditor(c, set));
+    if (c.t === "devices") what.push(...dvCard(c, set));
     if (c.t === "text") {
       const ta = el("textarea", { rows: "4", maxlength: "400", onchange: (e) => set("text", e.target.value) }); ta.value = o.text || "";
       let insDev = null, insAt = "temperature";
@@ -1856,9 +2108,11 @@
       what.push(tipRow(Kit.t("builder.fit.label"), Kit.t("builder.fit.tip"), seg([["cover", Kit.t("builder.fit.fill")], ["contain", Kit.t("builder.fit.whole")]], o.fit || "cover", (v) => set("fit", v))));
     }
     if (c.t === "calendar") what.push(row(Kit.t("builder.calendar.days"), el("select", { onchange: (e) => set("days", +e.target.value) }, optList([1, 2, 3, 4, 5, 7].map((n) => [n, n]), o.days || 3))));
-    if (c.t === "weather") what.push(...wxPlaces(o, set));
+    if (c.t === "weather") what.push(...wxSource(o, set), ...wxPlaces(o, set));
     if (c.t === "weather") what.push(row(Kit.t("builder.weather.days"), el("select", { onchange: (e) => set("days", e.target.value === "" ? null : +e.target.value) },
-      optList([[0, Kit.t("builder.weather.nowOnly")], [1, "1"], [2, "2"], [3, "3"], [4, "4"], [5, "5"], [7, "7"]], o.days, Kit.t("builder.weather.all")))));
+      optList([[0, Kit.t("builder.weather.nowOnly")], [1, "1"], [2, "2"], [3, "3"], [4, "4"], [5, "5"], [7, "7"], [14, "14"]], o.days, Kit.t("builder.weather.all")))));
+    if (c.t === "weather" && o.days !== 0) what.push(tipRow(Kit.t("builder.weather.tapHours"), Kit.t("builder.weather.tapHoursTip"),   // (v3.0.4: on unless switched off)
+      Kit.sw(o.hours !== false, (v) => set("hours", v ? null : false), Kit.t("builder.weather.tapHours"))));
     if (c.t === "openings") what.push(row(Kit.t("builder.f.shows"), seg([["both", Kit.t("builder.openings.both")], ["windows", Kit.t("builder.openings.windows")], ["doors", Kit.t("builder.openings.doors")]], o.show || "both", (v) => set("show", v === "both" ? null : v))));
     if (c.t === "temps") what.push(...tempsEditor(c, o, set));
     if (c.t === "locks") {
@@ -1893,7 +2147,7 @@
         onchange: (e) => { const n = Math.round(+e.target.value); set("travel", n >= 3 && n <= 60 ? n : null); } }), el("span.muted", {}, Kit.t("builder.garage.sToOpen"))),
       el("small.muted", {}, Kit.t("builder.garage.contactNote")));
     if (c.t === "spot") what.push(...spotEditor(c, o, set));
-    if (c.t === "blank") {   // its pieces: edited inside the card (the card fills the screen)
+    if (c.t === "blank") {   // its pieces: edited right on the card (v3.0.4: nothing zooms)
       const parts = o.parts || [];
       what.push(el("button.primary.bk-open", { type: "button", title: Kit.t("builder.blank.openTip"), onclick: () => enterInner(c) }, parts.length ? Kit.t("builder.blank.edit") : Kit.t("builder.blank.fill")),
         el("small.muted", {}, parts.length ? Kit.t("builder.blank.pieces", { n: parts.length, list: parts.map(pieceName).join(" · ") }) : Kit.t("builder.blank.empty")),
@@ -1931,6 +2185,9 @@
         const all = e.target.value.split(/[\s,]+/).filter(Boolean), v = [...new Set(all.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 240))].slice(0, 6);
         if (v.length < all.length) toast(v.length ? Kit.t("builder.timer.someLeft") : Kit.t("builder.timer.noneWork"), !v.length);
         set("presets", v.length ? v : null); } })));
+    if (c.t === "trash") what.push(...trashEditor(o));
+    if (NET_COL[c.t]) what.push(...netEditor(c, o, set));
+    if (c.t === "timers") what.push(...timersEditor(o));
     if (c.t === "roomcams") what.push(row(Kit.t("builder.f.shows"), seg([["live", Kit.t("builder.cam.live")], ["still", Kit.t("builder.cam.still")]], o.view || "live", (v) => set("view", v === "live" ? null : v))));
     if (c.t === "thermostat") what.push(...thermoEditor(c, o, set));
     if (["device", "value", "text", "button", "room", "camera"].includes(c.t) && !(c.t === "camera" && o.view !== "icon")) what.push(row(Kit.t("builder.f.icon"), c.t === "device"
@@ -1992,7 +2249,7 @@
     // actions
     const actRows = [["tap", Kit.t("builder.act.tap")], ["hold", Kit.t("builder.act.hold")], ["dbl", Kit.t("builder.act.dbl")]].map(([k, l]) =>
       k === "hold" && (o.wheel || []).length ? el("div.bld-act", {}, el("span.bld-l", {}, l), el("small.muted", {}, Kit.t("builder.act.opensWheel"))) : actionEditor(c, k, l));
-    if (!u && c.t !== "group") parts.push(sec("acts", Kit.t("builder.sec.does"), ["tap", "hold", "dbl"].filter((k) => c[k]).length ? Kit.t("builder.sec.set") : "", ...actRows,
+    if (!u && c.t !== "group" && c.t !== "devices") parts.push(sec("acts", Kit.t("builder.sec.does"), ["tap", "hold", "dbl"].filter((k) => c[k]).length ? Kit.t("builder.sec.set") : "", ...actRows,
       ["device", "room", "camera"].includes(c.t) && !c.tap ? el("small.muted", {}, c.t === "device" ? Kit.t("builder.act.noTapDevice") : Kit.t("builder.act.noTapOpen")) : null));
 
     // show-when / highlight
@@ -2202,6 +2459,29 @@
     return out;
   }
 
+  // ---------- (v3.0.4) a weather card's "Weather from": Automatic, Open-Meteo, the Hubitat device, OpenWeatherMap ----------
+  // (GET /api/manage/weather/sources, asked once a visit: only what's connected can be picked; the rest say where to
+  // connect it. A card that picked one since disconnected keeps it — the panel shows Open-Meteo for it meanwhile)
+  let wxSrcs = null, wxSrcAsked = false;
+  function wxSource(o, set) {
+    if (!wxSrcAsked) {
+      wxSrcAsked = true;
+      api("/api/manage/weather/sources").then((j) => { wxSrcs = j || {}; side(); }).catch(() => { wxSrcs = {}; side(); });
+    }
+    const s = wxSrcs || {}, cur = ["auto", "om", "hub", "owm"].includes(o.src) ? o.src : "auto";
+    const connect = () => (M.isAdmin && M.isAdmin() ? el("button.lnk", { type: "button", onclick: () => M.go("integrations") }, Kit.t("builder.wxsrc.connect"))
+      : el("span", {}, Kit.t("builder.wxsrc.connect")));
+    const opt = (v, name, note, ok) => el("label.bld-wxsrc" + (ok ? "" : ".off"), {},
+      el("input", { type: "radio", name: "bld-wxsrc", checked: cur === v, disabled: !ok && cur !== v, onchange: () => set("src", v) }),
+      el("span", {}, el("b", {}, name), el("small.muted", {}, ...(ok ? [note] : [Kit.t("builder.wxsrc.notConnected"), " ", connect()]))));
+    // (v3.0.4: as the panel decides — the device is the home place's, the others OpenWeatherMap with a key, else Open-Meteo)
+    const auto = wxSrcs ? Kit.t({ hub: "builder.wxsrc.autoHub", owm: "builder.wxsrc.autoOwm" }[s.auto] || "builder.wxsrc.autoOm", { other: Kit.t(s.owm ? "builder.wxsrc.owm" : "builder.wxsrc.om") }) : Kit.t("common.loading");
+    return [el("b", { style: "display:block;margin-top:6px" }, Kit.t("builder.wxsrc.title")),
+      opt("auto", Kit.t("builder.wxsrc.auto"), auto, true),
+      opt("om", Kit.t("builder.wxsrc.om"), Kit.t("builder.wxsrc.omNote"), true),
+      opt("hub", Kit.t("builder.wxsrc.hub"), Kit.t("builder.wxsrc.hubNote"), !wxSrcs || !!s.hub),
+      opt("owm", Kit.t("builder.wxsrc.owm"), Kit.t("builder.wxsrc.owmNote"), !wxSrcs || !!s.owm)];
+  }
   // ---------- a weather card's places: + Add a place (search Open-Meteo's place names), × to remove; the first is home ----------
   let wxFound = null, wxAdding = false, wxWhy = "";   // (wxWhy: why the last search found nothing — a word from the table)
   function wxPlaces(o, set) {
@@ -2259,14 +2539,7 @@
     if (!isG) out.push(row("", iconPick(o.pic, (v) => set("pic", v))));
     if (isG) {
       const doors = Array.isArray(o.doors) ? o.doors : (o.doors = [{}]);
-      out.push(row(Kit.t("builder.garage.doors"), seg([["1", "1"], ["2", "2"], ["3", "3"]], String(doors.length), (v) => { while (doors.length < +v) doors.push({}); doors.length = +v; set("doors", doors); })));
-      doors.forEach((dr, k) => out.push(el("div.bld-gitem", {}, el("b", {}, doors.length > 1 ? Kit.t(k === 0 ? "builder.garage.doorLeft" : k === doors.length - 1 ? "builder.garage.doorRight" : "builder.garage.doorMiddle", { n: k + 1 }) : Kit.t("builder.garage.theDoor")),
-        row(Kit.t("builder.spot.buttonOpener"), devSelect(dr.id ?? null, (v) => { if (v) dr.id = v; else delete dr.id; set("doors", doors); }, Kit.t("builder.garage.pickOpener"), GARAGE_FIRST)),
-        tipRow(Kit.t("builder.f.name"), Kit.t("builder.spot.doorNameTip"),
-          el("input", { type: "text", maxlength: "30", value: dr.label || "", placeholder: dr.id ? devName(dr.id) : Kit.t("builder.spot.openerNamePh"), onchange: (e) => { const v = e.target.value.trim(); if (v) dr.label = v; else delete dr.label; set("doors", doors); } })),
-        tipRow(Kit.t("builder.garage.contact"), Kit.t("builder.garage.contactTip"), devSelect(dr.contact ?? null, (v) => { if (v) dr.contact = v; else delete dr.contact; set("doors", doors); }, Kit.t("builder.garage.noContact"), CONTACT_FIRST)),
-        row(Kit.t("builder.garage.takes"), el("input", { type: "number", min: "3", max: "60", step: "1", placeholder: "15", value: dr.travel ?? "",
-          onchange: (e) => { const n = Math.round(+e.target.value); if (n >= 3 && n <= 60) dr.travel = n; else delete dr.travel; set("doors", doors); } }), el("span.muted", {}, Kit.t("builder.garage.sToOpen"))))));
+      out.push(...garageDoorRows(doors, () => set("doors", doors), true));
       out.push(el("small.muted", {}, Kit.t("builder.spot.garageNote")));
     } else {
       // when the picture moves
@@ -2337,9 +2610,255 @@
       items.length < max ? el("button.ghost.small", { type: "button", onclick: () => { items.push(fresh()); changed(); } }, addLabel) : el("small.muted", {}, Kit.t("builder.list.max", { n: max }))];
   }
 
+  // ---------- (v3.0.4) Bins / Trash and Countdown & timers (the design: mockups/prototypes/garage-bins-timers.html) ----------
+  // The card's own settings, plus two house-wide lists kept by the service, saved as they're changed: the holidays
+  // (/api/manage/bins — what moves a pickup) and the timer presets (/api/manage/timers — every timer's buttons).
+  const hex6 = () => Array.from(crypto.getRandomValues(new Uint8Array(3)), (b) => b.toString(16).padStart(2, "0")).join("");
+  const WEEKDAYS = ["builder.day.sunday", "builder.day.monday", "builder.day.tuesday", "builder.day.wednesday", "builder.day.thursday", "builder.day.friday", "builder.day.saturday"];
+  const BIN_COLORS = [["gray", "#7a808c"], ["black", "#2e3038"], ["yellow", "#f2c230"], ["green", "#3f9460"], ["blue", "#3373d6"], ["brown", "#8f5d3d"], ["red", "#d64545"],
+    ["purple", "#9b5bd6"], ["burgundy", "#8c2740"], ["lime", "#8cc63f"]];
+  const TC_COLORS = ["#8b5cf6", "#38bdf8", "#34d399", "#fbbf24", "#fb923c", "#fb7185", "#ec4899"];
+  const house = (what) => {   // the house's list, read once while the builder is open (then the side is drawn again)
+    const h = st.house || (st.house = {});
+    if (!h[what]) { h[what] = { busy: true }; api(`/api/manage/${what}`).then((r) => { if (st && r && r.ok) { st.house[what] = r; side(); } }).catch(() => {}); }
+    return h[what].busy ? null : h[what];
+  };
+  const saveHouse = (what, body) => api(`/api/manage/${what}`, body).then((r) => {
+    if (r && r.ok) { st.house[what] = r; toast(Kit.t("builder.house.saved")); } else toast((r && r.error) || Kit.t("builder.house.notSaved"), true);
+    side();
+  }).catch(() => toast(Kit.t("builder.house.notSaved"), true));
+  const timeIn = (v, put) => el("input", { type: "time", value: v || "", onchange: (e) => { if (/^\d{2}:\d{2}$/.test(e.target.value)) put(e.target.value); } });
+  const chips = (opts, on, flip) => el("div.bld-chips", {}, opts.map(([v, l]) => el("button.ghost.small" + (on(v) ? ".cur" : ""), { type: "button", "aria-pressed": String(on(v)), onclick: () => flip(v) }, l)));
+
+  // ---------- (v3.0.4) the UniFi cards: Style (A / B / C), their colors, each one's own settings ----------
+  // (the colors and their defaults: the panel's unifi.js COL — service/layouts.py NET_COLORS checks the keys)
+  const NET_COL = {
+    netwan: { dl: "#38bdf8", ul: "#c084fc", lat: "#fbbf24", ok: "#34d399", warn: "#fbbf24", bad: "#fb7185" },
+    netchips: { acc: "#f3efff", bar: "#a78bfa" },
+    netstrip: { ok: "#34d399", warn: "#fbbf24", bad: "#fb7185", sel: "#a78bfa" },
+    netmap: { line: "#8b5cf6", wifi: "#38bdf8", orb: "#f5d0fe", node: "#a78bfa", idle: "#6b6390", bad: "#fb7185", ok: "#34d399", warn: "#fbbf24" },
+    netdevs: { ok: "#34d399", bad: "#fb7185", warn: "#fbbf24" },
+    netpoe: { gauge: "#a78bfa", warn: "#fb923c", port: "#38bdf8" },
+    netclients: { icon: "#dacfff", named: "#a5b4fc" },
+    netlog: { join: "#34d399", roam: "#7dd3fc" },
+    netvals: { val: "#f3efff", icon: "#a78bfa" },
+  };
+  const NET_PARTS = ["counts", "uptime", "uptodate", "isp", "thru", "ping"], NET_STRIP = ["net", "gw", "wifi", "sw", "pro", "clients"];
+  const NET_VALS = ["inet", "line", "ping", "gw", "poe", "wifi", "wired", "clients", "devs"], NET_VALS0 = ["inet", "line", "ping", "wifi", "devs"];
+  const swIn = (on, put) => el("label.switch", {}, el("input", { type: "checkbox", checked: !!on, onchange: (e) => put(e.target.checked) }), el("span"));
+  function netColors(c, o) {
+    const cols = NET_COL[c.t], own = o.col || {};
+    const put = (k, v) => { const n = { ...(o.col || {}) }; if (v && v.toLowerCase() !== cols[k]) n[k] = v; else delete n[k]; if (Object.keys(n).length) o.col = n; else delete o.col; changed(false); };
+    return sec(`netcol:${c.t}`, Kit.t("builder.net.colors"), Kit.t("builder.net.colorsN", { n: Object.keys(cols).length }),
+      el("div.bld-netcols", {}, Object.entries(cols).map(([k, d]) => el("label", {}, el("input", { type: "color", value: own[k] || d, onchange: (e) => put(k, e.target.value) }), el("span", {}, Kit.t(`builder.net.col.${c.t}.${k}`))))),
+      el("button.ghost.small", { type: "button", onclick: () => { delete o.col; changed(); } }, Kit.t("builder.net.resetColors")));
+  }
+  // the switches on this house's network (the PoE card's picker): the Manager's own read of UniFi, once
+  const netSwitches = () => {
+    if (!st.netDevs) { st.netDevs = []; api("/api/manage/unifi").then((r) => { if (st) { st.netDevs = (r.devices || []).filter((d) => d.kind === "switch"); side(); } }).catch(() => {}); }
+    return st.netDevs;
+  };
+  function netEditor(c, o, set) {
+    const look = ["a", "b", "c"].includes(o.look) ? o.look : "a", out = [];
+    out.push(row(Kit.t("builder.dock.style"), seg(["a", "b", "c"].map((v) => [v, Kit.t(`builder.net.look.${c.t}.${v}`)]), look, (v) => set("look", v === "a" ? null : v))));
+    if (c.t === "netmap") {
+      const glow = Number.isInteger(o.glow) ? o.glow : 60, lab = el("span.bld-l", {}, Kit.t("builder.net.glowN", { n: glow }));
+      out.push(el("div.bld-row", {}, lab, el("input", { type: "range", min: 0, max: 100, step: 5, value: glow,
+        oninput: (e) => { lab.textContent = Kit.t("builder.net.glowN", { n: e.target.value }); }, onchange: (e) => set("glow", +e.target.value === 60 ? null : +e.target.value) })));
+    }
+    out.push(netColors(c, o));   // (the map's: just under Orb glow)
+    if (c.t === "netwan") out.push(
+      row(Kit.t("builder.net.graph"), seg([["dl", Kit.t("builder.net.gm.dl")], ["ul", Kit.t("builder.net.gm.ul")], ["both", Kit.t("builder.net.gm.both")]], o.gm || "both", (v) => set("gm", v === "both" ? null : v))),
+      el("small.muted", {}, Kit.t("builder.net.graphNote")),
+      row(Kit.t("builder.net.lat"), swIn(o.lat !== false, (v) => set("lat", v ? null : false))),
+      checks(`netparts:${c.i}`, Kit.t("builder.net.parts"), NET_PARTS.map((k) => [k, Kit.t(`builder.net.part.${k}`)]), o.parts, (v) => set("parts", v), Kit.t("builder.net.allParts")),
+      el("small.muted", {}, Kit.t("builder.net.wanNote")));
+    if (c.t === "netmap") {
+      const arr = st.netArr === c.i;
+      out.push(row(Kit.t("builder.net.follow"), swIn(o.follow !== false, (v) => set("follow", v ? null : false))),
+        el("h4.bld-sub", {}, Kit.t("builder.net.arrange")),
+        el("div.bld-row", {}, el("button" + (arr ? ".primary" : ".ghost") + ".small", { type: "button", onclick: () => netArrange(arr ? null : c.i) }, Kit.t(arr ? "builder.net.arrangeDone" : "builder.net.arrangeGo")),
+          o.pos ? el("button.ghost.small", { type: "button", onclick: () => set("pos", null) }, Kit.t("builder.net.reset")) : null),
+        el("small.muted", {}, Kit.t(arr ? "builder.net.arrangeOn" : "builder.net.arrangeNote")),
+        row(Kit.t("builder.net.snap"), swIn(o.snap, (v) => set("snap", v || null))),
+        row(Kit.t("builder.net.ports"), swIn(o.ports, (v) => set("ports", v || null))),
+        el("h4.bld-sub", {}, Kit.t("builder.net.protectGear")),
+        row(Kit.t("builder.net.protect"), swIn(o.protect !== false, (v) => set("protect", v ? null : false))),
+        o.protect !== false ? row(Kit.t("builder.net.cams"), seg([["bubble", Kit.t("builder.net.camsBubble")], ["each", Kit.t("builder.net.camsEach")]], o.camEach ? "each" : "bubble", (v) => set("camEach", v === "each" || null))) : null);
+    }
+    if (c.t === "netdevs") out.push(row(Kit.t("builder.net.cols"), seg([[1, Kit.t("builder.net.colsOne")], [2, Kit.t("builder.net.colsTwo")]], o.cols === 2 ? 2 : 1, (v) => set("cols", v === 2 ? 2 : null))),
+      row(Kit.t("builder.net.group"), swIn(o.group, (v) => set("group", v || null))), el("small.muted", {}, Kit.t("builder.net.devsNote")));
+    if (c.t === "netpoe") out.push(row(Kit.t("builder.net.switch"), el("select", { onchange: (e) => set("sw", e.target.value || null) },
+      optList(netSwitches().map((d) => [d.id, d.name]), o.sw || "", Kit.t("builder.net.allSwitches")))), el("small.muted", {}, Kit.t("builder.net.poeNote")));
+    if (c.t === "netclients") out.push(row(Kit.t("builder.net.sort"), el("select", { onchange: (e) => set("sort", e.target.value === "name" ? null : e.target.value) },
+      optList(["name", "type", "network", "ssid", "conn", "signal", "traffic"].map((k) => [k, Kit.t(`builder.net.sortBy.${k}`)]), o.sort || "name"))),
+      row(Kit.t("builder.net.filter"), seg(["all", "wired", "wifi", "guest"].map((k) => [k, Kit.t(`builder.net.f.${k}`)]), o.filter || "all", (v) => set("filter", v === "all" ? null : v))),
+      el("small.muted", {}, Kit.t("builder.net.clientsNote")));
+    if (c.t === "netlog") out.push(row(Kit.t("builder.net.logWifi"), swIn(o.wifi !== false, (v) => set("wifi", v ? null : false))), el("small.muted", {}, Kit.t("builder.net.logNote")));
+    if (c.t === "netstrip") out.push(checks(`netstrip:${c.i}`, Kit.t("builder.net.tabs"), NET_STRIP.map((k) => [k, Kit.t(`builder.net.tab.${k}`)]), o.items, (v) => set("items", v), Kit.t("builder.net.allTabs")),
+      el("small.muted", {}, Kit.t("builder.net.stripNote")));
+    if (c.t === "netvals") out.push(checks(`netvals:${c.i}`, Kit.t("builder.net.vals"), NET_VALS.map((k) => [k, Kit.t(`builder.net.val.${k}`)]), o.vals || NET_VALS0, (v) => set("vals", v || NET_VALS), Kit.t("builder.net.allVals")),
+      el("small.muted", {}, Kit.t("builder.net.valsNote")));
+    out.push(el("small.muted", { style: "display:block;margin-top:6px" }, Kit.t("builder.net.hiddenNote")));   // (its own line: not run into the note above)
+    return out.filter(Boolean);
+  }
+  // the map's arranging: on for one card (the frame lets the drag through), off when that card isn't the one selected
+  function netArrange(i) {
+    st.netArr = i || null;
+    const f = $(".bld-frame"); if (f && f.contentWindow) f.contentWindow.postMessage({ t: "netArrange", i: st.netArr }, location.origin);
+    const over = $(".bld-over"); if (over) over.classList.toggle("bld-pass", !!st.netArr);
+    side();
+  }
+  // a part dragged on the panel's card → that card's o.pos (node id → [x, y] in thousandths of the map)
+  function netPos(i, pos) {
+    const c = st.g.cards.find((x) => x.i === i); if (!c || c.t !== "netmap" || st.netArr !== i) return;
+    const clean = {};
+    for (const [k, v] of Object.entries(pos).slice(0, 300)) if (/^(wan:WAN2?|(pg:)?[0-9a-f]{12})$/.test(k) && Array.isArray(v) && v.length === 2 && v.every((n) => Number.isInteger(n) && n >= 0 && n <= 1000)) clean[k] = v;
+    c.o = c.o || {}; c.o.pos = clean;
+    changed(true, `netpos:${i}`);
+  }
+
+  function trashEditor(o) {
+    const rem = o.rem || (o.rem = { when: "before", at: "19:30" });
+    const out = [
+      ...listEditor(o, "items", 8, Kit.t("builder.trash.add"), () => ({ id: hex6(), name: Kit.t("builder.trash.trash"), icon: "wheelie", color: "green", anim: true, btn: "out",
+        truck: "07:00", hol: "none", sch: { k: "weekly", days: [1] } }), (b) => binRows(b)),
+      el("h4.bld-sub", {}, Kit.t("builder.trash.reminder")),
+      row(Kit.t("builder.trash.when"), seg([["before", Kit.t("builder.trash.before")], ["same", Kit.t("builder.trash.same")]], rem.when === "same" ? "same" : "before", (v) => { rem.when = v; changed(); })),
+      row(Kit.t("builder.trash.from"), timeIn(rem.at, (v) => { rem.at = v; changed(); })),
+      el("small.muted", {}, Kit.t("builder.trash.remNote")),
+      row(Kit.t("builder.trash.alarm"), el("label.switch", {}, el("input", { type: "checkbox", checked: !!o.alarm, onchange: (e) => { if (e.target.checked) o.alarm = "21:00"; else delete o.alarm; changed(); } }), el("span")),
+        o.alarm ? timeIn(o.alarm, (v) => { o.alarm = v; changed(); }) : null),
+      el("small.muted", {}, Kit.t("builder.trash.alarmNote")),
+      row(Kit.t("builder.trash.calm"), el("label.switch", {}, el("input", { type: "checkbox", checked: o.calm === true, onchange: (e) => { if (e.target.checked) o.calm = true; else delete o.calm; changed(); } }), el("span"))),
+      el("small.muted", {}, Kit.t("builder.trash.calmNote")),
+      el("h4.bld-sub", {}, Kit.t("builder.trash.holidays")),
+    ];
+    const h = house("bins");
+    if (!h) return [...out, el("small.muted", {}, Kit.t("builder.house.loading"))];
+    const hol = (h.holidays || []).map((x) => ({ ...x })), put = () => saveHouse("bins", { holidays: hol.filter((x) => x.d) });
+    return [...out, ...hol.map((x, n) => el("div.bld-row", {},
+      el("input", { type: "date", value: x.d || "", onchange: (e) => { x.d = e.target.value; put(); } }),
+      el("input", { type: "text", value: x.name || "", maxlength: "40", placeholder: Kit.t("builder.trash.holName"), onchange: (e) => { x.name = e.target.value.trim() || Kit.t("builder.trash.holiday"); put(); } }),
+      el("button.ghost.small", { type: "button", "aria-label": Kit.t("builder.pal.remove"), onclick: () => { hol.splice(n, 1); put(); } }, "✕"))),
+    hol.length < 40 ? el("button.ghost.small", { type: "button", onclick: () => { const d = new Date(); hol.push({ d: d.toISOString().slice(0, 10), name: Kit.t("builder.trash.holiday") }); put(); } }, Kit.t("builder.trash.addHoliday")) : null,
+    el("small.muted", {}, Kit.t("builder.trash.holNote"))];
+  }
+  function binRows(b) {
+    const s = b.sch || (b.sch = { k: "weekly", days: [1] }), put = () => changed();
+    const days = WEEKDAYS.map((k, i) => [i, Kit.t(k).slice(0, 3)]);
+    const rows = [
+      row(Kit.t("builder.f.name"), el("input", { type: "text", value: b.name || "", maxlength: "24", onchange: (e) => { b.name = e.target.value.trim() || Kit.t("builder.trash.trash"); put(); } })),
+      row(Kit.t("builder.trash.container"), el("select", { onchange: (e) => { b.icon = e.target.value; if (!["wheelie", "recycle", "inside"].includes(b.icon)) delete b.lid; put(); } },
+        optList(["wheelie", "recycle", "inside", "bag", "bulky"].map((k) => [k, Kit.t(`builder.trash.icon.${k}`)]), b.icon || "wheelie"))),
+      // (v3.0.4) your own picture instead of the drawing (Manager → Icons: the own-pictures picker)
+      tipRow(Kit.t("builder.trash.ownPic"), Kit.t("builder.trash.ownPicTip"), iconPick(b.pic || null, (v) => { if (/^up:[0-9a-f]{16}$/.test(v || "")) b.pic = v; else delete b.pic; put(); }, Kit.t("builder.trash.theDrawing"), { picsOnly: true }),
+        b.pic ? el("button.ghost.small", { type: "button", "aria-label": Kit.t("builder.trash.dropPic"), title: Kit.t("builder.trash.dropPic"), onclick: () => { delete b.pic; put(); } }, "✕") : null),
+      row(Kit.t("builder.trash.style"), seg([["still", Kit.t("builder.trash.still")], ["anim", Kit.t("builder.trash.animated")]], b.anim ? "anim" : "still", (v) => { if (v === "anim") b.anim = true; else delete b.anim; put(); })),
+      row(Kit.t("builder.trash.color"), el("div.bld-sws", {}, BIN_COLORS.map(([k, hx]) => el("button.bld-sw" + ((b.color || "gray") === k ? ".cur" : ""), { type: "button", title: Kit.t(`builder.trash.c.${k}`),
+        "aria-label": Kit.t(`builder.trash.c.${k}`), style: `background:${hx}`, onclick: () => { b.color = k; put(); } })))),
+      ["wheelie", "recycle", "inside"].includes(b.icon || "wheelie") ? row(Kit.t("builder.trash.colorOn"), seg([["all", Kit.t("builder.trash.whole")], ["lid", Kit.t("builder.trash.lid")]], b.lid ? "lid" : "all",
+        (v) => { if (v === "lid") b.lid = true; else delete b.lid; put(); })) : null,
+      row(Kit.t("builder.trash.schedule"), el("select", { onchange: (e) => { s.k = e.target.value; if (s.k === "every") { s.every = s.every || 2; s.from = s.from || new Date().toISOString().slice(0, 10); }
+        if (s.k === "seasonal" && !s.months) s.months = [2, 3, 4, 5, 6, 7, 8, 9, 10]; if (s.k === "monthly") { s.nth = s.nth || 1; s.days = [s.days[0] ?? 1]; } put(); } },
+        optList(["weekly", "every", "evenodd", "monthly", "seasonal"].map((k) => [k, Kit.t(`builder.trash.sch.${k}`)]), s.k || "weekly"))),
+    ];
+    if (s.k === "monthly") rows.push(row(Kit.t("builder.trash.which"), el("select", { onchange: (e) => { s.nth = +e.target.value; put(); } }, optList(["first", "second", "third", "fourth", "last"].map((w, i) => [i + 1, Kit.t(`builder.trash.nth.${w}`)]), s.nth || 1)),
+      el("select", { onchange: (e) => { s.days = [+e.target.value]; put(); } }, optList(WEEKDAYS.map((k, i) => [i, Kit.t(k)]), (s.days || [1])[0]))));
+    else rows.push(row(Kit.t("builder.trash.days"), chips(days, (v) => (s.days || []).includes(v), (v) => {
+      const d = new Set(s.days || []); if (d.has(v) && d.size > 1) d.delete(v); else d.add(v); s.days = [...d].sort(); put(); })));
+    if (s.k === "every") rows.push(row(Kit.t("builder.trash.every"), el("select", { onchange: (e) => { s.every = +e.target.value; put(); } }, optList([1, 2, 3, 4, 6, 8].map((n) => [n, Kit.t("builder.trash.weeks", { n })]), s.every || 2))),
+      row(Kit.t("builder.trash.knownPickup"), el("input", { type: "date", value: s.from || "", onchange: (e) => { if (e.target.value) { s.from = e.target.value; put(); } } })),
+      el("small.muted", {}, Kit.t("builder.trash.everyNote")));
+    if (s.k === "evenodd") rows.push(row(Kit.t("builder.trash.weeksOf"), seg([["even", Kit.t("builder.trash.even")], ["odd", Kit.t("builder.trash.odd")]], s.parity === "odd" ? "odd" : "even", (v) => { s.parity = v; put(); })));
+    if (s.k === "seasonal") rows.push(row(Kit.t("builder.trash.season"), chips([...Array(12).keys()].map((m) => [m, new Date(2026, m, 1).toLocaleDateString(undefined, { month: "short" })]),
+      (v) => (s.months || []).includes(v), (v) => { const m = new Set(s.months || []); if (m.has(v) && m.size > 1) m.delete(v); else m.add(v); s.months = [...m].sort((x, y) => x - y); put(); })));
+    rows.push(row(Kit.t("builder.trash.truck"), timeIn(b.truck || "07:00", (v) => { b.truck = v; put(); })),
+      row(Kit.t("builder.trash.ifHoliday"), el("select", { onchange: (e) => { b.hol = e.target.value; put(); } },
+        optList(["none", "next_day", "next_work_day", "shift_week", "shift_rest", "cancel"].map((k) => [k, Kit.t(`builder.trash.hol.${k.replace(/_(\w)/g, (m, x) => x.toUpperCase())}`)]), b.hol || "none"))),
+      row(Kit.t("builder.trash.button"), el("select", { onchange: (e) => { b.btn = e.target.value; put(); } }, optList([["out", Kit.t("builder.trash.btn.out")], ["emptied", Kit.t("builder.trash.btn.emptied")], ["curb", Kit.t("builder.trash.btn.curb")]], b.btn || "out"))));
+    return rows;
+  }
+
+  function timersEditor(o) {
+    // (own: the card's own presets — an old Timers card's buttons, moved over in 3.0.4; else every timer's, the house's)
+    const h = house("timers"), own = Array.isArray(o.presets) && o.presets.length ? o.presets : null, presets = (h && h.presets) || [], pl = own || presets;
+    const items = Array.isArray(o.items) ? o.items : (o.items = []);
+    const out = [...listEditor(o, "items", 8, Kit.t("builder.tc.addTimer"), () => ({ id: hex6(), k: "timer", name: Kit.t("builder.tc.timer"), mix: "hms", col: TC_COLORS[items.length % TC_COLORS.length],
+      preset: pl[0] && pl[0].id, snd: "chime", dismiss: 15 }), (it) => tcRows(it, pl))];
+    if (items.length < 8) out.push(el("button.ghost.small", { type: "button", onclick: () => {
+      const d = new Date(Date.now() + 7 * 864e5);
+      items.push({ id: hex6(), k: "count", name: Kit.t("builder.tc.countdown"), mix: "d", col: TC_COLORS[1], at: `${d.toISOString().slice(0, 10)}T09:00` }); changed(); } }, Kit.t("builder.tc.addCount")));
+    // (v3.0.4) the PIN lock-down: +1 min, Pause, Resume, Stop ask for the panel PIN; the presets too when not "free"
+    out.push(tipRow(Kit.t("builder.tc.pin"), Kit.t("builder.tc.pinTip"), Kit.sw(o.pin === true, (v) => { if (v) o.pin = true; else { delete o.pin; delete o.pinFree; } changed(); }, Kit.t("builder.tc.pin"))));
+    if (o.pin === true) out.push(row(Kit.t("builder.tc.pinFree"), Kit.sw(o.pinFree !== false, (v) => { if (v) delete o.pinFree; else o.pinFree = false; changed(); }, Kit.t("builder.tc.pinFree"))));
+    if (own) out.push(el("h4.bld-sub", {}, Kit.t("builder.tc.ownPresets")), el("small.muted", {}, Kit.t("builder.tc.ownPresetsNote", { list: own.map((p) => p.name).join(", ") })),
+      el("button.ghost.small", { type: "button", onclick: () => { delete o.presets; for (const it of items) if (it.k === "timer") it.preset = presets[0] && presets[0].id; changed(); } }, Kit.t("builder.tc.useHouse")));
+    out.push(el("h4.bld-sub", {}, Kit.t("builder.tc.presets")));
+    if (!h) return [...out, el("small.muted", {}, Kit.t("builder.house.loading"))];
+    const list = presets.map((p) => ({ ...p })), put = () => saveHouse("timers", { presets: list });
+    out.push(...list.map((p, n) => el("div.bld-row", {},
+      el("input", { type: "text", value: p.name, maxlength: "24", "aria-label": Kit.t("builder.f.name"), onchange: (e) => { if (e.target.value.trim()) { p.name = e.target.value.trim(); put(); } } }),
+      el("input", { type: "number", min: "1", max: "10080", value: String(Math.round(p.sec / 60)), "aria-label": Kit.t("builder.tc.minutes"), style: "width:72px",
+        onchange: (e) => { const m = Math.round(+e.target.value); if (m >= 1 && m <= 10080) { p.sec = m * 60; put(); } } }),
+      el("label.bld-chk", { title: Kit.t("builder.tc.asButton") }, el("input", { type: "checkbox", checked: p.btn !== false, onchange: (e) => { p.btn = e.target.checked; put(); } }), Kit.t("builder.tc.button")),
+      list.length > 1 ? el("button.ghost.small", { type: "button", "aria-label": Kit.t("builder.pal.remove"), onclick: () => { list.splice(n, 1); put(); } }, "✕") : null)),
+    list.length < 12 ? el("button.ghost.small", { type: "button", onclick: () => { list.push({ name: Kit.t("builder.tc.newPreset"), sec: 600, btn: true }); put(); } }, Kit.t("builder.tc.addPreset")) : null,
+    el("small.muted", {}, Kit.t("builder.tc.presetsNote")), el("small.muted", {}, Kit.t("builder.tc.hubNote")));
+    return out;
+  }
+  function tcRows(it, presets) {
+    const put = () => changed();
+    const mix = String(it.mix || (it.k === "count" ? "d" : "hms"));
+    const sw = el("i.dve-colsw", { style: `background:${it.col || TC_COLORS[0]}` });
+    const cb = el("button.ghost.small.dve-colbtn", { type: "button", "aria-haspopup": "dialog", onclick: () => DE().pickColor(cb, it.col || null, (v) => {
+      if (v) it.col = v; else delete it.col; sw.style.background = v || ""; changed(false, `tccol:${it.id}`);
+    }, TC_COLORS.map((c) => [c, c]), () => side()) }, sw, el("span", {}, it.col || TC_COLORS[0]));
+    const rows = [
+      el("small.muted", {}, Kit.t(it.k === "count" ? "builder.tc.isCount" : "builder.tc.isTimer")),
+      row(Kit.t("builder.f.name"), el("input", { type: "text", value: it.name || "", maxlength: "24", onchange: (e) => { it.name = e.target.value.trim() || Kit.t(it.k === "count" ? "builder.tc.countdown" : "builder.tc.timer"); put(); } })),
+    ];
+    if (it.k === "count") rows.push(row(Kit.t("builder.tc.countsTo"), el("input", { type: "datetime-local", value: it.at || "", onchange: (e) => { if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(e.target.value)) { it.at = e.target.value; put(); } } })),
+      row(Kit.t("builder.f.icon"), iconPick(it.icon, (v) => { if (v) it.icon = v; else delete it.icon; put(); }, Kit.t("builder.tc.calendar"))));
+    else rows.push(row(Kit.t("builder.tc.preset"), el("select", { onchange: (e) => { it.preset = e.target.value; put(); } }, optList(presets.map((p) => [p.id, `${p.name} · ${Math.round(p.sec / 60)} min`]), it.preset))));
+    rows.push(row(Kit.t("builder.tc.display"), chips([["d", Kit.t("builder.tc.mix.d")], ["h", "HH"], ["m", "MM"], ["s", "SS"]], (u) => mix.includes(u),   // i18n-ok (the clock's parts)
+      (u) => { const m = new Set(mix); if (m.has(u) && m.size > 1) m.delete(u); else m.add(u); it.mix = "dhms".split("").filter((x) => m.has(x)).join(""); put(); })),
+      row(Kit.t("builder.tc.color"), cb));
+    if (it.k === "timer") {
+      rows.push(row(Kit.t("builder.tc.sound"), el("select", { onchange: (e) => { it.snd = e.target.value; if (it.snd !== "speak") delete it.say; put(); } },
+        optList([["chime", Kit.t("builder.tc.snd.chime")], ["speak", Kit.t("builder.tc.snd.speak")], ["none", Kit.t("builder.tc.snd.none")]], it.snd || "chime"))),
+        it.snd === "speak" || (it.speakers || []).length ? row(Kit.t("builder.tc.words"), el("input", { type: "text", value: it.say || "", maxlength: "80", placeholder: Kit.t("builder.tc.wordsPh", { name: it.name || "" }), onchange: (e) => { const v = e.target.value.trim(); if (v) it.say = v; else delete it.say; put(); } })) : null,
+        row(Kit.t("builder.tc.dismiss"), el("input", { type: "number", min: "3", max: "120", value: String(it.dismiss || 15), style: "width:72px", onchange: (e) => { const v = Math.round(+e.target.value); if (v >= 3 && v <= 120) { it.dismiss = v; put(); } } })));
+      // (v3.0.4) lights that flash on "Timer up" (none by default; up to 4 — lights only)
+      const lights = Array.isArray(it.lights) ? it.lights : [], setL = (l) => { if (l.length) it.lights = l; else delete it.lights; put(); };
+      [...lights, ...(lights.length < 4 ? [null] : [])].forEach((id, n) => rows.push(tipRow(n ? "" : Kit.t("builder.tc.lights"), Kit.t("builder.tc.lightsTip"),
+        devSelect(id, (v) => { const l = lights.slice(); if (v) l[n] = v; else l.splice(n, 1); setL([...new Set(l.filter(Boolean))]); }, Kit.t(id == null ? "builder.tc.addLight" : "builder.tc.noLight"),
+          { only: (d) => d.kind === "light", firstLabel: Kit.t("builder.dev.lights") }))));
+      // (v3.0.4) house speakers that say the words on "Timer up" (none by default; up to 3 — only a Hubitat speaker with
+      // "speak"; the service sends it, not this panel); a volume only when one of them has setVolume (else left alone)
+      const spk = Array.isArray(it.speakers) ? it.speakers : [], setS = (l) => { if (l.length) it.speakers = l; else { delete it.speakers; delete it.spkVol; } put(); };
+      [...spk, ...(spk.length < 3 ? [null] : [])].forEach((id, n) => rows.push(tipRow(n ? "" : Kit.t("builder.tc.speakers"), Kit.t("builder.tc.speakersTip"),
+        devSelect(id, (v) => { const l = spk.slice(); if (v) l[n] = v; else l.splice(n, 1); setS([...new Set(l.filter(Boolean))]); }, Kit.t(id == null ? "builder.tc.addSpeaker" : "builder.tc.noLight"),
+          { only: (d) => !!rawDev(d.id).speak }))));
+      if (spk.some((id) => (rawDev(id).cmds || []).includes("setVolume")))
+        rows.push(tipRow(Kit.t("builder.tc.spkVol"), Kit.t("builder.tc.spkVolTip"), el("select", { onchange: (e) => { if (e.target.value) it.spkVol = +e.target.value; else delete it.spkVol; put(); } },
+          optList([["", Kit.t("builder.tc.spkVolKeep")], ...[20, 30, 40, 50, 60, 70, 80, 100].map((v) => [String(v), `${v}%`])], it.spkVol ? String(it.spkVol) : ""))));
+      const others = (st.ctx.panels || []).filter((p) => p.id !== st.ctx.panel.id);
+      if (others.length) {
+        rows.push(el("small.muted", {}, Kit.t("builder.tc.livesNote", { panel: st.ctx.panel.name || st.ctx.panel.id })));
+        for (const p of others) rows.push(row(p.name || p.id, el("select", { onchange: (e) => { const l = { ...(it.links || {}) }; if (e.target.value) l[p.id] = e.target.value; else delete l[p.id];
+          if (Object.keys(l).length) it.links = l; else delete it.links; put(); } },
+          optList([["", Kit.t("builder.tc.link.none")], ["notify", Kit.t("builder.tc.link.notify")], ["linked", Kit.t("builder.tc.link.linked")]], (it.links || {})[p.id] || ""))));
+        rows.push(el("small.muted", {}, Kit.t("builder.tc.linkNote")));
+      }
+    }
+    return rows;
+  }
+
   // the devices on a "Devices" card: each with its icon and name (or the device's own), in order
+  // (v3.0.4: the old Devices card, kept so one still opens — the new one's editor is dvCard / dvItem below)
   function groupEditor(c, set) {
-    const o = c.o, items = Array.isArray(o.items) ? o.items : (o.items = []);
+    const o = c.o, items = Array.isArray(o.items) ? o.items : (o.items = []), nk = "title", max = 12;
     const put = () => set("items", items);
     const rows = items.map((it, n) => el("div.bld-gitem", {},
       el("div.bld-row", {}, devSelect(it.id ?? null, (v) => { if (v) { it.id = v; put(); } }),
@@ -2347,8 +2866,8 @@
         el("button.ghost.small", { type: "button", disabled: n === items.length - 1, "aria-label": Kit.t("builder.wx.down"), onclick: () => { items.splice(n + 1, 0, items.splice(n, 1)[0]); put(); } }, "▼"),
         el("button.ghost.small", { type: "button", "aria-label": Kit.t("builder.pal.remove"), onclick: () => { items.splice(n, 1); put(); } }, "✕")),
       el("div.bld-row", {}, iconPick(it.icon, (v) => { if (v) it.icon = v; else delete it.icon; put(); }),
-        el("input", { type: "text", value: it.title || "", maxlength: "40", placeholder: devName(it.id) || Kit.t("builder.f.name"), onchange: (e) => { const v = e.target.value.trim(); if (v) it.title = v; else delete it.title; put(); } })),
-      (() => {   // this device's own press-and-hold wheel
+        el("input", { type: "text", value: it[nk] || "", maxlength: "40", placeholder: devName(it.id) || Kit.t("builder.f.name"), onchange: (e) => { const v = e.target.value.trim(); if (v) it[nk] = v; else delete it[nk]; put(); } })),
+      !it.id ? null : (() => {   // this device's own press-and-hold wheel
         const list = it.wheel || (it.wheel = []), key = `gw-${c.i}-${n}`;
         const d = el("details.bld-gwheel", { open: st.open.has(key) }, el("summary", {}, list.length ? Kit.t("builder.wheel.holdWheelN", { n: list.length }) : Kit.t("builder.wheel.holdWheel")),
           wheelEditor(it.id, list, () => { if (list.length) it.wheel = list; else delete it.wheel; put(); }, it.icon));
@@ -2359,11 +2878,392 @@
     let pick = null;
     return [
       ...rows,
-      items.length < 12 ? el("div.bld-row", {}, devSelect(null, (v) => { pick = v; }, Kit.t("builder.group.addDevice")),
+      items.length < max ? el("div.bld-row", {}, devSelect(null, (v) => { pick = v; }, Kit.t("builder.group.addDevice")),
         el("button.ghost.small", { type: "button", onclick: () => { if (!pick) return toast(Kit.t("builder.text.pickDevFirst"), true); items.push({ id: pick }); put(); } }, Kit.t("builder.group.add"))) : el("small.muted", {}, Kit.t("builder.group.max")),
       row(Kit.t("builder.look.title"), seg([["list", Kit.t("builder.todo.list")], ["tiles", Kit.t("builder.roomdevs.tiles")]], o.look || "list", (v) => set("look", v === "list" ? null : v))),
       el("small.muted", {}, Kit.t("builder.group.note")),
     ];
+  }
+
+
+  // ---------- (v3.0.4) a Devices card: its look, its items, one item's settings (the parts: devedit.js) ----------
+  // In the card's settings: the look (List · Tiles · Freeform · One big item), Tiles' columns, the items (a grip to
+  // drag, or ▲ ▼), + a device / + a button. A click on an item (or a double-click on the card) opens the card on the
+  // screen, as a blank card's: an item is picked there — Freeform: moved anywhere and resized from any edge or corner
+  // (no grid, no marks: the cursor says which), Tiles: its span from its right / bottom edge, List / Tiles: dragged to its
+  // place (a drop line). The picked item's settings: a live preview on top (a click shows it on / off — here only), then
+  // four tabs: Device (which, what kind of item, what it shows) · Actions (a press, a hold, a double-tap: the device's own
+  // commands, never another device — that's "Something else…") · Look (icon, motion, background, color when on, sizes,
+  // text position, its place) · Advanced (a value's unit and range, a plug's running watts, the old card's look, remove).
+  const DE = () => window.DevEdit;
+  const DV_LOOKS = ["list", "tiles", "free", "single"], DV_KS = ["value", "switch", "button", "lock", "fan", "scene"];
+  const dvLook = (o) => (DV_LOOKS.includes(o.look) ? o.look : "list");
+  const dvDev = (id) => (id == null ? null : devices().find((d) => d.id === id) || null);
+  const dvOwn = (it) => { const d = dvDev(it.id); return d ? DE().choices(d, wheelChoices(d.id)) : []; };
+  const dvName = (it) => it.label || (it.id != null ? devName(it.id) : "") || Kit.t(it.k === "scene" ? "builder.dve.scene" : it.k === "button" ? "builder.dve.button" : "builder.dve.item");
+  const dvPic = (it) => it.icon || (dvDev(it.id) ? DE().kindIcon(dvDev(it.id).kind) : it.k === "scene" ? "sparkles" : "power");
+  const dvTodo = (it) => (it.id == null && !(["scene", "button"].includes(it.k) && it.tap) ? Kit.t("builder.dve.needDevice") : "");
+  // the panel draws again after a change (post): the boxes over it follow once it has
+  const dvRedraw = () => { clearTimeout(st.dvT); st.dvT = setTimeout(() => { if (st && innerCard()) drawInner(); }, 90); };
+  function dvOpen(c, n) {
+    if (!st.inner || st.inner.id !== c.i) return enterInner(c, n);
+    st.inner.sel = n; drawInner(); side();
+  }
+  function dvMove(c, from, to) {
+    if (!DE().move(c.o.items, from, to)) return;
+    if (st.inner && st.inner.id === c.i && st.inner.sel === from) st.inner.sel = to;
+    changed(); dvRedraw();
+  }
+  function dvAdd(c, it) {
+    const items = c.o.items || (c.o.items = []);
+    if (items.length >= 24) return toast(Kit.t("builder.devices.max"), true);
+    items.push(it);
+    if (dvLook(c.o) === "free") DE().autoPlace(items);
+    st.dvTab = "device";
+    changed(false); dvOpen(c, items.length - 1);
+  }
+  function dvRemove(c, n) {
+    c.o.items.splice(n, 1);
+    st.inner.sel = null; changed(); dvRedraw();
+  }
+  // the device box: a combobox — its search is the list's first row (devedit.js pickDevice)
+  function dvDevButton(cur, pick, empty = Kit.t("builder.dve.pickDevice")) {
+    const d = dvDev(cur);
+    const b = el("button.dve-cbx" + (d ? "" : ".none"), { type: "button", "aria-haspopup": "dialog", onclick: () => {
+      const every = devices().filter((x) => !noiseDev(x) || x.id === cur), main = every.filter((x) => !helperDev(x) || x.id === cur);
+      DE().pickDevice(b, main, cur, pick, every.filter((x) => !main.includes(x)));
+    } },
+      el("span.dve-ci", {}, iconEl(d ? DE().kindIcon(d.kind) : "search", 18)),
+      el("span.dve-ct", {}, el("b", {}, d ? d.label : empty), el("small", {}, d ? [d.room, DE().kindName(d.kind)].filter(Boolean).join(" · ") : Kit.t("builder.dve.typeToSearch"))),
+      el("span.dve-chev", { "aria-hidden": "true" }, "▾"));
+    return b;
+  }
+  // the card's own settings (in the inspector, and over the items while the card is open)
+  function dvCard(c, set) {
+    const o = c.o, items = Array.isArray(o.items) ? o.items : (o.items = []), look = dvLook(o);
+    const out = [row(Kit.t("builder.look.title"), seg([["list", Kit.t("builder.todo.list")], ["tiles", Kit.t("builder.roomdevs.tiles")], ["free", Kit.t("builder.devices.free")], ["single", Kit.t("builder.devices.single")]],
+      look, (v) => { if (v === "free") DE().autoPlace(items); set("look", v); dvRedraw(); }))];
+    if (look === "tiles") out.push(row(Kit.t("builder.dve.cols"), el("select", { onchange: (e) => set("cols", e.target.value ? +e.target.value : null) },
+      optList([1, 2, 3, 4, 5, 6, 7, 8].map((n) => [n, String(n)]), o.cols, Kit.t("builder.f.automatic")))));
+    // a card moved over from an old type keeps that card's look ("st") until "Use the new look" — one Undo takes it back
+    if (items.some((it) => it.st)) out.push(el("div.dve-old", {}, el("small.muted", {}, Kit.t("builder.dve.oldLook")),
+      el("button.ghost.small", { type: "button", onclick: () => { items.forEach((it) => delete it.st); st.dvUndo = c.i; set("items", items); dvRedraw(); toast(Kit.t("builder.dve.newLookDone")); } }, Kit.t("builder.dve.newLook"))));
+    else if (st.dvUndo === c.i) out.push(el("div.dve-old", {}, el("small.muted", {}, Kit.t("builder.dve.newLookDone")),
+      el("button.ghost.small", { type: "button", onclick: () => { st.dvUndo = null; undoRedo(true); } }, Kit.t("builder.dve.undo"))));
+    const cur = st.inner && st.inner.id === c.i ? st.inner.sel : null;
+    const list = el("div.dve-items", {}, items.map((it, n) => el("div.dve-li" + (cur === n ? ".cur" : ""), {},
+      Kit.reorder ? Kit.reorder.grip(n, dvName(it)) : null,
+      el("button.ghost.small.dve-lib", { type: "button", "aria-current": cur === n ? "true" : null, onclick: () => dvOpen(c, n) }, picEl(dvPic(it), 16), el("span", {}, dvName(it)), dvTodo(it) ? el("b.bk-todo", { title: dvTodo(it) }, "!") : null),
+      el("button.ghost.small", { type: "button", disabled: n === 0, "aria-label": Kit.t("builder.wx.up"), onclick: () => dvMove(c, n, n - 1) }, "▲"),
+      el("button.ghost.small", { type: "button", disabled: n === items.length - 1, "aria-label": Kit.t("builder.wx.down"), onclick: () => dvMove(c, n, n + 1) }, "▼"))));
+    if (Kit.reorder) Kit.reorder.list(list, `dv-${c.i}`, { name: (k) => dvName(items[k]), move: (a, b) => dvMove(c, a, b) });
+    out.push(list, items.length < 24 ? el("div.bld-row.dve-add", {}, dvDevButton(null, (id) => dvAdd(c, { id }), Kit.t("builder.group.addDevice")),
+      el("button.ghost.small", { type: "button", title: Kit.t("builder.dve.addButtonTip"), onclick: () => dvAdd(c, { k: "button" }) }, Kit.t("builder.dve.addButton"))) : el("small.muted", {}, Kit.t("builder.devices.max")),
+      el("small.muted", {}, Kit.t(items.length ? "builder.dve.clickItem" : "builder.devices.note")));
+    return out;
+  }
+  // the right side while the card is open: Done, the card's settings, the picked item's
+  function dvSide(c) {
+    const items = c.o.items || [], n = st.inner.sel, it = n != null ? items[n] : null;
+    const set = (k, v) => { if (v == null || v === "") delete c.o[k]; else c.o[k] = v; changed(); };
+    return el("div.card.bld-insp.bk-insp.dve", {},
+      el("div.bld-head", {}, picEl("grid", 22), el("h3", {}, c.o.title || Kit.t("builder.type.devices.name")),
+        el("button.primary.small.bk-done", { type: "button", title: Kit.t("builder.inner.doneTip"), onclick: leaveInner }, Kit.t("builder.top.done")),
+        el("small.muted", {}, Kit.t(`builder.dve.help.${dvLook(c.o)}`))),
+      ...dvCard(c, set),
+      it ? dvItem(c, it, n) : null);
+  }
+
+  // ---------- one item: the live preview, then the four tabs ----------
+  const DV_TABS = [["device", "builder.dve.tab.device"], ["actions", "builder.dve.tab.actions"], ["look", "builder.dve.tab.look"], ["adv", "builder.dve.tab.adv"]];
+  function dvItem(c, it, n) {
+    const d = dvDev(it.id), raw = it.id != null ? rawDev(it.id) : {}, own = dvOwn(it), look = dvLook(c.o);
+    const put = (redraw = true, merge = null) => { changed(redraw, merge); dvRedraw(); };
+    const setv = (k, v, redraw = true, merge = null) => { if (v == null || v === "" || (Array.isArray(v) && !v.length)) delete it[k]; else it[k] = v; put(redraw, merge); };
+    const tab = DV_TABS.some(([k]) => k === st.dvTab) ? st.dvTab : "device";
+    const go = (k) => { st.dvTab = k; side(); const b = document.getElementById(`dve-t-${k}`); if (b) b.focus(); };
+    const tabs = el("div.dve-tabs", { role: "tablist", "aria-label": Kit.t("builder.dve.itemSettings") }, DV_TABS.map(([k, w], i) => el("button" + (k === tab ? ".cur" : ""), {
+      type: "button", role: "tab", id: `dve-t-${k}`, "aria-selected": String(k === tab), "aria-controls": "dve-panel", tabindex: k === tab ? "0" : "-1", onclick: () => go(k),
+      onkeydown: (e) => { const j = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: DV_TABS.length - 1 }[e.key]; if (j != null) { e.preventDefault(); go(DV_TABS[(j + DV_TABS.length) % DV_TABS.length][0]); } } }, Kit.t(w))));
+    const x = { d, raw, own, look, put, setv };
+    const body = { device: dvTabDevice, actions: dvTabActions, look: dvTabLook, adv: dvTabAdv }[tab](c, it, n, x);
+    return el("div.dve-ed", {}, el("b.bk-h", {}, Kit.t("builder.dve.itemN", { n: n + 1, name: dvName(it) })), dvPreview(c, it, n, x), tabs,
+      el("div.dve-panel", { role: "tabpanel", id: "dve-panel", "aria-labelledby": `dve-t-${tab}` }, ...body.filter(Boolean)));
+  }
+  // what it shows now, from the hub's last values (the preview only)
+  function dvWords(it, d, raw, on) {
+    const a = raw.attrs || {}, out = [];
+    for (const k of it.show && it.show.length ? it.show : ["state"]) {
+      if (k === "state") out.push(d && DE().isLock(d, raw) ? Kit.t(a.lock === "unlocked" ? "builder.dve.unlocked" : "builder.dve.locked") : d && (DE().canSwitch(d, raw) || it.tap) ? Kit.t(on ? "builder.wheel.on" : "builder.wheel.off") : "");
+      else if (a[k] != null && a[k] !== "") out.push(`${a[k]}${it.unit ? ` ${it.unit}` : ""}`);
+    }
+    return out.filter(Boolean).join(" · ");
+  }
+  function dvPreview(c, it, n, { d, raw, look }) {
+    const key = `${c.i}:${n}`, a = raw.attrs || {}, real = a.switch === "on" || a.lock === "unlocked" || (/purifier/.test((d || {}).kind || "") && /^(FAN|AUTO)$/i.test(String(a.fanState || a.fanMode || "")));
+    const on = st.dvPv && st.dvPv.k === key ? st.dvPv.on : real;
+    const pic = dvPic(it), sz = Math.round((30 * (it.iz || 100)) / 100), mot = it.motion && window.Motion && !/^(art|up):/.test(pic) ? Motion.pick(it.motion, pic, (d || {}).kind) : "";
+    const icx = mot ? (() => { const s = el("span"); s.innerHTML = Motion.wrap(icon(pic, Math.round(sz * 0.8)), mot, on, Math.round(sz * 0.8)); return s; })() : picEl(pic, sz);
+    const tp = it.tp || (look === "list" ? "right" : "bottom"), words = dvWords(it, d, raw, on);
+    return el("div.dve-pv", {},
+      el(`button.dve-pvit.tp-${tp}` + (on ? ".on" : "") + (it.bg === "none" ? ".bg-none" : ""), { type: "button", title: Kit.t("builder.dve.previewTip"), "aria-pressed": String(on),
+        style: `${it.col ? `--dc:${it.col};` : ""}--tz:${(it.tz || 100) / 100}`, onclick: () => { st.dvPv = { k: key, on: !on }; side(); } },
+        el("span.dve-pvic", {}, icx), el("span.dve-pvtx", {}, el("b", {}, dvName(it)), words ? el("small", {}, words) : null)),
+      el("small.muted", {}, Kit.t("builder.dve.previewNote")));
+  }
+
+  // Device: which device (a button may have none), what kind of item, what it shows
+  function dvTabDevice(c, it, n, { d, raw, setv, put }) {
+    const out = [row(Kit.t("builder.f.device"), dvDevButton(it.id ?? null, (id) => {
+      const was = it.id;
+      it.id = id;
+      // (its own actions were the old device's: gone with it; what it shows too)
+      for (const k of ["tap", "hold", "dbl"]) if (it[k] && it[k].id === was) delete it[k];
+      delete it.wheel; delete it.show;
+      put();
+    }))];
+    if (it.id == null) out.push(el("small.muted", {}, Kit.t(["scene", "button"].includes(it.k) ? "builder.dve.buttonOnly" : "builder.dve.needDevice")));
+    const autoK = !d ? "button" : DE().isLock(d, raw) ? "lock" : /fan|purifier/.test(d.kind) ? "fan" : DE().canSwitch(d, raw) ? "switch" : "value";
+    out.push(row(Kit.t("builder.dve.kindItem"), el("div.dve-chips", { role: "radiogroup", "aria-label": Kit.t("builder.dve.kindItem") },
+      [["", Kit.t("builder.dve.kindAuto", { kind: Kit.t(`builder.dve.k.${autoK}`) })], ...DV_KS.map((k) => [k, Kit.t(`builder.dve.k.${k}`)])].map(([k, w]) =>
+        el("button.chip" + ((it.k || "") === k ? ".on" : ""), { type: "button", role: "radio", "aria-checked": String((it.k || "") === k), onclick: () => setv("k", k || null) }, w)))));
+    if (d) {   // what it shows: its state and up to 3 more of its values (or 4 values)
+      const a = raw.attrs || {}, shown = it.show && it.show.length ? it.show : ["state"];
+      const keys = ["state", ...Object.keys(a).filter((k) => !SKIP_AT.test(k) && typeof a[k] !== "object").sort()];
+      out.push(el("b.bk-h", {}, Kit.t("builder.dve.shows")), el("div.dve-ticks", { role: "group", "aria-label": Kit.t("builder.dve.shows") }, keys.map((k) => el("label.dve-tk", {},
+        el("input", { type: "checkbox", checked: shown.includes(k), disabled: !shown.includes(k) && shown.length >= 4,
+          onchange: (e) => { const nx = e.target.checked ? [...shown, k] : shown.filter((x) => x !== k); setv("show", nx.length === 1 && nx[0] === "state" ? null : nx); } }),
+        el("span", {}, k === "state" ? Kit.t("builder.dve.state") : spotPlain(k)), k !== "state" && a[k] != null ? el("small.muted", {}, String(a[k]).slice(0, 18)) : null))),
+        el("small.muted", {}, Kit.t("builder.dve.showsNote")));
+    }
+    return out;
+  }
+  // Actions: a press, a hold, a double-tap — from the device's own commands (devedit.js choices); "Something else…"
+  // opens the old editor (another device, a room, a page, a camera), its device the item's own to start with
+  function dvTabActions(c, it, n, { d, raw, own, put }) {
+    if (!d) return [actionEditor(it, "tap", Kit.t("builder.dve.pressDoes")), el("small.muted", {}, Kit.t("builder.dve.buttonNote"))];
+    const other = (k) => st.dvOther === `${c.i}:${n}:${k}`;
+    const setAct = (k, key) => {
+      st.dvOther = null;
+      if (key === "other") { st.dvOther = `${c.i}:${n}:${k}`; return side(); }
+      if (key === "auto") delete it[k]; else if (key === "none") it[k] = { do: "none" };
+      else { const ch = own.find((x) => x.key === key); if (ch) it[k] = DE().plain(ch.a); }
+      put();
+    };
+    const pick = (label, opts, cur, onpick) => row(label, el("select", { "aria-label": label, onchange: (e) => onpick(e.target.value) }, optList(opts, cur)));
+    const out = [];
+    const pk = other("tap") ? "other" : DE().actKey(it.tap, it, own);
+    out.push(pick(Kit.t("builder.dve.pressDoes"), DE().pressOpts(it, d, raw, own), pk, (v) => setAct("tap", v)),
+      el("small.muted", {}, pk === "auto" ? Kit.t(`builder.dve.pressWhy.${DE().pressAuto(it, d, raw)}`) : pk === "other" ? Kit.t("builder.dve.otherNote") : Kit.t("builder.dve.ownCmds")));
+    if (pk === "other") out.push(actionEditor(it, "tap", Kit.t("builder.dve.otherDoes"), it.id));
+    // the hold: Automatic, nothing, a fly-out (tick which of its options show), one of its commands, something else
+    const hk = other("hold") ? "other" : DE().holdKey(it, own);
+    out.push(pick(Kit.t("builder.dve.holdDoes"), [...DE().holdOpts(own), ["other", Kit.t("builder.dve.other")]], hk, (v) => {
+      if (v === "fly") { delete it.hold; st.dvOther = null; it.wheel = DE().flyList(own, DE().flyDefault(d, own)); return put(); }
+      delete it.wheel; setAct("hold", v);
+    }));
+    if (hk === "fly") {
+      const keys = DE().flyKeys(it, own), put2 = (ks) => { const w = DE().flyList(own, ks); if (w.length) it.wheel = w; else delete it.wheel; put(); };
+      out.push(el("small.muted", {}, Kit.t("builder.dve.flyCount", { n: keys.length, max: DE().FLY_MAX })),
+        el("div.dve-ticks.dve-fly", { role: "group", "aria-label": Kit.t("builder.dve.flyShow") }, own.map((ch) => el("label.dve-tk", {},
+          el("input", { type: "checkbox", checked: keys.includes(ch.key), disabled: !keys.includes(ch.key) && keys.length >= DE().FLY_MAX,
+            onchange: (e) => put2(e.target.checked ? [...keys, ch.key] : keys.filter((k) => k !== ch.key)) }),
+          ch.col ? el("i.bld-sw", { style: `background:${ch.col}` }) : iconEl(ch.icon || "power", 14), el("span", {}, ch.label)))),
+        el("div.bld-row.dve-mini", {}, el("button.ghost.small", { type: "button", onclick: () => put2(own.slice(0, DE().FLY_MAX).map((x) => x.key)) }, Kit.t("builder.dve.tickFirst", { n: DE().FLY_MAX })),
+          DE().isPurifier(d) ? el("button.ghost.small", { type: "button", onclick: () => put2(DE().flyDefault(d, own)) }, Kit.t("builder.dve.flyEven")) : null,
+          el("button.ghost.small", { type: "button", onclick: () => put2([]) }, Kit.t("builder.dve.clear"))));
+    } else out.push(el("small.muted", {}, Kit.t(hk === "auto" ? "builder.dve.holdAutoNote" : hk === "other" ? "builder.dve.otherNote" : hk === "none" ? "builder.dve.holdNoneNote" : "builder.dve.ownCmds")));
+    if (hk === "other") out.push(actionEditor(it, "hold", Kit.t("builder.dve.otherDoes"), it.id));
+    // a double-tap: nothing (a press is at once), or one of its commands
+    const dk = other("dbl") ? "other" : DE().actKey(it.dbl, it, own);
+    out.push(pick(Kit.t("builder.dve.dblDoes"), DE().dblOpts(own), dk === "none" ? "auto" : dk, (v) => setAct("dbl", v)), el("small.muted", {}, Kit.t("builder.dve.dblNote")));
+    if (dk === "other") out.push(actionEditor(it, "dbl", Kit.t("builder.dve.otherDoes"), it.id));
+    return out;
+  }
+  // every icon to pick from: the line icons, the animated ones and the drawings (iconItems), the owner's pictures
+  const dvIcons = () => [...iconItems(true), ...(st.pics || []).filter((p) => p.style !== "background").map((p) => ({ v: "up:" + p.id, name: p.name, group: "pics", cat: "", anim: false }))];
+  // Look: its name, icon (any icon can move: its motion, only while it's on), background, color when on, icon and text
+  // size, where the words sit, its place on the card
+  function dvTabLook(c, it, n, { d, look, setv, put }) {
+    const out = [row(Kit.t("builder.f.name"), el("input", { type: "text", value: it.label || "", maxlength: "40", placeholder: (it.id != null && devName(it.id)) || Kit.t("builder.f.automaticPh"),
+      onchange: (e) => setv("label", e.target.value.trim()) }))];
+    const ib = el("button.dve-cbx", { type: "button", "aria-haspopup": "dialog", onclick: () => DE().pickIcon(ib, dvIcons(), it.icon || null, (v) => {
+      const m = /^mo:([a-z]+):(.+)$/.exec(v || "");
+      if (m) { it.icon = m[2]; it.motion = m[1]; }
+      else { if (v) it.icon = v; else delete it.icon; if (/^(art|up):/.test(v || "")) delete it.motion; }
+      put();
+    }, picEl, Kit.t("builder.f.automatic")) },
+      el("span.dve-ci", {}, picEl(dvPic(it), 22)), el("span.dve-ct", {}, el("b", {}, it.icon ? picName(it.icon) : Kit.t("builder.f.automatic")), el("small", {}, Kit.t("builder.dve.iconChange"))),
+      el("span.dve-chev", { "aria-hidden": "true" }, "▾"));
+    out.push(row(Kit.t("builder.dve.icon"), ib));
+    if (!/^(art|up):/.test(it.icon || "") && window.Motion) out.push(row(Kit.t("builder.dve.motion"), el("select", { "aria-label": Kit.t("builder.dve.motion"), onchange: (e) => setv("motion", e.target.value || null) },
+      optList([["auto", Kit.t("builder.f.automatic")], ...Motion.MOTIONS], it.motion, Kit.t("builder.dve.still")))), el("small.muted", {}, Kit.t("builder.dve.motionNote")));
+    out.push(row(Kit.t("builder.dve.background"), seg([["round", Kit.t("builder.dve.round")], ["none", Kit.t("builder.dve.none")]], it.bg === "none" ? "none" : "round", (v) => setv("bg", v === "none" ? "none" : null))),
+      el("small.muted", {}, Kit.t(it.bg === "none" ? "builder.dve.bgNoneNote" : "builder.dve.bgRoundNote")));
+    // color when on: Automatic, or any color (the full picker: hue, saturation, brightness, a hex code)
+    const sw = el("i.dve-colsw", { style: it.col ? `background:${it.col}` : "" }), sl = el("span", {}, it.col || Kit.t("builder.dve.colorAutoShort"));
+    const cb = el("button.ghost.small.dve-colbtn", { type: "button", "aria-haspopup": "dialog", onclick: () => DE().pickColor(cb, it.col || null, (v) => {
+      if (v) it.col = v; else delete it.col;
+      sw.style.background = v || ""; sl.textContent = v || Kit.t("builder.dve.colorAutoShort");
+      changed(false, `dvcol:${c.i}:${n}`);
+    }, COLORS.map(([name, , , hex]) => [name, hex]), () => side()) }, sw, sl);
+    out.push(row(Kit.t("builder.dve.colorOn"), cb));
+    const slide = (label, k) => {
+      const v = it[k] || 100, l = el("span.bld-l", {}, Kit.t("builder.dve.pct", { label, n: v }));
+      return el("div.bld-row", {}, l, el("input", { type: "range", min: "50", max: "250", step: "5", value: String(v), "aria-label": label,
+        oninput: (e) => { const nv = +e.target.value; if (nv === 100) delete it[k]; else it[k] = nv; l.textContent = Kit.t("builder.dve.pct", { label, n: nv }); changed(false, `dv${k}:${c.i}:${n}`); dvRedraw(); },
+        onchange: () => side() }));
+    };
+    out.push(slide(Kit.t("builder.dve.iconSize"), "iz"), slide(Kit.t("builder.dve.textSize"), "tz"));
+    const tp = it.tp || (look === "list" ? "right" : "bottom");
+    out.push(row(Kit.t("builder.dve.textPos"), seg([["top", Kit.t("builder.dve.top")], ["bottom", Kit.t("builder.dve.bottom")], ["left", Kit.t("builder.dve.left")], ["right", Kit.t("builder.dve.right")]], tp, (v) => setv("tp", v))));
+    // its place: Freeform's X / Y / W / H (in % of the card; they follow a drag), Tiles' span, else the look places it
+    if (look === "free") {
+      if (!DE().placed(it)) DE().autoPlace(c.o.items);
+      const num = (k) => el("label.dve-num", {}, el("span", {}, Kit.t(`builder.dve.${k}`)), el("input", { type: "number", min: "0", max: "100", step: "0.5", value: String(it[k] / 10), "data-k": k, "aria-label": Kit.t(`builder.dve.${k}Long`),
+        onchange: (e) => { const v = parseFloat(e.target.value); if (!Number.isFinite(v)) return side(); Object.assign(it, DE().fixRect({ ...it, [k]: v * 10 })); put(); } }));
+      out.push(el("b.bk-h", {}, Kit.t("builder.dve.place")), el("div.dve-xywh", {}, num("x"), num("y"), num("w"), num("h")), el("small.muted", {}, Kit.t("builder.dve.placeNote")));
+    } else if (look === "tiles") {
+      const span = (k, label) => el("label.dve-num", {}, el("span", {}, label), el("select", { onchange: (e) => setv(k, +e.target.value > 1 ? +e.target.value : null) }, optList([1, 2, 3, 4].map((v) => [v, String(v)]), it[k] || 1)));
+      out.push(el("b.bk-h", {}, Kit.t("builder.dve.span")), el("div.dve-xywh", {}, span("sw", Kit.t("builder.dve.spanW")), span("sh", Kit.t("builder.dve.spanH"))), el("small.muted", {}, Kit.t("builder.dve.spanNote")));
+    } else out.push(el("small.muted", {}, Kit.t(look === "single" ? "builder.dve.placeSingle" : "builder.dve.placeList")));
+    return out;
+  }
+  // Advanced: a value's unit, decimals and range; a plug-in appliance's running watts; a garage door's contact; the
+  // old card's look; duplicate, remove
+  function dvTabAdv(c, it, n, { d, setv, put }) {
+    const out = [], numIn = (k, ph) => el("input", { type: "number", value: it[k] ?? "", placeholder: ph || "", onchange: (e) => { const v = e.target.value.trim(); setv(k, v === "" ? null : +v); } });
+    out.push(row(Kit.t("builder.f.unit"), el("input", { type: "text", value: it.unit || "", maxlength: "8", placeholder: Kit.t("builder.value.unitPh"), onchange: (e) => setv("unit", e.target.value.trim()) })),
+      row(Kit.t("builder.value.decimals"), el("select", { onchange: (e) => setv("dec", e.target.value === "" ? null : +e.target.value) }, optList([[0, "0"], [1, "1"], [2, "2"]], it.dec, Kit.t("builder.f.automatic")))),
+      row(Kit.t("builder.dve.min"), numIn("min")), row(Kit.t("builder.dve.max"), numIn("max")));
+    if (d && /plug|outlet|switch/.test(d.kind || "") || it.runW) out.push(row(Kit.t("builder.dve.runW"), numIn("runW")), el("small.muted", {}, Kit.t("builder.dve.runWNote")));
+    if (d && /garage/.test(d.kind || "") || it.contact) out.push(row(Kit.t("builder.dve.contact"), dvDevButton(it.contact ?? null, (v) => setv("contact", v))), row(Kit.t("builder.dve.travel"), numIn("travel", "15")));
+    // (v3.0.4) "Ask before doing it": Yes / Cancel on the panel first; a garage door always asks (and the PIN)
+    const gar = !!(d && /garage/.test(d.kind || ""));
+    if (d || it.tap) out.push(el("label.dve-tk", {}, el("input", { type: "checkbox", checked: gar || it.ask === true, disabled: gar, onchange: (e) => setv("ask", e.target.checked ? true : null) }),
+      el("span", {}, Kit.t("builder.dve.ask"))), el("small.muted", {}, Kit.t(gar ? "builder.dve.askGarage" : "builder.dve.askNote")));
+    if (it.st) out.push(el("div.dve-old", {}, el("small.muted", {}, Kit.t("builder.dve.oldItem")),
+      el("button.ghost.small", { type: "button", onclick: () => { delete it.st; st.dvUndo = c.i; put(); } }, Kit.t("builder.dve.newLook"))));
+    out.push(el("div.bld-row.dve-mini", {},
+      el("button.ghost.small", { type: "button", disabled: c.o.items.length >= 24, onclick: () => { const cp = structuredClone(it); if (DE().placed(cp)) Object.assign(cp, DE().dragRect(cp, "move", 30, 30)); c.o.items.splice(n + 1, 0, cp); st.inner.sel = n + 1; put(); } }, Kit.t("builder.f.duplicate")),
+      el("button.ghost.small.bad", { type: "button", onclick: () => dvRemove(c, n) }, Kit.t("builder.pal.remove"))));
+    return out;
+  }
+
+  // ---------- the open card on the screen: each item a box over the panel's own (measured in the live panel) ----------
+  // Freeform: no grid and no borders — a dashed outline only on the picked one; a press near an edge or a corner resizes
+  // (the cursor shows it, there are no marks), anywhere else moves. Tiles: its right / bottom edge spans it over more
+  // tiles. List / Tiles: drag it to its place — a drop line shows where.
+  function dvMeasure(c) {
+    const bx = st.inner && st.inner.box;
+    try {
+      const doc = $(".bld-frame").contentDocument, card = doc && bx && doc.querySelector(`[data-gi="${CSS.escape(c.i)}"]`), dv = card && card.querySelector(".dv");
+      if (!dv) return null;
+      const pct = (r) => ({ left: ((r.left - bx.x0) / bx.w0) * 100, top: ((r.top - bx.y0) / bx.h0) * 100, width: (r.width / bx.w0) * 100, height: (r.height / bx.h0) * 100 });
+      return { area: pct(dv.getBoundingClientRect()), items: [...dv.querySelectorAll("[data-gitem]")].map((x) => ({ n: +x.dataset.gitem, ...pct(x.getBoundingClientRect()) })) };
+    } catch { return null; }
+  }
+  const pctBox = (r) => `left:${r.left}%;top:${r.top}%;width:${r.width}%;height:${r.height}%`;
+  const freeBox = (r) => `left:${r.x / 10}%;top:${r.y / 10}%;width:${r.w / 10}%;height:${r.h / 10}%`;
+  function drawDvInner(c) {
+    const over = $(".bld-over"); if (!over) return;
+    const items = c.o.items || [], look = dvLook(c.o), m = dvMeasure(c), kids = [];
+    if (!m) { st.dvTry = (st.dvTry || 0) + 1; if (st.dvTry < 20) dvRedraw(); }   // (the panel not drawn yet)
+    else {
+      st.dvTry = 0;
+      const area = el("div.dve-area", { style: pctBox(m.area) });
+      area.addEventListener("pointerdown", (e) => { if (e.target === area && e.button === 0 && st.inner.sel != null) { st.inner.sel = null; drawInner(); side(); } });
+      kids.push(area);
+      if (look === "free") {
+        const tmp = items.map((it) => ({ ...it }));
+        DE().autoPlace(tmp);   // (one not placed yet: where the panel would put it, until it's moved)
+        tmp.forEach((it, n) => area.append(dvBox(c, n, freeBox(it), look)));
+      } else m.items.filter((q) => items[q.n]).forEach((q) => kids.push(dvBox(c, q.n, pctBox(q), look)));
+    }
+    over.replaceChildren(...kids, el("div.bk-ed-tip", {}, Kit.t(items.length ? `builder.dve.tip.${look}` : "builder.dve.tipEmpty")));
+  }
+  function dvBox(c, n, style, look) {
+    const it = c.o.items[n], b = el("div.dve-it" + (st.inner.sel === n ? ".sel" : "") + (dvTodo(it) ? ".todo" : "") + `.lk-${look}`, { "data-n": String(n), style, title: dvName(it) });   // i18n-ok (class names, CSS)
+    // (Freeform: every edge and corner; Tiles: the right and bottom edges; List, one big item: it only moves)
+    const zoneAt = (e) => {
+      const r = b.getBoundingClientRect(), z = DE().zone(e.clientX - r.left, e.clientY - r.top, r.width, r.height);
+      return look === "free" ? z : look === "tiles" && /^(e|s|se)$/.test(z) ? z : look === "single" ? "pick" : "move";
+    };
+    b.addEventListener("pointermove", (e) => { if (!st.pdrag) b.style.cursor = DE().CURSOR[zoneAt(e)] || "pointer"; });
+    b.addEventListener("pointerdown", (e) => dvDrag(e, c, n, zoneAt(e), look, b));
+    return b;
+  }
+  // the X / Y / W / H boxes follow a drag
+  const dvSync = (r) => document.querySelectorAll(".bld-side .dve-xywh input[data-k]").forEach((x) => { if (r[x.dataset.k] != null) x.value = String(r[x.dataset.k] / 10); });
+  function dvDrag(e, c, n, z, look, node) {
+    if (e.button !== 0) return;
+    const it = c.o.items[n]; if (!it) return;
+    e.preventDefault(); e.stopPropagation();
+    if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+    const over = $(".bld-over"), O = over.getBoundingClientRect(), A = node.parentElement.getBoundingClientRect(), R0 = node.getBoundingClientRect();
+    try { node.setPointerCapture(e.pointerId); } catch {}
+    if (st.inner.sel !== n) { st.inner.sel = n; over.querySelectorAll(".dve-it").forEach((x) => x.classList.toggle("sel", +x.dataset.n === n)); side(); }
+    if (z === "pick") return;
+    const r0 = DE().placed(it) ? { x: it.x, y: it.y, w: it.w, h: it.h } : DE().fixRect({ x: ((R0.left - A.left) / A.width) * 1000, y: ((R0.top - A.top) / A.height) * 1000, w: (R0.width / A.width) * 1000, h: (R0.height / A.height) * 1000 });
+    const s0 = { px: e.clientX, py: e.clientY, sw: it.sw || 1, sh: it.sh || 1 };
+    let moved = false, line = null, drop = null;
+    const mv = (ev) => {
+      const dx = ev.clientX - s0.px, dy = ev.clientY - s0.py;
+      if (!moved && Math.hypot(dx, dy) < 4) return;
+      if (!moved) { moved = true; document.body.classList.add("bld-dragging"); }
+      if (look === "free") {
+        const r = DE().dragRect(r0, z, (dx / A.width) * 1000, (dy / A.height) * 1000);
+        st.pdrag = { n, r }; node.style.cssText = freeBox(r); dvSync(r); post();
+      } else if (z !== "move") {   // (a tile: its span, in whole tiles; the box follows the pointer)
+        const r = DE().span({ sw: s0.sw, sh: s0.sh }, z, dx, dy, R0.width / s0.sw, R0.height / s0.sh);
+        st.pdrag = { n, r };
+        node.style.width = `${Math.max(12, R0.width + (z.includes("e") ? dx : 0))}px`; node.style.height = `${Math.max(12, R0.height + (z.includes("s") ? dy : 0))}px`;
+        post();
+      } else {   // (List / Tiles: to another place; the drop line shows where)
+        const rects = [...over.querySelectorAll(".dve-it")].sort((a, b) => a.dataset.n - b.dataset.n).map((x) => {
+          if (x === node) return { left: R0.left - O.left, top: R0.top - O.top, width: R0.width, height: R0.height };
+          const q = x.getBoundingClientRect(); return { left: q.left - O.left, top: q.top - O.top, width: q.width, height: q.height };
+        });
+        drop = DE().dropAt(rects, n, ev.clientX - O.left, ev.clientY - O.top);
+        if (!line) { line = el("div.dve-line"); over.append(line); }
+        Object.assign(line.style, { left: `${drop.line.x - (drop.line.w ? 0 : 2)}px`, top: `${drop.line.y - (drop.line.h ? 0 : 2)}px`, width: `${drop.line.w || 4}px`, height: `${drop.line.h || 4}px` });
+        node.style.transform = `translate(${dx}px, ${dy}px)`;   // i18n-ok (class names, CSS)
+      }
+    };
+    const up = (ev) => {
+      node.removeEventListener("pointermove", mv); node.removeEventListener("pointerup", up); node.removeEventListener("pointercancel", up);
+      st.dragEsc = null; try { node.releasePointerCapture(e.pointerId); } catch {}
+      document.body.classList.remove("bld-dragging"); if (line) line.remove();
+      const d = st.pdrag; st.pdrag = null;
+      if (moved && ev.type === "pointerup") {
+        if (look === "free" && d) Object.assign(it, d.r);
+        else if (d && d.r.sw) { for (const k of ["sw", "sh"]) if (d.r[k] > 1) it[k] = d.r[k]; else delete it[k]; }
+        else if (drop && DE().move(c.o.items, n, drop.at)) st.inner.sel = drop.at;
+        changed();
+      }
+      drawInner(); dvRedraw(); post();
+    };
+    node.addEventListener("pointermove", mv); node.addEventListener("pointerup", up); node.addEventListener("pointercancel", up);
+    st.dragEsc = () => up({ type: "pointercancel" });
+  }
+  // Esc / Done: back to the cards; Delete: remove the picked item; the arrows: Freeform moves it 1 % (Shift: 10 %), List /
+  // Tiles move it a place earlier / later
+  function dvKey(e, t, typing, c) {
+    if (e.key === "Escape" && !typing && !(t.closest && t.closest("select"))) { e.preventDefault(); return leaveInner(); }
+    const n = st.inner.sel, it = n != null ? (c.o.items || [])[n] : null;
+    if (!it || !onScreen(t) || (t.closest && t.closest("input, textarea, select, button, [contenteditable]"))) return;   // i18n-ok
+    if (["Delete", "Backspace"].includes(e.key)) { e.preventDefault(); return dvRemove(c, n); }   // i18n-ok
+    if (!/^Arrow/.test(e.key)) return;
+    e.preventDefault();
+    if (dvLook(c.o) === "free") {
+      if (!DE().placed(it)) DE().autoPlace(c.o.items);
+      Object.assign(it, DE().nudge(it, e.key, e.shiftKey)); changed(true, `dvnudge:${c.i}:${n}`);
+    } else {
+      const to = n + (["ArrowLeft", "ArrowUp"].includes(e.key) ? -1 : 1);   // i18n-ok
+      if (!DE().move(c.o.items, n, to)) return;
+      st.inner.sel = to; changed();
+    }
+    drawInner(); dvRedraw();
   }
 
   function camSelect(cur, pick) {
@@ -2372,10 +3272,12 @@
       (st.ctx.views || []).length ? el("optgroup", { label: Kit.t("builder.cam.views") }, st.ctx.views.map((v) => el("option", { value: v.id, selected: cur === v.id }, v.name))) : null);
   }
 
-  function actionEditor(c, k, label) {
+  // ownId (v3.0.4, a Devices card's item): a device action starts on the item's own device — never asks for a second one
+  function actionEditor(c, k, label, ownId = null) {
     const a = c[k] || { do: "none" };
     const put = (patch) => {
       const next = { ...a, ...patch };
+      if (ownId != null && DEV_ACTIONS.includes(next.do) && next.id == null) next.id = ownId;
       if (next.do === "none") delete c[k]; else c[k] = next;
       refreshItem(c); changed();
     };
@@ -2518,6 +3420,10 @@
         const bad = a && cmdValue(a); if (bad && stop(Kit.t({ tap: "builder.save.badTap", hold: "builder.save.badHold", dbl: "builder.save.badDbl" }[k], { problem: bad }))) return;
       }
       if (["show", "hi"].some((k) => (c[k] || []).some((r) => !r.id)) && stop(Kit.t("builder.save.ruleDevice"))) return;
+      if (c.t === "devices") {   // (a scene / button item may do only its action; every other item needs its device)
+        const n = (c.o.items || []).findIndex((it) => !it.id && !(["scene", "button"].includes(it.k) && it.tap));
+        if (n >= 0 && stop(Kit.t("builder.save.devicesTodo", { n: n + 1 }))) return;
+      }
       if (c.t === "scenes") {
         const n = (c.o.items || []).findIndex((it) => !it.a || it.a.do === "none" || (DEV_ACTIONS.includes(it.a.do) && !it.a.id) || (it.a.do === "cmd" && !it.a.c)
           || (it.a.do === "room" && !it.a.room) || (it.a.do === "page" && !it.a.page) || (it.a.do === "camera" && !it.a.cam));
@@ -2549,7 +3455,7 @@
         const b = (list || []).map(cmdValue).find(Boolean);
         if (b && stop(w ? Kit.t("builder.save.devWheel", { n: w, problem: b }) : Kit.t("builder.save.wheel", { problem: b }))) return;
       }
-      if (c.t === "countdown" && !c.o.date && stop(Kit.t("builder.plain.countdown"))) return;
+      // (v3.0.4: an old Countdown with no date — kept as it was, not moved over — saves as it is; it says "Pick a date")
       const u = userCard(c.t);
       if (u && u.slots.some((sl) => sl.required && !((c.o || {}).bind || {})[sl.key]) && stop(Kit.t("builder.save.ucardDevices", { name: u.name }))) return;
     }
@@ -2569,7 +3475,9 @@
     }
     if (st.look.theme !== st.look0.theme) set["look.theme"] = st.look.theme;
     if (st.look.background !== st.look0.background) set["look.background"] = st.look.background;
-    for (const k of ["dockStyle", "dockLabels", "dockAutoHide"]) if (st.look[k] !== st.look0[k]) set[k] = st.look[k];
+    for (const k of ["dockStyle", "dockLabels", "dockAutoHide", "dockAt", "roomOrder"]) if (lookDiff(k)) set[k] = st.look[k];
+    // (hidden rooms are merged where they're kept: each room this changed — shown again = false)
+    if (lookDiff("hiddenRooms")) set.hiddenRooms = Object.fromEntries([...new Set([...Object.keys(st.look.hiddenRooms), ...Object.keys(st.look0.hiddenRooms)])].map((k) => [k, st.look.hiddenRooms[k] === true]));
     if (!Object.keys(set).length) { st.dirty = false; window.removeEventListener("beforeunload", unsavedGuard); dirtyNow(); return toast(Kit.t("builder.save.nothing")); }
     // (v2.5.0: the layouts as they were loaded go along — saved only if nobody saved them meanwhile, another tab or person)
     const base = st.ctx.latest ? st.ctx.managed : null, was = {};

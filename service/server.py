@@ -23,6 +23,9 @@ Design: docs/dashboard-service.md. Python 3.12 stdlib; paho-mqtt is optional (ch
   PATCH /api/manage/alerts -> the admin acknowledges alerts waiting on the panels (levels 4–5: the panel PIN)
   GET/PATCH /api/manage/weather -> (v3.0.0, admins) Integrations → Weather: the Hubitat weather device, its warnings on
                               the panels, the weather card (service/weather_device.py; the bridge reads the setting)
+  GET /api/weather/forecast, /api/weather/hours -> (v3.0.4, a paired panel) OpenWeatherMap with the house's key, 14 days,
+                              a day's hours (service/weather_sources.py); GET /api/manage/weather/sources: the builder's
+                              "Weather from" (what's connected — never the key)
 
 Environment: PORT (8088), BIND (0.0.0.0), DATA_DIR (<project>/data), DASHBOARD_DIR (<project>/dashboard),
 MQTT_HOST (localhost; empty = no MQTT), MQTT_PORT (1883), MQTT_USER / MQTT_PASSWORD (optional, never logged),
@@ -63,10 +66,13 @@ try:  # `python -m service.server` / tests; or run from inside service/
     from service.panel_pin import PanelPin
     from service import feedback
     from service import geocode
-    from service import activity_log, art_sources, calendars, camera_frames, event_icons, cards, guest_wifi, health, house_devices, house_settings, layouts, lists, live_state, manager_auth, manager_prefs, overview, own_cameras, panel_settings, pictures, templates
-    from service import weather_device
+    from service import activity_log, art_sources, calendars, camera_frames, camera_labels, event_icons, cards, guest_wifi, health, house_devices, house_settings, layouts, lists, live_state, manager_auth, manager_prefs, overview, own_cameras, panel_settings, pictures, templates
+    from service import weather_device, weather_sources
     from service import device_rules
     from service import panel_devices, switch_rule
+    from service import devices_card
+    from service import bins, time_cards, timers
+    from service import unifi_net
     from service import broker
 
 except ImportError:  # pragma: no cover
@@ -83,18 +89,25 @@ except ImportError:  # pragma: no cover
     import templates
     import art_sources
     import guest_wifi
+    import unifi_net
     import health
     import own_cameras
     import house_devices
     import panel_settings
     import pictures
     import house_settings
+    import camera_labels
     import manager_auth
     import manager_prefs
     import live_state
     import overview
     import device_rules
+    import devices_card
+    import bins
+    import time_cards
+    import timers
     import weather_device
+    import weather_sources
     import panel_devices
     import switch_rule
     import broker
@@ -300,6 +313,10 @@ class Config:
         self.guest_wifi = env.get("GUEST_WIFI") == "1"
         if self.guest_wifi:
             page["guestWifi"] = True
+        # (v3.0.4) the UniFi cards' child runs (service/unifi_net.py, with the same console): /api/panel/<id>/unifi
+        self.unifi_net = env.get("UNIFI_NET") == "1"
+        if self.unifi_net:
+            page["unifiNet"] = True
         page["version"] = self.version
         if self.release:
             page["release"] = self.release
@@ -733,6 +750,7 @@ class Notifier:
                     client.subscribe("hubitat/modes", qos=0)      # (v2.9.3: the Manager's Mode & alarm — retained)
                     client.subscribe("hubitat/hsm", qos=0)
                     client.subscribe(weather_device.TOPIC, qos=0)   # (v3.0.0: the weather device, as the bridge sees it)
+                    client.subscribe(timers.TOPIC, qos=1)   # (v3.0.4: a Hubitat rule's "Timer: <name>, <length>", from the bridge)
                     if self.live is not None:   # (the Overview: device values, batteries, last activity)
                         client.subscribe("hubitat/state", qos=0)
                         client.subscribe("hubitat/event", qos=0)
@@ -756,6 +774,11 @@ class Notifier:
                             self.after_weather(self.weather)
                         except Exception as e:
                             log(f"weather: not logged ({type(e).__name__})")
+                elif msg.topic == timers.TOPIC and not msg.retain and callable(getattr(self, "after_timer", None)):
+                    try:
+                        self.after_timer(msg.payload[:2048])
+                    except Exception as e:
+                        log(f"timers: a Hubitat timer not started ({type(e).__name__})")
                 if self.live is not None and msg.topic in live_state.TOPICS:
                     try:
                         self.live.on_message(msg.topic, msg.payload)
@@ -814,6 +837,37 @@ class Notifier:
         try:
             if c is not None and c.is_connected():
                 c.publish("dashboard/lists/changed", "{}", qos=0, retain=False)
+        except Exception:
+            pass
+
+    def shared_changed(self, what):
+        """(v3.0.4) A bin was taken out / a timer pressed (what: "bins" | "timers"): the panels fetch them again."""
+        c = self.client
+        try:
+            if c is not None and c.is_connected():
+                c.publish(f"dashboard/{what}/changed", "{}", qos=0, retain=False)
+        except Exception:
+            pass
+
+    def timer_speak(self, msg):
+        """(v3.0.4) "Timer up" on a house speaker: one signed {"id", "text", "vol"?, "rid", "exp", "sig"} for the bridge
+        (timers.SPEAK_TOPIC; it checks the device and sends "speak"). False when there's no broker to send it on."""
+        c = self.client
+        try:
+            if c is None or not c.is_connected():
+                return False
+            c.publish(timers.SPEAK_TOPIC, json.dumps(msg, separators=(",", ":")), qos=1, retain=False)
+            return True
+        except Exception:
+            return False
+
+    def owm_alerts(self, doc):
+        """(v3.0.4) The OpenWeatherMap warnings (weather_sources.Sources.alerts_doc), retained, for the bridge: they join
+        the panels' alerts there as the weather device's do (service/weather_device.py)."""
+        c = self.client
+        try:
+            if c is not None and c.is_connected():
+                c.publish(weather_device.OWM_TOPIC, json.dumps(doc, separators=(",", ":")), qos=1, retain=True)
         except Exception:
             pass
 
@@ -1154,9 +1208,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 or re.fullmatch(r"/api/manage/devices/\d{1,9}/command", bare) is not None or bare in (
                 "/api/pin", "/api/guest-wifi", "/api/manage/login", "/api/manage/users", "/api/manage/devices", "/api/manage/settings",
                 "/api/manage/never", "/api/manage/guest-wifi", "/api/manage/pictures", "/api/manage/cameras", "/api/manage/groups", "/api/manage/rooms",
-                "/api/manage/cards", "/api/manage/templates", "/api/manage/calendars", "/api/manage/prefs", "/api/lists",
+                "/api/manage/cards", "/api/manage/templates", "/api/manage/calendars", "/api/manage/prefs", "/api/lists", "/api/bins", "/api/timers",
+                "/api/manage/bins", "/api/manage/timers",
                 "/api/manage/health", "/api/manage/guest-lockdown", "/api/manage/house/command", "/api/manage/activity/retention", "/api/manage/feedback",
-                "/api/manage/weather", "/api/pair", "/api/manage/pairing", "/api/manage/pin", "/api/manage/event-icons")
+                "/api/manage/weather", "/api/manage/unifi", "/api/manage/upgrade", "/api/pair", "/api/manage/pairing", "/api/manage/pin", "/api/manage/event-icons")
             extra = {"Allow": "GET, HEAD, PATCH" if patchable else "GET, HEAD"} if e.code == 405 else None
             self._json(e.code, {"error": e.message, **e.extra}, extra)
         except (ConnectionError, TimeoutError):
@@ -1730,6 +1785,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._manage_pictures()
         if path == "/api/manage/guest-wifi":
             return self._manage_guest_wifi()
+        if path == "/api/manage/unifi":
+            return self._manage_unifi()
+        if path == "/api/manage/upgrade":   # (v3.0.4) the admin's "What changed in 3.0.4"
+            return self._manage_upgrade()
         if path == "/api/manage/cameras":
             return self._manage_cameras()
         if path == "/api/manage/cameras/motion":   # v2.6.0: when each camera last saw motion (the hub's events)
@@ -1766,8 +1825,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._manage_calendars()
         if path == "/api/manage/event-icons":   # (v3.0.2: Integrations → Calendars → Event icons, the admin)
             return self._manage_event_icons()
+        if path == "/api/manage/display":   # (v3.0.4: Display settings — the house's units and date formats, the admin)
+            return self._manage_display()
         if path == "/api/manage/weather":   # (v3.0.0: Integrations → Weather, the admin)
             return self._manage_weather()
+        if path == "/api/manage/weather/sources":   # (v3.0.4: the builder's "Weather from" — logins that edit layouts)
+            self._manage_need("panels")
+            if self.command not in ("GET", "HEAD"):
+                raise ApiError(405, "Method not allowed")
+            return self._json(200, {"ok": True, **self._weather_sources()})
+        if path in ("/api/bins", "/api/timers"):   # (v3.0.4) Bins / Trash marks, the timers' runs: shared by every panel
+            return self._bins_timers(path[5:], self._device())
+        if path in ("/api/manage/bins", "/api/manage/timers"):   # (v3.0.4) the builder: the holidays, the timer presets
+            return self._manage_bins_timers(path[12:])
         if path == "/api/lists":   # the shared lists and notes (lists.py): every panel reads and changes them
             self._device()   # (v3.0.2: a paired panel or a Manager login)
             return self._lists()
@@ -1776,6 +1846,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if self.command not in ("GET", "HEAD"):
                 raise ApiError(405, "Method not allowed")
             return self._json(200, {"cards": [cards.public(c) for c in self.app.cards.all()]})
+        if path in ("/api/weather/forecast", "/api/weather/hours"):   # (v3.0.4: OpenWeatherMap, 14 days, a day's hours)
+            self._device()
+            return self._weather_get(path.rsplit("/", 1)[1])
         m = re.fullmatch(r"/api/manage/panels/([^/]+)/bench", path)
         if m:   # the Manager's live view of a running benchmark
             self._manage_need(None, m.group(1).lower())
@@ -1806,6 +1879,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         m = re.fullmatch(r"/api/panel/([^/]+)/events", path)
         if m:
             return self._panel_events(m.group(1))
+        m = re.fullmatch(r"/api/panel/([^/]+)/unifi", path)
+        if m:
+            return self._panel_unifi(m.group(1))
         m = re.fullmatch(r"/api/panel/([^/]+)/agent", path)
         if m:
             return self._panel_agent(m.group(1))
@@ -1835,7 +1911,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not doc["exists"]:
                 # only the Manager (the admin) sets panels up: a tablet at an unknown address shows "not set up"
                 raise ApiError(404, "not-set-up")
-            return self._json(200, doc)
+            return self._json(200, {**doc, "house": self.app.house_public()})   # (v3.0.4: the house's units, camera labels)
         if self.command == "PATCH":
             return self._patch(panel)
         raise ApiError(405, "Method not allowed")
@@ -2120,7 +2196,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                    "dataWritable": self.app.store.writable()}
             if me:
                 out.update(me.public(), permissions=self._permission_list(), notices=auth.notices(me.user),
-                           pwAt=auth.info(me.user).get("pwAt"), confirmed=auth.confirmed(self._manage_token()))
+                           pwAt=auth.info(me.user).get("pwAt"), confirmed=auth.confirmed(self._manage_token()),
+                           display=self.app.display.load())   # (v3.0.4: the house's date and time format, for the Manager's logs)
             return self._json(200, out, extra={"Cache-Control": "no-store"})
         if self.command != "PATCH":
             raise ApiError(405, "Method not allowed")
@@ -2475,7 +2552,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return self._json(200, {"ok": True, "restarting": os.environ.get("SKYPANE_SUPERVISED") == "1"})
 
     # (v2.7.0) which health problems belong to which group of the Integrations page
-    SETTINGS_PROBLEMS = {"Hubitat": ("hubitat",), "UniFi Protect": ("protect",), "Guest Wi-Fi": ("unifi", "guestwifi", "guest"),
+    SETTINGS_PROBLEMS = {"Hubitat": ("hubitat",), "UniFi Protect": ("protect",), "Guest Wi-Fi": ("unifi", "guestwifi", "guest"), "UniFi Network": ("unifinet",),
                          "MQTT broker": ("mqtt",), "Cameras": ("go2rtc", "camera", "cameras", "video"), "Calendars": ("calendar",),
                          "Music": ("music",)}   # (v3.0.2: the Music page had no status at all)
 
@@ -2483,7 +2560,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
     # means the hub / Protect / the console really answered with this key — not just that something is filled in
     SETTINGS_PROOF = {"Hubitat": ("HUBITAT_HOST", "HUBITAT_TOKEN", "Maker API token", HUB_STATUS_FILE),
                       "UniFi Protect": ("PROTECT_HOST", "PROTECT_API_KEY", "Protect API key", PROTECT_STATUS_FILE),
-                      "Guest Wi-Fi": ("UNIFI_HOST", "UNIFI_API_KEY", "UniFi Network API key", guest_wifi.STATUS)}
+                      "Guest Wi-Fi": ("UNIFI_HOST", "UNIFI_API_KEY", "UniFi Network API key", guest_wifi.STATUS),
+                      # (v3.0.4) the UniFi cards' reads (service/unifi_net.py): Connected / Trouble in its own words
+                      "UniFi Network": ("UNIFI_HOST", "UNIFI_API_KEY", "UniFi Network API key", unifi_net.STATUS)}
 
     def _proof(self, group, st, saved_at):
         """None (fine), or a state for the group: "nokey" / "noaddress" / "waiting" (no answer since the last save) /
@@ -2552,8 +2631,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         on = {"Hubitat": parts["hub"], "MQTT broker": parts["broker"], "Cameras": parts["cameras"],
               "UniFi Protect": bool(st.get("PROTECT_HOST") or st.get("PROTECT_API_KEY")),
               "Guest Wi-Fi": bool(st.get("UNIFI_HOST") or st.get("UNIFI_API_KEY")),
+              "UniFi Network": bool(st.get("UNIFI_HOST") or st.get("UNIFI_API_KEY")),
               "Calendars": bool(self.app.calendars.house()), "Music": bool(st.get("SONOS_PANEL_URL"))}
         probs = self.app.health.current()
+        if on["UniFi Network"]:
+            self.app.unifi_demand()   # (v3.0.4: the Manager asks — the UniFi child reads now, so "Checking…" turns into an answer)
         out = {}
         for group, kinds in self.SETTINGS_PROBLEMS.items():
             mine = [p for p in probs if re.split(r"[:.]", p["id"])[0] in kinds]
@@ -2581,7 +2663,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # (v3.0.0) the weather device, as the bridge last said (the page words it: reason, device, last change)
         cfg, wst = self.app.weather_setting(), self.app.notifier.weather or {}
         if not (cfg.get("on") and cfg.get("device")):
-            out["Weather"] = {"state": "off", "words": "", "since": None}
+            # (v3.0.4) an OpenWeatherMap key alone: its last call's answer (key refused, over the limit, unreachable)
+            ow = self.app.wx.status()
+            out["Weather"] = {"state": "off", "words": "", "since": None} if not ow["key"] else \
+                {"state": "problem" if ow["error"] else "ok", "words": "", "since": None, "reason": f"owm-{ow['error']}" if ow["error"] else "owm"}
         else:
             bad = wst.get("reason") in ("stale", "no-data") or not wst
             out["Weather"] = {"state": "problem" if bad else "ok", "words": "", "since": None, "reason": wst.get("reason") if wst else "waiting",
@@ -3260,7 +3345,47 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "panels": [{"id": pid.lower(), "name": name} for pid, name in self.app.panel_names()],
                 "defaults": {"levels": dict(weather_device.DEFAULT_LEVELS), "extreme": list(weather_device.DEFAULT_EXTREME)},
                 "status": st, "broker": broker, "bridge": self.app.notifier.bridge() if broker is not None else None,
-                "staleAfter": weather_device.STALE_S}
+                "staleAfter": weather_device.STALE_S, "sources": self._weather_sources(cfg)}
+
+    def _weather_sources(self, cfg=None):
+        """(v3.0.4) What the weather cards may pick (the builder's "Weather from"): {hub: a device connected, owm: a key
+        set, card: the house switch as stored (Automatic's default), auto: what Automatic shows now, owmStatus: {calls
+        today, budget, every (s), places, error}} — never the key."""
+        cfg = cfg or self.app.weather_setting()
+        hub, st = bool(cfg.get("on") and cfg.get("device")), self.app.wx.status()
+        return {"hub": hub, "owm": st["key"], "card": bool(cfg.get("card")),
+                "auto": weather_sources.resolve("auto", hub, bool(cfg.get("card")), st["key"]), "owmStatus": st}
+
+    WEATHER_PER_MIN = 30
+
+    def _weather_get(self, what):
+        """(v3.0.4) GET /api/weather/forecast?lat&lon&src=owm|om, /api/weather/hours?lat&lon&date=YYYY-MM-DD&src=… (a
+        paired panel or a Manager login) → weather_sources' answers. The server's caches answer most of them; 30 a minute
+        per panel. The place is never logged."""
+        if self.command not in ("GET", "HEAD"):
+            raise ApiError(405, "Method not allowed")
+        q = {k: v[0] for k, v in self._query(6).items()}
+        src = q.get("src") if q.get("src") in ("owm", "om") else "om"
+        who = getattr(self, "manager", None)
+        caller = f"m:{who.user}" if who else f"k:{self._dk_check()[0]}"
+        now = time.monotonic()
+        with self.app.lock_geocode:
+            hits = [t for t in self.app.weather_hits.get(caller, []) if now - t < 60]
+            if len(hits) >= self.WEATHER_PER_MIN:
+                self.app.weather_hits[caller] = hits
+                return self._json(429, {"ok": False, "error": "slow-down"}, {"Retry-After": "60"})
+            self.app.weather_hits[caller] = hits + [now]
+        if what == "forecast":
+            r = self.app.wx.forecast(q.get("lat"), q.get("lon"), src, home=q.get("home") == "1")
+            if r.get("alerts"):   # (OpenWeatherMap's warnings for the weather card's ribbon: ids and levels like the device's)
+                cfg = self.app.weather_setting()
+                r["warnings"] = [{"id": weather_device.alert_id(a["event"], a.get("start")), "lvl": lvl, "title": a["event"], "to": cfg.get("panels") or ["all"]}
+                                 for a in r["alerts"] if cfg.get("warnings") and (lvl := weather_device.classify(a["event"], None, cfg))]
+        else:
+            r = self.app.wx.hours(q.get("lat"), q.get("lon"), q.get("date"), src)
+        if not r.get("ok"):
+            return self._json(400 if r.get("error") in ("place", "date") else 502, r, extra={"Cache-Control": "no-store"})
+        return self._json(200, r, extra={"Cache-Control": "no-store"})
 
     def _manage_weather(self):
         """(v3.0.0) GET → _weather_answer. PATCH {set: {on?, device?, card?, warnings?, panels?,
@@ -3382,6 +3507,38 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return {"icons": doc["icons"], "lang": doc["lang"], "edited": doc["edited"], "damaged": doc["damaged"],
                 "defaults": event_icons.defaults(doc["lang"]), "available": event_icons.available(app.cfg.dashboard_dir),
                 "max": {"icons": event_icons.MAX_ICONS, "words": event_icons.MAX_WORDS, "word": event_icons.MAX_WORD, "name": event_icons.MAX_NAME}}
+
+    def _manage_display(self):
+        """(v3.0.4) GET → {display, choices, panels: [{id, name, temp, wind}]} (a panel's own units: "" = follows the
+        house). PATCH {set: {key: value}} (house_settings.DISPLAY) saves the house's settings; the panels told at once
+        (they pull their data again — "house" comes with it). A panel's own override: PATCH /api/manage/panels/<id>."""
+        me = self._manage_need("admin")
+
+        def answer():
+            panels_ = []
+            for p in me.panels(self.app.store.panel_ids()):
+                u = (self.app.store.get(p)["data"].get("settings") or {}).get("units")
+                u = u if isinstance(u, dict) else {}
+                panels_.append({"id": p, "name": (self.app.store.get(p)["data"].get("settings") or {}).get("panelName") or p,
+                                "temp": u.get("temp") or "", "wind": u.get("wind") or ""})
+            return {"ok": True, "display": self.app.display.load(), "panels": panels_,
+                    "choices": {k: list(v[0]) for k, v in house_settings.DISPLAY.items()}}
+        if self.command in ("GET", "HEAD"):
+            return self._json(200, answer(), extra={"Cache-Control": "no-store"})
+        if self.command != "PATCH":
+            raise ApiError(405, "Method not allowed")
+        req = self._json_body()
+        try:
+            self.app.display.change(req.get("set"))
+        except house_settings.Invalid as e:
+            return self._json(400, {"ok": False, "error": str(e)[:120]})
+        except OSError as e:
+            log(f"display settings: not saved ({type(e).__name__})")
+            raise ApiError(503, "The display settings couldn't be saved on the server")
+        log(f"manager: display settings ({', '.join(sorted(req['set']))}) by {me.user} from {self.client_address[0]}")
+        self._act("settings.display", what=",".join(sorted(req["set"]))[:80])
+        self.app.house_changed()
+        return self._json(200, answer())
 
     def _manage_event_icons(self):
         """(v3.0.2) GET → {icons, defaults, available, lang, edited, damaged, max}. PATCH {icons: [{id, name, icon, color,
@@ -4111,7 +4268,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 "mayEdit": me.can("panels", p), "shows": sorted(self._panel_cameras(p, views, cams)),
                                 "hiddenViews": sorted(k for k, v in hv.items() if v is True) if isinstance(hv, dict) else []})
             return self._json(200, {**public(own_cameras.load(priv)), "all": [dict(c, pictures=c["id"] in ids) for c in cams], "rooms": rooms,
-                                    "panels": panels_, "viewCams": views,
+                                    "panels": panels_, "viewCams": views, "labels": camera_labels.load(self.app.data_dir / "house"),
                                     "builtin": bool(self.app.cfg.page_config.get("go2rtcPort")),
                                     "separate": bool(self.app.cfg.page_config.get("go2rtc")),
                                     "protectViews": self._protect_views(), "viewMax": own_cameras.VIEW_MAX, **protect_pending()})
@@ -4119,6 +4276,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             raise ApiError(405, "Method not allowed")
         self._manage_need("cameras")
         req = self._json_body()
+        if req.get("action") == "label":   # (v3.0.4) what a camera's label shows — a login with "cameras"
+            try:
+                camera_labels.change(self.app.data_dir / "house", req.get("id"), req.get("label"), [c["id"] for c in cams])
+            except camera_labels.Invalid as e:
+                raise ApiError(400, str(e))
+            self._act("camera.change", what="label", name=str(req.get("id")))
+            self.app.house_changed()
+            return self._json(200, {"ok": True, **public(own_cameras.load(priv)), "labels": camera_labels.load(self.app.data_dir / "house")})
         if req.get("action") in ("add", "edit", "remove"):
             # cameras of your own hand go2rtc a stream address: the admins' (as the Manager shows it) — a login with
             # "cameras" keeps the views and the names of Protect's
@@ -4871,6 +5036,131 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._act("device.change", count=len(ids))
         return self._json(200, {"ok": True, "rev": rev, "changed": len(ids), "overrides": {str(i): ov.get(str(i), {}) for i in ids}})
 
+    # ---- (v3.0.4) the UniFi cards (service/unifi_net.py reads the console; these only read / write its files) -----
+    def _unifi_model(self, panel=None):
+        """The UniFi child's model with the owner's settings put on (unifi_net.apply_settings) — never a key, an IP or a
+        MAC address (the child scrubbed it). Asking keeps the child reading for unifi_net.DEMAND_FRESH s."""
+        if not self.app.cfg.unifi_net:
+            return {"enabled": False}
+        self.app.unifi_demand()
+        st = read_json_file(self.app.data_dir / "private" / unifi_net.STATUS)
+        if not st:
+            st = {"ok": False, "error": None, "starting": True}   # (the first read is on its way: a few seconds)
+        st = unifi_net.mark_stale(st, time.time(), getattr(self.app, "unifi_since", None))
+        return {"enabled": True, **unifi_net.apply_settings(st, self.app.unifi_settings(), panel=panel)}
+
+    def _panel_unifi(self, panel):
+        """GET /api/panel/<id>/unifi — the UniFi cards: {enabled, ok, readAt, error, wans, gateway, devices, protect,
+        clients, topology, counts, log, notices} (guests hidden and the notices for this panel, as the owner chose)."""
+        if self.command not in ("GET", "HEAD"):
+            raise ApiError(405, "Method not allowed")
+        pid = panel.lower()
+        if not PANEL_RE.fullmatch(panel):
+            raise ApiError(400, "Invalid panel id")
+        self._device(pid)   # (this panel's key, or a Manager login that sees it)
+        if pid not in self.app.store.panel_ids():
+            raise ApiError(404, "no such panel")
+        return self._json(200, self._unifi_model(panel=pid), extra={"Cache-Control": "no-store"})
+
+    def _manage_unifi(self):
+        """GET: the UniFi model (every client, the whole log) + the owner's settings — a login with a panel. PATCH
+        {settings: {wans: {WAN|WAN2: {label, icon}}, clientLog, logDays, newDevice, newDevicePanels, hideGuests,
+        poeWarn}} (merged into what is saved): the admin only."""
+        if self.command in ("GET", "HEAD"):
+            self._manage_read()
+            return self._json(200, {**self._unifi_model(), "settings": self.app.unifi_settings(),
+                                    "choices": {"icons": unifi_net.ICONS, "logDays": unifi_net.LOG_DAYS}},
+                              extra={"Cache-Control": "no-store"})
+        if self.command != "PATCH":
+            raise ApiError(405, "Method not allowed")
+        self._manage_need("admin")
+        new = self._json_body().get("settings")
+        if not isinstance(new, dict) or set(new) - set(unifi_net.DEFAULT_SETTINGS):
+            raise ApiError(400, "Invalid settings")
+        cur = self.app.unifi_settings()
+        merged = {**cur, **new}
+        if isinstance(new.get("wans"), dict):
+            merged["wans"] = {**cur["wans"], **new["wans"]}
+        if unifi_net.clean_settings(merged) != merged:
+            raise ApiError(400, "Invalid settings")
+        house = self.app.data_dir / "house"
+        guest_wifi.write_private(house / unifi_net.SETTINGS, json.dumps(merged, indent=1, ensure_ascii=False))
+        self._act("settings.change", keys=sorted("unifi." + k for k in new))   # (which ones — never the labels)
+        return self._json(200, {"ok": True, "settings": merged})
+
+    # ---- (v3.0.4) "What changed in 3.0.4": what the one-time moves did to the saved layouts, for the admins ----------
+    UPGRADE = ("3.0.4", devices_card.RECORD)    # (the release the notice is about; the moves' record in DATA_DIR/house)
+    UPGRADE_SEEN = "upgrade-notice-seen.json"   # (private: {version: [admin login names, small letters]} — each one's "Got it")
+
+    def _manage_upgrade(self):
+        """GET /api/manage/upgrade — the admin's "What changed" notice, read from the moves' record (devices_card.py,
+        time_cards.py … each adds its rows: read generically, only these keys): {version, at, seen, cards, panels: [{id,
+        name, gone, rows: [{where, card, from, to, title}]}], saved: [{id, name, from, to}], failed: [{panel, name, saved,
+        where, error}]}. No record (a new install, nothing moved): cards 0 and empty lists. PATCH {action: "seen" |
+        "unseen"}: this admin's "Got it" (and "Show it again"); a renamed login sees it once more."""
+        who = self._manage_need("admin")
+        ver, rec_name = self.UPGRADE
+        seen_path = self.app.data_dir / "private" / self.UPGRADE_SEEN
+        seen, me = read_json_file(seen_path), who.user.lower()
+        names = [n for n in seen.get(ver) or [] if isinstance(n, str)] if isinstance(seen.get(ver), list) else []
+        if self.command == "PATCH":
+            act = self._json_body().get("action")
+            if act not in ("seen", "unseen"):
+                raise ApiError(400, "Invalid action")
+            names = [n for n in names if n != me][-199:] + ([me] if act == "seen" else [])
+            guest_wifi.write_private(seen_path, json.dumps({**seen, ver: names}, ensure_ascii=False))
+            return self._json(200, {"ok": True, "seen": act == "seen"})
+        if self.command not in ("GET", "HEAD"):
+            raise ApiError(405, "Method not allowed")
+        rec = read_json_file(self.app.data_dir / "house" / rec_name)
+
+        def word(v, n=80):   # (a name / a type from the record: short plain text, else None)
+            return " ".join(v.split())[:n] if isinstance(v, str) and v.strip() else None
+
+        def rows(v):
+            return [r for r in v if isinstance(r, dict)][:500] if isinstance(v, list) else []
+        ids, panels = set(self.app.store.panel_ids()), []
+        for pid, rs in sorted((rec.get("panels") or {}).items()) if isinstance(rec.get("panels"), dict) else ():
+            got = [{k: word(r.get(k)) for k in ("where", "card", "from", "to", "title")} for r in rows(rs)]
+            if pid in ids and any(not r["title"] for r in got):
+                self._upgrade_whereabouts(pid, got)
+            if got and PANEL_RE.fullmatch(str(pid)):
+                panels.append({"id": pid, "name": self.app.panel_name(pid) if pid in ids else pid, "gone": pid not in ids, "rows": got})
+        saved = [{"id": word(r.get("id")), "name": word(r.get("name")), "from": word(r.get("from")), "to": word(r.get("to"))} for r in rows(rec.get("saved"))]
+        failed = [{"panel": word(r.get("panel")), "name": self.app.panel_name(r["panel"]) if r.get("panel") in ids else word(r.get("panel")),
+                   "saved": word(r.get("saved")), "where": word(r.get("where")), "error": word(r.get("error"), 200)} for r in rows(rec.get("failed"))]
+        return self._json(200, {"version": ver, "at": word(rec.get("at"), 40), "seen": me in names, "cards": sum(len(p["rows"]) for p in panels),
+                                "panels": panels, "saved": saved, "failed": failed}, extra={"Cache-Control": "no-store"})
+
+    def _upgrade_whereabouts(self, pid, got):
+        """(v3.0.4, tester 1 #7) A moved card with no title — "Home screen" alone said nothing: its first device's name
+        ("dev") and where it is on the screen ("pos": topLeft … bottomRight, by its middle), from the layout as it is."""
+        try:
+            s = self.app.store.get(pid)["data"].get("settings") or {}
+        except (OSError, ValueError, KeyError, StoreError):
+            return
+        names = {}
+        for r in (self.app.house_model() or {}).get("rooms") or []:
+            for d in r.get("devices") or [] if isinstance(r, dict) else []:
+                if isinstance(d, dict) and isinstance(d.get("id"), int):
+                    names.setdefault(d["id"], d.get("full") or d.get("name"))
+        rooms = s.get("roomGrids") if isinstance(s.get("roomGrids"), dict) else {}
+        for r in got:
+            w = r.get("where") or ""
+            g = s.get("homeGrid") if w == "home" else rooms.get("*") if w == "rooms" else rooms.get(w[5:]) if w.startswith("room:") else None
+            c = next((c for c in (g.get("cards") or []) if isinstance(c, dict) and c.get("i") == r.get("card")), None) if isinstance(g, dict) else None
+            if r["title"] or not c:
+                continue
+            o = c.get("o") if isinstance(c.get("o"), dict) else {}
+            first = next((it.get("id") for it in o.get("items") or [] if isinstance(it, dict) and isinstance(it.get("id"), int)), o.get("id"))
+            if isinstance(names.get(first), str):
+                r["dev"] = names[first][:80]
+            try:
+                fx, fy = (c["x"] + c["w"] / 2) / g["cols"], (c["y"] + c["h"] / 2) / g["rows"]
+            except (KeyError, TypeError, ZeroDivisionError):
+                continue
+            r["pos"] = ("top", "middle", "bottom")[min(2, int(fy * 3))] + ("Left", "Center", "Right")[min(2, int(fx * 3))]
+
     # ---- guest Wi-Fi (service/guest_wifi.py does the UniFi work; these only read / write its files) ----------
     def _manage_templates(self):
         """GET: the saved cards (the layout builder's "Saved" list). PATCH {action: "add", name, card} | "rename"
@@ -4908,6 +5198,63 @@ class Handler(http.server.BaseHTTPRequestHandler):
             raise ApiError(400, str(e))
         self.app.notifier.lists_changed()
         return self._json(200, doc)
+
+    def _bins_timers(self, what, auth):
+        """(v3.0.4) GET: the Bins / Trash marks and holidays (bins.py), or the timers' presets and runs (timers.py) with
+        the timers other panels connected to this one ("shared"; a Manager login: ?panel=). PATCH {action, …}: one press;
+        the panels hear dashboard/<bins|timers>/changed. The shared lists' limit: 60 changes a minute from one address."""
+        pid = auth[1] if auth[0] == "key" else (self._query(4).get("panel") or [""])[0].lower()[:40]
+        if self.command in ("GET", "HEAD"):
+            if what == "bins":
+                return self._json(200, self.app.bins.get(), extra={"Cache-Control": "no-store"})
+            doc = self.app.timers.get()
+            return self._json(200, {**doc, "shared": timers.shared_for(pid, self.app.timer_panels()) if pid else []}, extra={"Cache-Control": "no-store"})
+        if self.command != "PATCH":
+            raise ApiError(405, "Method not allowed")
+        req = self._json_body()
+        if not self.app.rate("bins-timers", self.client_address[0], 60):
+            raise ApiError(429, "Too many changes — wait a minute")
+        if what == "timers":
+            self._timer_press_ok(req, pid, auth)
+        try:
+            doc = self.app.bins.change(req, pid) if what == "bins" else                 self.app.timers.change(req, known=timers.run_ids(self.app.timer_panels()))
+        except (bins.Invalid, timers.Invalid) as e:
+            raise ApiError(400, str(e))
+        self.app.notifier.shared_changed(what)
+        return self._json(200, doc)
+
+    def _timer_press_ok(self, req, pid, auth):
+        """(v3.0.4, security) A timer press only from a panel it is on (timers.press_lock: its own card, or linked there;
+        a Manager login: a panel it sees). On a PIN-protected card (a preset's start too with pinFree false), while a
+        PIN is set: only with a "timerPress" ticket from /api/pin for exactly this action on this timer — single use."""
+        if auth[0] == "manager" and not (pid and auth[1].sees(pid)):
+            raise ApiError(403, "other-panel")
+        a, rid = req.get("action") if isinstance(req, dict) else None, req.get("id") if isinstance(req, dict) else None
+        lock = timers.press_lock(pid, rid, self.app.timer_panels())
+        if lock is None:
+            raise ApiError(403, "not-this-panel")
+        if (lock == "all" or (lock == "more" and a != "start")) and self.app.pin.is_set():
+            t = req.get("ticket")
+            if not (isinstance(t, str) and len(t) <= 120 and self.app.pin.check_ticket(t, 0, "timerPress", f"{a} {rid}")
+                    and self.app.spend_ticket(t)):
+                raise ApiError(403, "pin-required")
+
+    def _manage_bins_timers(self, what):
+        """(v3.0.4) The builder: GET the holidays / presets (any login that sees a panel); PATCH {holidays: […]} or
+        {presets: […]} — a login that edits layouts."""
+        if self.command in ("GET", "HEAD"):
+            self._manage_read()
+            return self._json(200, {"ok": True, **(self.app.bins.get() if what == "bins" else self.app.timers.get())})
+        if self.command != "PATCH":
+            raise ApiError(405, "Method not allowed")
+        self._manage_need("panels")
+        req = self._json_body()
+        try:
+            doc = self.app.bins.set_holidays(req.get("holidays")) if what == "bins" else self.app.timers.set_presets(req.get("presets"))
+        except (bins.Invalid, timers.Invalid) as e:
+            raise ApiError(400, str(e))
+        self.app.notifier.shared_changed(what)
+        return self._json(200, {"ok": True, **doc})
 
     def _guest_wifi(self, extra=None):
         """GET: the guest Wi-Fi status for the card and Settings (network name, its password for Settings — the QR
@@ -5008,10 +5355,12 @@ class App:
         self.cmd_waiters = threading.BoundedSemaphore(MANAGER_CMD_WAITERS)
         self.cmd_clock = time.monotonic   # (the rate slots' clock; the tests give it a hand-turned one)
         self._reveal_n, self._sw_last, self._ld_cache, self._ld_at = {}, {}, {}, -10.0   # (per guest switch: times it went on; its last value)
+        self._spent, self._spent_lock = {}, threading.Lock()   # (v3.0.4: the one-time tickets the server accepted itself)
         self.feedback_limits = feedback.Limits()   # (v3.0.0: Send feedback — our own budget before the relay's)
         self.notifier = Notifier(cfg, self.live)
         self.notifier.after_live = self.watch_guest_switch   # (v2.9.3: reveal tickets end when the guest switch goes on)
         self.notifier.after_weather = self.log_weather_warnings   # (v3.0.0: the activity log — weather warnings up / ended)
+        self.notifier.after_timer = self.timer_from_hub   # (v3.0.4: "Timer: Emma, Free time" from a Hubitat rule)
         self._wx_logged = None   # (the weather warnings last seen: {id: title}; None until the first message after a start)
         # (v2.9.1: the bridge's answers to the Manager's device commands are signed with a key from the house ticket key)
         self.notifier.result_key = lambda: self.pin.purpose_key(device_rules.MGR_RESULT_LABEL, create=True)
@@ -5024,15 +5373,22 @@ class App:
         self.last_export = -60.0      # (the activity CSV: at most every 10 s)
         self.prefs = manager_prefs.Prefs(cfg.data_dir / "private")   # each login's look in the Manager (v2.3.0)
         self.settings = house_settings.HouseSettings(cfg.data_dir / "private")
+        self.display = house_settings.Display(cfg.data_dir / "house")   # (v3.0.4) units and date formats, house-wide
+        # (v3.0.4) the weather the server fetches: the house's OpenWeatherMap key (read from settings.json at each call —
+        # in no process's environment, never logged or sent to a browser) and Open-Meteo's 14 days and hours
+        self.wx = weather_sources.Sources(cfg.data_dir / "house", lambda: self.settings.load().get("OWM_API_KEY", ""), log=lambda m: log(m))
+        self.wx.on_alerts = self.notifier.owm_alerts   # (v3.0.4: its warnings join the panels' alerts, through the bridge)
         self.pictures = pictures.Library(cfg.data_dir)
         self.cards = cards.Library(cfg.data_dir)
         # (v2.6.0) the Manager's camera pictures: from the built-in go2rtc inside the container, or the separate one set
         self.frames = camera_frames.Frames(camera_frames.http_fetch(
             "http://127.0.0.1:1985" if cfg.page_config.get("go2rtcPort") else getattr(cfg, "go2rtc_url", None) or cfg.page_config.get("go2rtc")))
         self.lists = lists.Lists(cfg.data_dir)
+        self.bins, self.timers = bins.Bins(cfg.data_dir), timers.Timers(cfg.data_dir)   # (v3.0.4: Bins / Trash, Countdown & timers)
         self.templates = templates.Templates(cfg.data_dir)
         self.list_hits = {}                 # client address → recent changes (a rate limit for the shared lists)
         self.geocode_hits, self.lock_geocode = {}, threading.Lock()   # login → its recent place searches (20 a minute)
+        self.weather_hits = {}   # (v3.0.4) a panel / login → its recent /api/weather/* asks (30 a minute; under lock_geocode)
         self._manual_guest = (None, None)   # (file signature, its content) — read again only when the file changes
         self.perftests = {}                 # panel → when its last performance test was asked for (one a minute)
         self.bench_live = {}                # panel → its running benchmark's progress (bench.js report; memory only)
@@ -5051,6 +5407,10 @@ class App:
                 log("devices: the device choices moved from the main panel's settings to house/device-settings.json")
         except (OSError, ValueError) as e:
             log(f"devices: could not move the device choices ({type(e).__name__})")
+        try:   # (v3.0.4) the panels' own units → the house's display settings (once)
+            self.migrate_display()
+        except (OSError, ValueError, StoreError) as e:
+            log(f"display settings: could not move the panels' units ({type(e).__name__})")
         # v2.2.0: the one PIN window (pinUnlockSeconds) becomes the general window; the alarm window starts at 30 s
         for pid in self.store.panel_ids():
             try:
@@ -5059,6 +5419,15 @@ class App:
                     log(f"panel {pid}: its PIN window became the general PIN window (Manager → Panels → Safety)")
             except (OSError, ValueError, StoreError) as e:
                 log(f"panel {pid}: could not move its PIN window ({type(e).__name__})")
+            try:   # (v3.0.4) no more arranging on the wall: the old switch dropped, the bar's edge kept
+                if panel_settings.migrate_room_bar(self.store.get(pid)["data"].get("settings")) is not None:
+                    def drop(data):   # (settings left empty stay empty — not the old ones again)
+                        s = panel_settings.migrate_room_bar(data.get("settings"))
+                        return {"settings": data.get("settings") if s is None else s}
+                    self.store.modify(pid, drop)
+                    log(f"panel {pid}: the room bar is arranged in the Manager now (Panels → Room bar)")
+            except (OSError, ValueError, StoreError) as e:
+                log(f"panel {pid}: could not update its room bar settings ({type(e).__name__})")
         # (v3.0.2) pairing replaces the built-in main panel — once: its "may switch" rule moves to house/switch-rule.json,
         # its FreeKiosk name is offered when approving the first tablet (an install from before 3.0 whose main panel
         # never set one: the old default, OLD_KIOSK), its settings go (a last backup kept); on an upgrade the other
@@ -5077,6 +5446,22 @@ class App:
                 mark.write_text("3.0.0\n", encoding="utf-8")
         except OSError:
             pass
+        # (v3.0.4) once: Device, Devices, Value, Button, Lock, Fan and Scene buttons on every saved layout (and the saved
+        # cards) become Devices cards that look the same; what moved: house/layout-upgrade-v304.json (the Manager's notice)
+        try:
+            devices_card.migrate_v304(self.data_dir, self.store, log=lambda m: log(m))
+        except (OSError, ValueError, StoreError) as e:
+            log(f"layouts (3.0.4): the one-time move to Devices cards didn't run ({type(e).__name__}) - tried again at the next start")
+        # (v3.0.4) once: Bin day, Countdown and Timers cards become Bins / Trash and Countdown & timers (the same record)
+        try:
+            time_cards.migrate_v304(self.data_dir, self.store, log=lambda m: log(m))
+        except (OSError, ValueError, StoreError) as e:
+            log(f"layouts (3.0.4): the move to Bins / Trash and Countdown & timers didn't run ({type(e).__name__}) - tried again at the next start")
+        # (v3.0.4) once: each weather card gets the source it showed (the house switch: Hubitat device / Open-Meteo)
+        try:
+            weather_sources.migrate_v304(self.data_dir, self.store, self.weather_setting(), log=lambda m: log(m))
+        except (OSError, ValueError, StoreError) as e:
+            log(f"weather (3.0.4): the weather cards' sources weren't written ({type(e).__name__}) - tried again at the next start")
         self.paired = panel_devices.PanelDevices(cfg.data_dir / "private")   # (v3.0.2: the tablets' device keys, hashed)
         if moved.get("ran") and not moved.get("mainRemoved") and had_login and self.paired.doc.get("legacyKiosk") is None:
             # (an install whose main panel never saved anything: its tablet still had the default FreeKiosk name)
@@ -5168,6 +5553,64 @@ class App:
         n = self._reveal_n.get(lock["switch"], 0) if lock else 0
         return f"{self._boot}{n:x}"
 
+    def timer_panels(self):
+        """(v3.0.4) {panel id: (its name, its settings)} — where the Countdown & timers cards are (timers.py)."""
+        panels = {}
+        for p in self.store.panel_ids():
+            try:
+                s = self.store.get(p)["data"].get("settings") or {}
+            except (OSError, ValueError, KeyError, StoreError):
+                continue
+            panels[p] = (s.get("panelName") or p if isinstance(s, dict) else p, s)
+        return panels
+
+    def speak_timers_up(self, ids, now=None):
+        """(v3.0.4) The runs that just ran out (ids): their timers' house speakers speak the timer's words — signed for
+        the bridge (timers.SPEAK_LABEL), each good for 30 s. → how many were sent."""
+        jobs = timers.speak_jobs(set(ids), self.timer_panels())
+        key = self.pin.purpose_key(timers.SPEAK_LABEL, create=True) if jobs else None
+        if not key:
+            return 0
+        exp, sent = int(now if now is not None else time.time()) + 30, 0
+        for did, words, vol in jobs:
+            msg = {"id": did, "text": words, **({"vol": vol} if vol else {}), "rid": secrets.token_hex(12), "exp": exp}
+            msg["sig"] = device_rules.sign(key, msg)
+            sent += bool(self.notifier.timer_speak(msg))
+        log(f"timers: Timer up on {sent} of {len(jobs)} house speaker(s)")
+        return sent
+
+    def start_timer_speakers(self):
+        """(v3.0.4) Every second: a running timer reaching its end → speak_timers_up (only the timers with speakers say
+        anything). An end missed while the service was stopped stays missed — never spoken late."""
+        def loop():
+            last = int(time.time() * 1000)
+            while True:
+                time.sleep(1)
+                now = int(time.time() * 1000)
+                try:
+                    due = [k for k, e in self.timers.ends().items() if last < e <= now]
+                    if due:
+                        self.speak_timers_up(due)
+                except Exception as e:   # (never let the watcher die)
+                    log(f"timers: Timer up on the speakers failed ({type(e).__name__})")
+                last = now
+        threading.Thread(target=loop, name="timer-speakers", daemon=True).start()
+
+    def timer_from_hub(self, payload):
+        """(Notifier.after_timer, v3.0.4) A Hubitat rule's "Timer: <name>, <preset | d HH:MM>" (the bridge took it from
+        the Skypane Notifier, timers.TOPIC): every timer of that name starts; the panels hear dashboard/timers/changed."""
+        try:
+            m = json.loads(payload)
+        except (ValueError, UnicodeDecodeError):
+            m = None
+        cmd = timers.parse_command(f"Timer: {m.get('name')}, {m.get('len')}") if isinstance(m, dict) and m.get("v") == 1 else None
+        if not cmd:
+            return log("timers: a Hubitat timer command not understood")
+        ids = self.timers.start_named(cmd, self.timer_panels())
+        log(f"timers: Hubitat started {len(ids)} timer(s) named {cmd['name']!r}" if ids else f"timers: Hubitat asked for {cmd['name']!r} — no such timer (or preset)")
+        if ids:
+            self.notifier.shared_changed("timers")
+
     def log_weather_warnings(self, st):
         """(Notifier.after_weather, v3.0.0) A weather warning the device starts reporting → "weather.alert" in the
         activity log (its level and event name), one it stops reporting → "weather.clear". The first message after a
@@ -5228,6 +5671,17 @@ class App:
         if val == "on" and self._sw_last.get(sw) != "on":
             self._reveal_n[sw] = self._reveal_n.get(sw, 0) + 1
         self._sw_last[sw] = val
+
+    def spend_ticket(self, ticket):
+        """(v3.0.4) A one-time ticket the server itself accepts (a PIN-protected timer's press): True the first time
+        only — kept until it expires."""
+        now = time.time()
+        with self._spent_lock:
+            self._spent = {t: exp for t, exp in self._spent.items() if exp > now}
+            if ticket in self._spent:
+                return False
+            self._spent[ticket] = now + 60   # (longer than a ticket lives: 30 s)
+            return True
 
     def reveal_ticket(self, pid, secs):
         """A ticket for /api/panel/<pid>/events while its calendar is blurred: "<exp>.<nonce>.<epoch>.<sig>" (HMAC with a
@@ -5397,6 +5851,43 @@ class App:
         except OSError as e:
             log(f"card devices: not written ({type(e).__name__})")
 
+    def house_public(self):
+        """(v3.0.4) What every panel gets with its data: the house's units and date formats, the camera labels."""
+        return {"display": self.display.load(), "camLabels": camera_labels.load(self.data_dir / "house")}
+
+    def house_changed(self):
+        """(v3.0.4) The display settings or a camera label changed: every panel pulls its data again (rev 0: always)."""
+        for pid in self.store.panel_ids():
+            self.notifier.changed(pid, 0, ["house"], "manager")
+
+    def migrate_display(self):
+        """(v3.0.4, once: no display.json yet) The panels' own units become the house's (house_settings.display_migrate):
+        the unit most of them show; a panel showing another keeps it as its own."""
+        if self.display.exists():
+            return
+        # (crash-safe: the plan is saved before any panel changes; a start that stopped half-way finishes that plan)
+        plan_path = self.display.path.with_name(".display-migrate.json")
+        plan = read_json_file(plan_path)
+        if isinstance(plan, dict) and isinstance(plan.get("values"), dict) and isinstance(plan.get("changes"), dict):
+            values, changes = house_settings.display_clean(plan["values"]), plan["changes"]
+        else:
+            units = {}
+            for pid in self.store.panel_ids():
+                u = (self.store.get(pid)["data"].get("settings") or {}).get("units")
+                units[pid] = u if isinstance(u, dict) else {}
+            values, changes = house_settings.display_migrate(units)
+            plan_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = plan_path.with_name(plan_path.name + ".tmp")
+            tmp.write_text(json.dumps({"values": values, "changes": changes}), encoding="utf-8")
+            os.replace(tmp, plan_path)
+        for pid, c in changes.items():
+            if isinstance(c, dict):
+                self.store.modify(pid, lambda data, c=c: {"settings": panel_settings.put(data.get("settings"), c)})
+        self.display.save(values)
+        plan_path.unlink(missing_ok=True)
+        log(f"display settings: the house shows °{values['temp']} and {house_settings.WIND_OF[values['dist']]} "
+            f"({len(changes)} panel(s) changed to keep their look)")
+
     def house_model(self):
         """The house model the bridge wrote (house/hubitat-data.js), or None."""
         try:
@@ -5405,6 +5896,23 @@ class App:
             return m if isinstance(m, dict) else None
         except (OSError, ValueError):
             return None
+
+    # ---- (v3.0.4) the UniFi cards: someone looks (the child reads only then); the owner's settings ----
+    def unifi_demand(self):
+        """A panel's UniFi card or the Manager asked: private/unifi-net-demand.json gets the time (at most every 15 s)."""
+        now = time.time()
+        if now - getattr(self, "_unifi_asked", 0) > unifi_net.DEMAND_FRESH:   # (nobody looked for a while: asked anew)
+            self.unifi_since = now
+        if now - getattr(self, "_unifi_asked", 0) < 15:
+            return
+        self._unifi_asked = now
+        try:
+            guest_wifi.write_private(self.data_dir / "private" / unifi_net.DEMAND, json.dumps({"at": now}))
+        except OSError as e:
+            log(f"unifi: ask not saved ({type(e).__name__})")
+
+    def unifi_settings(self):
+        return unifi_net.clean_settings(read_json_file(self.data_dir / "house" / unifi_net.SETTINGS))
 
     # ---- a guest network typed in the Manager (houses without a UniFi console): private/guest-wifi-manual.json ----
     GUEST_MANUAL = "guest-wifi-manual.json"
@@ -5469,6 +5977,7 @@ class Server(http.server.ThreadingHTTPServer):
     # running servers share the port there. Windows: SO_REUSEADDR WOULD let two servers share 8088, so it stays off and
     # the port is taken exclusively (SO_EXCLUSIVEADDRUSE) — TIME_WAIT doesn't block a new bind on Windows.
     allow_reuse_address = os.name != "nt"
+    request_queue_size = 64   # (v3.0.4: listen() backlog — the default 5 refused a page's burst of 8 requests on Windows)
     _slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
 
     def server_bind(self):
@@ -5560,6 +6069,7 @@ def main():
         signal.signal(signal.SIGBREAK, on_signal)
     srv.app.health.start(publish=srv.app.notifier.health)   # (every 30 s; the heartbeat goes to Hubitat)
     srv.app.calendars.start()                                # (every 5–30 minutes, the admin's setting: each link fetched again)
+    srv.app.start_timer_speakers()                           # (v3.0.4: "Timer up" on the house speakers)
     host, port = srv.server_address[:2]
     log(f"dashboard service {cfg.version} on {host}:{port} - dashboard {cfg.dashboard_dir}, data {cfg.data_dir}")
     try:

@@ -26,10 +26,10 @@
   const ago = (t) => K.ago(t, "short");   // (kit.js: one "time ago" for every page)
   const phone = () => S.isPhone();
   const day = (t) => K.when(t / 1000, "date");   // (milliseconds here; kit.js: one date formatter)
-  const TABS = [["general", K.t("panels.tab.general"), "settings"], ["look", K.t("panels.tab.look"), "layout"], ["rooms", K.t("panels.tab.rooms"), "home"], ["cameras", K.t("panels.shared.aboutcameras"), "camera"],
+  const TABS = [["general", K.t("panels.tab.general"), "settings"], ["look", K.t("panels.tab.look"), "layout"], ["dock", K.t("panels.tab.dock"), "rows"], ["rooms", K.t("panels.tab.rooms"), "home"], ["cameras", K.t("panels.shared.aboutcameras"), "camera"],
     ["people", K.t("panels.tab.people"), "users"], ["alerts", K.t("panels.tab.alerts"), "bell"], ["safety", K.t("panels.tab.safety"), "shield"], ["guest", K.t("panels.tab.guest"), "wifi"],
     ["effects", K.t("panels.tab.effects"), "sparkles"]];
-  const TOPIC = { general: "panel-general", look: "look-layout", rooms: "panel-rooms", cameras: "panel-cameras", people: "people-calendars",
+  const TOPIC = { general: "panel-general", look: "look-layout", dock: "room-bar", rooms: "panel-rooms", cameras: "panel-cameras", people: "people-calendars",
     alerts: "panel-alerts", safety: "panel-safety", guest: "guest-card", effects: "weather-effects" };
   // (every alert setting, the PIN windows, unlocking, the tablet's identity: the admin's — server.py ADMIN_PANEL_KEYS)
   const ADMIN_KEYS = new Set(["allowUnlock", "kioskName", "music.url", "cameras.go2rtc", "alertMinLevel", "quietFrom", "quietTo", "quietModes", "quietLevel4",
@@ -59,7 +59,7 @@
   const gone = (v) => v === false || v === "" || (Array.isArray(v) && !v.length) || v == null;
   // (v3.0.2) what a setting that isn't saved means — what the tabs show for it (and the panel does): put back to it, a
   // change leaves the list ("Celsius" and back to "Fahrenheit" on a panel that never had one is no change)
-  const DEF = { "units.temp": "F", "units.wind": "mph", ledStrip: false, arrangeOnPanel: false, pinSound: true, showVersion: true, homeAfter: 0, insideSensor: "panel", notifyLight: 0,
+  const DEF = { "units.temp": "", "units.wind": "", ledStrip: false, pinSound: true, showVersion: true, homeAfter: 0, insideSensor: "panel", notifyLight: 0,
     alertBeeps: true, alertSilence: false, alertMinLevel: 1, quietLevel4: true, quietFrom: -1, quietTo: -1 };
   const isSaved = (k, v, saved) => (saved[k] == null ? (k in DEF ? same(v, DEF[k]) : v == null || v === "" || (Array.isArray(v) && !v.length)) : same(v, saved[k]));
   function dropPending() { pend = {}; pendPid = null; }
@@ -710,7 +710,7 @@
     const name = data.managed.panelName || p.name;
     if (!TABS.some(([k]) => k === tab)) tab = "general";
     const mayEdit = M.can("panels", cur), admin = M.isAdmin();
-    const body = { general, look, rooms, cameras, people, alerts, safety, guest, effects }[tab](p);
+    const body = { general, look, dock: dockTab, rooms, cameras, people, alerts, safety, guest, effects }[tab](p);
     const adminTab = tab === "alerts" || tab === "safety";
     if (!mayEdit || (adminTab && !admin)) for (const x of body.querySelectorAll("input, select, textarea, button:not([data-ro-ok])")) x.disabled = true;
     else if (!admin) for (const x of body.querySelectorAll("[data-key]")) if (ADMIN_KEYS.has(x.dataset.key)) { x.disabled = true; x.title = K.t("panels.save.adminOnly"); }
@@ -806,11 +806,12 @@
         R(K.t("panels.gen.language"), K.t("panels.gen.languageHint"), (data.languages || ["en"]).length > 1
           ? select("language", data.languages.map((c) => [c, K.t(`lang.${c}`)]), g.language || "en", (v) => keep({ language: v }), K.t("panels.gen.language"))
           : el("span.ac-lang", {}, el("b", {}, K.t("lang.en")), " " + K.t("account.lang.more"))),
-        // (v3.0.0) how this panel shows the weather: settings.units {temp, wind} (unset: °F and mph, as the panel does)
-        R(K.t("panels.gen.unitTemp"), K.t("panels.gen.unitTempHint"), select("units.temp", [["F", K.t("panels.gen.unitF")], ["C", K.t("panels.gen.unitC")]],
-          g["units.temp"] || "F", (v) => keep({ "units.temp": v }), K.t("panels.gen.unitTemp"))),
-        R(K.t("panels.gen.unitWind"), K.t("panels.gen.unitWindHint"), select("units.wind", [["mph", K.t("panels.gen.unitMph")], ["km/h", K.t("panels.gen.unitKmh")]],
-          g["units.wind"] || "mph", (v) => keep({ "units.wind": v }), K.t("panels.gen.unitWind"))),
+        // (v3.0.0) how this panel shows the weather: settings.units {temp, wind} — (v3.0.4) its own; "" follows the
+        // house (Manager → Display settings)
+        R(K.t("panels.gen.unitTemp"), K.t("panels.gen.unitTempHint"), select("units.temp", [["", K.t("panels.gen.unitHouse")], ["F", K.t("panels.gen.unitF")], ["C", K.t("panels.gen.unitC")]],
+          g["units.temp"] || "", (v) => keep({ "units.temp": v }), K.t("panels.gen.unitTemp"))),
+        R(K.t("panels.gen.unitWind"), K.t("panels.gen.unitWindHint"), select("units.wind", [["", K.t("panels.gen.unitHouse")], ["mph", K.t("panels.gen.unitMph")], ["km/h", K.t("panels.gen.unitKmh")],
+          ["m/s", K.t("panels.gen.unitMs")], ["kn", K.t("panels.gen.unitKn")]], g["units.wind"] || "", (v) => keep({ "units.wind": v }), K.t("panels.gen.unitWind"))),
         R(K.t("panels.gen.kiosk"), K.t("panels.gen.kioskHint"),
           text("kioskName", g.kioskName || p.kiosk, { lower: true, label: K.t("panels.gen.kiosk") })),
         R(K.t("panels.gen.music"), K.t("panels.gen.musicHint"), text("music.url", g["music.url"], { max: 300, ph: "http://…", label: K.t("panels.gen.music") })),
@@ -821,8 +822,6 @@
         R(K.t("panels.gen.inside"), K.t("panels.gen.insideHint"), insideSel(g)),
         R(K.t("panels.gen.homeAfter"), K.t("panels.gen.homeAfterHint"),
           select("homeAfter", HOME_AFTER.concat(HOME_AFTER.some(([v]) => v === ha) ? [] : [[ha, secs(ha)]]), ha, (v) => keep({ homeAfter: +v }), K.t("panels.gen.homeAfter"))),
-        R(K.t("panels.gen.arrange"), K.t("panels.gen.arrangeHint"),
-          swi("arrangeOnPanel", g.arrangeOnPanel === true, (on) => keep({ arrangeOnPanel: on }), K.t("panels.gen.arrange"))),
         // (v3.0.3) a soft tick on the PIN pad's keys, the version in the corner (unset = on, as the panel reads them — settings.js)
         R(K.t("panels.gen.pinSound"), K.t("panels.gen.pinSoundHint"),
           swi("pinSound", g.pinSound !== false, (on) => keep({ pinSound: on }), K.t("panels.gen.pinSound"))),
@@ -913,8 +912,7 @@
   }
   function look() {
     const m = view(), theme = m["look.theme"] || "purple", home = m.homeLayout || "classic", roomDef = m.roomLayout || "G";
-    const per = m.roomLayouts || {}, dock = m.dockAt || "bottom";
-    const dockStyle = DOCK_STYLES.some(([k]) => k === m.dockStyle) ? m.dockStyle : "pill", dockLabels = typeof m.dockLabels === "boolean" ? m.dockLabels : dockStyle !== "rail";
+    const per = m.roomLayouts || {};
     const pick = (set) => saveDraw(set);
     const themes = Object.entries(window.THEMES || {});
     const ownN = (m.homeGrid && (m.homeGrid.cards || []).length) || 0, roomsN = Object.keys(m.roomGrids || {}).length;
@@ -944,14 +942,32 @@
           ownRoom(m, r.id) ? el("button.btn.sm", { type: "button", disabled: phone(), "aria-label": K.t("panels.roomBuild.editOwn", { room: r.name }),
             onclick: () => openBuilder({ room: true, key: r.id }) }, ic("layout", 14), K.t("panels.edit")) : null))),
       ], ROOM_LAYOUTS.map(([, n, d]) => K.t("panels.look.roomLayoutLine", { name: n, desc: d })).join(" · ")),
-      ...skyGroup(m, pick),
+      ...skyGroup(m, pick));
+  }
+  // (v3.0.4) everything about the room bar on one tab: shown or not, its edge (also dragged in the layout builder — never
+  // on the wall), its look, and its rooms (which, in what order)
+  function dockTab() {
+    const m = view(), dock = m.dockAt || "bottom", pick = (set) => saveDraw(set);
+    const dockStyle = DOCK_STYLES.some(([k]) => k === m.dockStyle) ? m.dockStyle : "pill", dockLabels = typeof m.dockLabels === "boolean" ? m.dockLabels : dockStyle !== "rail";
+    const hiddenRooms = m.hiddenRooms || {}, ordered = roomsInOrder(m);
+    const roomList = ordered.length ? orderList(ordered.map((r) => ({ id: r.id, label: r.name, sub: K.t(r.custom ? "panels.rooms.devicesYours" : "search.roomDevices", { n: r.devices.length + (r.members || []).length }),
+      extra: swi("hiddenRooms", !hiddenRooms[r.id], (on) => saveDraw({ hiddenRooms: { [r.id]: !on } }), K.t("panels.shownHere", { name: r.name })) })),
+    (ids) => keep({ roomOrder: ids }), K.t("panels.rooms.group")) : el("p.pn-info", {}, K.t("panels.rooms.none"));
+    return el("div", {},
       ...G(K.t("panels.look.roomBar"), [
+        R(K.t("panels.dock.move"), K.t("panels.dock.moveHint"), el("button.btn.sm", { type: "button", disabled: phone(), onclick: () => { tab = "look"; openBuilder(); } }, ic("layout", 14), K.t("panels.dock.moveBtn"))),
         R(K.t("panels.look.showBar"), K.t("panels.look.showBarHint"), seg("dockOff", [["on", K.t("panels.show")], ["off", K.t("panels.hide")]], m.dockOff ? "off" : "on", (v) => pick({ dockOff: v === "off" }), K.t("panels.look.showBar"))),
         R(K.t("panels.look.where"), null, seg("dockAt", [["bottom", K.t("panels.look.bottom")], ["top", K.t("panels.look.top")], ["left", K.t("panels.look.left")], ["right", K.t("panels.look.right")]], dock, (v) => pick({ dockAt: v }), K.t("panels.look.whereLabel"))),
         block(el("div.pn-picks.pn-docks", {}, DOCK_STYLES.map(([k, n, d]) => keyed(pickTile(k === dockStyle, () => pick({ dockStyle: k, dockLabels: k !== "rail" }), dockMini(k, dock), el("b", {}, n), el("small", {}, d)), "dockStyle")))),
         R(K.t("panels.look.names"), K.t("panels.look.namesHint"), seg("dockLabels", [["on", K.t("panels.show")], ["off", K.t("panels.hide")]], dockLabels ? "on" : "off", (v) => pick({ dockLabels: v === "on" }), K.t("panels.look.names"))),
         R(K.t("panels.look.autoHide"), K.t("panels.look.autoHideHint"), seg("dockAutoHide", [["off", K.t("control.off")], ["on", K.t("control.on")]], m.dockAutoHide ? "on" : "off", (v) => pick({ dockAutoHide: v === "on" }), K.t("panels.look.autoHide"))),
-      ], K.t("panels.look.dockFoot")));
+      ], K.t("panels.look.dockFoot")),
+      ...G(K.t("panels.rooms.group"), [block(roomList)], K.t("panels.rooms.foot")));
+  }
+  // this panel's rooms in its order (roomOrder; the rest after them, as they come)
+  function roomsInOrder(m) {
+    const order = m.roomOrder || [], rank = (r, i) => { const k = order.indexOf(r.id); return k < 0 ? order.length + i : k; };
+    return data.rooms.map((r, i) => [r, rank(r, i)]).sort((a, b) => a[1] - b[1]).map(([r]) => r);
   }
   // the background (built in, or the owner's own picture), the animated sky above it, its colours, where the effects go
   const BUILT_BG = (window.BACKGROUNDS || [{ id: "mountains", name: "Mountains" }]).map((b) => [b.id, b.name]);
@@ -1026,37 +1042,25 @@
   }
 
   // ================================================================== Rooms & devices
-  // a list the owner puts in order: drag a row (mouse) or ▲ ▼ (keyboard, touch); onOrder(ids) after each move
+  // a list the owner puts in order: drag a row by its grip, the keyboard on the grip (Kit.reorder, v3.0.4) or ▲ ▼;
+  // onOrder(ids) after each move
   function orderList(items, onOrder, label) {   // items: [{id, label, sub, extra}]
     const box = el("div.pn-olist", { role: "list", "aria-label": label || null });
-    let from = null;
     const commit = (focusId, dir) => { draw(); onOrder(items.map((x) => x.id)); if (focusId != null) { const b = box.querySelector(`[data-fk="${dir}:${focusId}"]`) || box.querySelector(`[data-fk="${dir === "up" ? "down" : "up"}:${focusId}"]`); if (b) b.focus(); } };
     const move = (i, d) => { const j = i + d; if (j < 0 || j >= items.length) return; const id = items[i].id; [items[i], items[j]] = [items[j], items[i]]; commit(id, d < 0 ? "up" : "down"); };
     function draw() {
-      box.replaceChildren(...items.map((it, i) => el("div.pn-orow", { role: "listitem", draggable: "true",
-        ondragstart: (e) => { from = i; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", String(it.id)); } catch {} },
-        ondragover: (e) => { e.preventDefault(); e.currentTarget.classList.add("over"); },
-        ondragleave: (e) => e.currentTarget.classList.remove("over"),
-        ondrop: (e) => { e.preventDefault(); e.currentTarget.classList.remove("over"); if (from == null || from === i) return;
-          const [mv] = items.splice(from, 1); items.splice(i, 0, mv); from = null; commit(); },
-        ondragend: () => { from = null; } },
-        el("span.grip", { "aria-hidden": "true" }, "⠿"), el("span.tx", {}, el("b", {}, it.label), it.sub ? el("small", {}, it.sub) : null), it.extra || null,
+      box.replaceChildren(...items.map((it, i) => el("div.pn-orow", { role: "listitem" },
+        K.reorder.grip(it.id, it.label), el("span.tx", {}, el("b", {}, it.label), it.sub ? el("small", {}, it.sub) : null), it.extra || null,
         el("span.arrows", {}, el("button.pn-ar", { type: "button", disabled: i === 0, onclick: () => move(i, -1), "aria-label": K.t("panels.order.up", { name: it.label }), "data-fk": `up:${it.id}` }, ic("chevU", 14)),
           el("button.pn-ar", { type: "button", disabled: i === items.length - 1, onclick: () => move(i, 1), "aria-label": K.t("panels.order.down", { name: it.label }), "data-fk": `down:${it.id}` }, ic("chevD", 14))))));
     }
     draw();
-    return box;
+    return K.reorder.list(box, label || "order", { name: (i) => items[i].label, move: (from, to) => { const [mv] = items.splice(from, 1); items.splice(to, 0, mv); commit(); } });
   }
   function rooms() {
-    const m = view(), hiddenRooms = m.hiddenRooms || {}, hiddenDevices = m.hiddenDevices || {};
-    const order = m.roomOrder || [];
-    const rank = (r, i) => { const k = order.indexOf(r.id); return k < 0 ? order.length + i : k; };
-    const ordered = data.rooms.map((r, i) => [r, rank(r, i)]).sort((a, b) => a[1] - b[1]).map(([r]) => r);
+    // (v3.0.4: which rooms, and their order: the Room bar tab)
+    const m = view(), hiddenDevices = m.hiddenDevices || {}, ordered = roomsInOrder(m);
     const byId = new Map(data.rooms.flatMap((x) => x.devices.map((d) => [d.id, { ...d, room: x.name }])));
-    const devN = (r) => r.devices.length + (r.members || []).length;
-    const roomList = ordered.length ? orderList(ordered.map((r) => ({ id: r.id, label: r.name, sub: K.t(r.custom ? "panels.rooms.devicesYours" : "search.roomDevices", { n: devN(r) }),
-      extra: swi("hiddenRooms", !hiddenRooms[r.id], (on) => saveDraw({ hiddenRooms: { [r.id]: !on } }), K.t("panels.shownHere", { name: r.name })) })),
-    (ids) => keep({ roomOrder: ids }), K.t("panels.rooms.group")) : el("p.pn-info", {}, K.t("panels.rooms.none"));
 
     if (!roomPick || !data.rooms.some((r) => r.id === roomPick)) roomPick = ordered[0] && ordered[0].id;
     const r = data.rooms.find((x) => x.id === roomPick);
@@ -1080,8 +1084,7 @@
         : el("p.pn-info", {}, K.t("panels.rooms.noDevices")), el("div.pn-addrow", {}, add));
     }
     return el("div", {},
-      ...G(K.t("panels.rooms.group"), [block(roomList)], K.t("panels.rooms.foot")),
-      ...(!ordered.length ? [] : G(K.t("panels.rooms.devGroup"), [R(K.t("panels.rooms.room"), null, select("", ordered.map((x) => [x.id, x.name]), roomPick, (v) => { roomPick = v; drawSetup(); }, K.t("panels.rooms.room"))), block(devBox)],
+      ...(!ordered.length ? [el("p.pn-info", {}, K.t("panels.rooms.none"))] : G(K.t("panels.rooms.devGroup"), [R(K.t("panels.rooms.room"), null, select("", ordered.map((x) => [x.id, x.name]), roomPick, (v) => { roomPick = v; drawSetup(); }, K.t("panels.rooms.room"))), block(devBox)],
         K.t("panels.rooms.devFoot"))));
   }
 

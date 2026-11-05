@@ -16,18 +16,59 @@ An action: {"do": "toggle" | "on" | "off" | "lock" | "unlock" | "cmd" | "room" |
             "id": device, "c": command, "v": value, "room": room id, "cam": camera id, "page": "home"|"cameras"|…}
 A rule:    {"id": device, "at": attribute, "op": "eq" | "ne" | "gt" | "lt", "v": text or number}  (all must match)
 A blank card's piece (o.parts, up to 16): {"t": "icon" | "light" | "switch" | "value" | "door" | "lock" | "garage" | "text",
-            "x", "y", "w", "h": cells of the card's own 24 × 24 grid, "id": device, "label", "icon", "at", "unit",
-            "doors": [{"id", "contact", "travel", "label"}], "text", "size": "s"|"m"|"l"|"xl", "align", "bold", "wheel": [action…]}
+            "x", "y", "w", "h": thousandths of the card (o.fr = 1, v3.0.4; before: cells of its 24 × 24 grid — moved over
+            as it's saved), "id": device, "label", "icon", "at", "unit",
+            "doors": [{"id", "contact", "travel", "tclose", "vib", "wide", "label"}] (1–4), "text", "size": "s"|"m"|"l"|"xl", "align", "bold", "wheel": [action…]}
+A "Devices" card (v3.0.4 — it replaces Device, Devices, Value, Button, Lock, Fan and Scene buttons; service/devices_card.py
+moves the old ones over once): o = {"title", "look": "list" | "tiles" | "free" | "single", "cols": 1–8 (Tiles), "items": [item…]}
+  an item: {"id": device (a Button / Scene may have none), "k": "value" | "switch" | "button" | "lock" | "fan" | "scene"
+            (none: what the device is, the panel decides), "label", "show": ["state" | attribute…], "icon", "motion",
+            "bg": "round" | "none", "col": "#rrggbb" (none: automatic), "iz" / "tz": icon / text size %, "tp": "top" |
+            "bottom" | "left" | "right", "tap" / "hold" / "dbl": action, "wheel": [action…],
+            "x", "y", "w", "h": Freeform place in thousandths of the card, "sw", "sh": Tiles span (1–4),
+            "st": the old card's look kept for a card moved over ("row" | "square" | "icon" | "slider" | "bar" | "big" |
+            "gauge" | "chip" | "button" | "lock" | "fan"), "unit", "dec", "min", "max" (a value), "runW", "contact",
+            "travel" (a plug's running watts, a garage opener's door), "ask": true ("Ask before doing it")}
+
+(v3.0.4) The UniFi cards ("Network" in the builder; dashboard/layouts/v4/shared/unifi.js draws them from service/
+unifi_net.py's model): netwan (Internet), netchips (Clients & gateway), netstrip (Status tabs), netmap (Network map),
+netdevs (UniFi devices), netpoe (PoE power), netclients (Clients), netlog (Client log), netvals (Network values).
+  o = {"title", "look": "a" | "b" | "c" (the card's Style), "col": {color key: "#rrggbb"} (NET_COLORS: none = the
+  default), and per card: netwan "gm": "dl" | "ul" | "both" (the graph), "lat": false (no latency line), "parts": [the
+  side-panel pieces NET_WAN_PARTS]; netmap "glow": 0–100, "follow": false (an even flow), "snap", "ports", "protect":
+  false, "camEach" (each camera, not a bubble per switch), "pos": {node id: [x, y]} (dragged by hand, thousandths of the
+  map); netdevs "cols": 1 | 2, "group"; netpoe "sw": a switch's id (none: all); netclients "sort", "filter"; netlog
+  "wifi": false; netstrip "items" and netvals "vals": [what's shown, NET_STRIP / NET_VALS]}
+
+(v3.0.4) "Bins / Trash" (replaces Bin day; service/time_cards.py moves the old ones over once): o = {"title", "calm": true
+  (no animation), "rem": {"when": "before" | "same", "at": "HH:MM"} (the reminder: the evening before / pickup day, from),
+  "alarm": "HH:MM" (a sound when a bin isn't out yet) | none, "items": [bin…]}
+  a bin: {"id", "name", "icon": "wheelie" | "recycle" | "inside" | "bag" | "bulky", "pic": "up:<id>" (the owner's own
+          picture instead of the drawing), "color": one of BIN_COLORS, "lid": true
+          (the color on the lid only), "anim": true (animated), "btn": "out" | "emptied" | "curb", "truck": "HH:MM",
+          "hol": what a holiday does (BIN_HOL), "sch": {"k": "weekly" | "every" | "evenodd" | "monthly" | "seasonal",
+          "days": [0–6], "every": 1–8 and "from": a known pickup day (every), "parity": "even" | "odd", "nth": 1–5 (5 =
+          the last; monthly: days[0] is its weekday), "months": [0–11] (seasonal)}}
+(v3.0.4) "Countdown & timers" (replaces Countdown and Timers): o = {"title", "items": [item…]}
+  an item: {"id", "k": "count" | "timer", "name", "col": "#rrggbb", "mix": the parts shown ("d", "h", "m", "s" in that order),
+            a countdown: "at": "YYYY-MM-DDTHH:MM", "icon"; a timer: "preset": a preset's id (service/timers.py), "snd":
+            "chime" | "speak" | "none", "say": the words, "dismiss": 3–120 s, "links": {panel id: "notify" | "linked"},
+            "lights": [up to 4 lights that flash on "Timer up"], "speakers": [up to 3 Hubitat speakers the server has
+            speak its words on "Timer up"], "spkVol": 1–100 (only for speakers with setVolume; none = left as it is)}; the card's "pin": true (PIN-protected), "pinFree": false
+            (the presets ask for it too); "presets": the card's own (as service/timers.py's; an old Timers card's buttons) —
+            none: the house's
 
 Every command still goes through the panel's own checks (the PIN, "only some panels") and the bridge's (its allow
 list, the command list per device) — the layout can't widen what a panel may do.
 """
 import re
+import secrets
 
 try:
-    from service import house_model
+    from service import house_model, timers as timer_runs
 except ImportError:  # pragma: no cover
     import house_model
+    import timers as timer_runs
 
 
 class Invalid(ValueError):
@@ -37,13 +78,16 @@ class Invalid(ValueError):
 # the built-in cards (dashboard/layouts/v4/shared/grid.js draws them)
 BUILTIN = ("clock", "weather", "calendar", "thermostat", "locks", "openings", "people", "temps", "guest", "alerts",
            "device", "value", "text", "button", "room", "camera", "picture", "group",
+           "devices",   # (v3.0.4: the one Devices card; the 7 types it replaces are still read — older layouts, older pages)
            # a room's own page (the room it's on fills them in): its header, devices, doors / locks, cameras, appliances
            "roomhead", "roomdevs", "roomopen", "roomcams", "roomthings",
            "timer",   # kitchen timers
            "scenes", "modes", "safety", "notices", "countdown", "bins",
-           "alarm", "lock", "garage", "spot",   # (spot: a picture with live values, or a garage of 1-3 doors)
+           "alarm", "lock", "garage", "spot",   # (spot: a picture with live values, or a garage of 1-4 doors)
            "status", "photos", "batteries", "power", "player", "fan", "energy",
            "todo", "notes",   # the shared lists (to-do, shopping…) and the note board (service/lists.py)   # health, a slideshow, low batteries, what uses power   # Hubitat Safety Monitor (the PIN), one lock (slide to unlock), a garage door
+           "trash", "timers",   # (v3.0.4: Bins / Trash, Countdown & timers — they replace bins, countdown and timer)
+           "netwan", "netchips", "netstrip", "netmap", "netdevs", "netpoe", "netclients", "netlog", "netvals",   # (v3.0.4) UniFi
            "blank")   # a blank card: the owner's own pieces (pictures, lights, switches, values, a lock, a garage, text) inside it
 USER_CARD = re.compile(r"card:[a-z0-9-]{1,40}")       # an uploaded card (service/cards.py)
 ACTIONS = ("none", "toggle", "on", "off", "lock", "unlock", "cmd", "room", "camera", "page", "nudge")
@@ -56,6 +100,12 @@ MOTIONS = ("auto", "spin", "rock", "twist", "swing", "sonar", "rumble", "hop", "
 STYLES = {"thermostat": ("dial", "big", "compact", "arc"), "device": ("row", "square", "icon", "slider", "bar"), "value": ("big", "gauge", "chip"),
           "people": ("pills", "avatars", "count"), "alarm": ("full", "buttons", "badge"), "player": ("row", "big", "volume")}
 OPS = ("eq", "ne", "gt", "lt")
+# (v3.0.4) the Devices card: its looks, what an item is, where its words sit, the old cards' looks a moved card keeps
+DEV_LOOKS = ("list", "tiles", "free", "single")
+DEV_KINDS = ("value", "switch", "button", "lock", "fan", "scene")
+DEV_TP = ("top", "bottom", "left", "right")
+DEV_ST = ("row", "square", "icon", "slider", "bar", "big", "gauge", "chip", "button", "lock", "fan")
+DEV_ITEMS, DEV_FREE = 24, 1000
 # a thermostat card's buttons: its modes ("fan" = off with the fan on, as the dial has it) and its fan's modes
 THERMO_MODES = ("heat", "cool", "auto", "off", "fan", "emergency heat")
 FAN_MODES = ("auto", "on", "circulate")
@@ -78,12 +128,33 @@ ICON = re.compile(r"[a-zA-Z][a-zA-Z0-9]{0,30}|art:[a-z0-9-]{1,30}|up:[0-9a-f]{16
 COLOR = re.compile(r"#[0-9a-fA-F]{6}")
 PIC = re.compile(r"up:[0-9a-f]{16}")
 MAX_CARDS = 60
-# a blank card's pieces sit on its own small grid: 24 × 24 cells whatever the card's size (positions are shares of
-# the card, so the pieces move and grow with it)
+# a blank card's pieces sit anywhere on it, in thousandths of the card (v3.0.4, o.fr = 1 — as a Devices card's Freeform
+# items); before, on its own small grid of 24 × 24 cells: moved over as it's saved, edges where they were (shares of
+# the card either way, so the pieces move and grow with it)
 PIECES = {"icon": "picture", "light": "light", "switch": "switch", "value": "value", "door": "door", "lock": "lock",
           "garage": "garage", "text": "text"}
 INNER = 24
 MAX_PIECES = 16
+MAX_SPEAKERS = 3   # (v3.0.4) a timer's speakers on "Timer up"
+
+
+# (v3.0.4) Bins / Trash: the 10 colors (as skyrotter's Poubelle Card has them), what a holiday does, the alert's button
+BIN_COLORS = ("gray", "black", "yellow", "green", "blue", "brown", "red", "purple", "burgundy", "lime")
+BIN_ICONS = ("wheelie", "recycle", "inside", "bag", "bulky")
+BIN_HOL = ("none", "next_day", "next_work_day", "shift_week", "shift_rest", "cancel")
+BIN_SCH = ("weekly", "every", "evenodd", "monthly", "seasonal")
+# (v3.0.4) the UniFi cards: each one's color keys (unifi.js COL — the builder's NET_COLORS), what they may show
+NET_COLORS = {"netwan": ("dl", "ul", "lat", "ok", "warn", "bad"), "netchips": ("acc", "bar"), "netstrip": ("ok", "warn", "bad", "sel"),
+              "netmap": ("line", "wifi", "orb", "node", "idle", "bad", "ok", "warn"), "netdevs": ("ok", "bad", "warn"),
+              "netpoe": ("gauge", "warn", "port"), "netclients": ("icon", "named"), "netlog": ("join", "roam"), "netvals": ("val", "icon")}
+NET_WAN_PARTS = ("counts", "uptime", "uptodate", "isp", "thru", "ping")
+NET_STRIP = ("net", "gw", "wifi", "sw", "pro", "clients")
+NET_VALS = ("inet", "line", "ping", "gw", "poe", "wifi", "wired", "clients", "devs")
+NET_SORT = ("name", "type", "network", "ssid", "conn", "signal", "traffic")
+NET_NODE = re.compile(r"wan:WAN2?|(?:pg:)?[0-9a-f]{12}")
+HHMM = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d")
+ITEM_ID = re.compile(r"[0-9a-f]{6,12}")
+PANEL_ID = re.compile(r"[a-z0-9][a-z0-9_-]{0,39}")
 
 
 def _int(v, lo, hi, what):
@@ -295,8 +366,14 @@ def options(t, o):
             out["wheel"] = wh
     if t == "calendar" and o.get("days") is not None:
         out["days"] = _int(o["days"], 1, 7, "days")
-    if t == "weather" and o.get("days") is not None:
-        out["days"] = _int(o["days"], 0, 7, "days")
+    if t == "weather" and o.get("days") is not None:   # (v3.0.4: up to 14 — Open-Meteo has 16)
+        out["days"] = _int(o["days"], 0, 14, "days")
+    if t == "weather" and o.get("hours") is False:   # (v3.0.4: "Tap a day for its hours" switched off; on by default)
+        out["hours"] = False
+    if t == "weather" and o.get("src") is not None:   # (v3.0.4) where it comes from (service/weather_sources.py)
+        if o["src"] not in ("auto", "om", "hub", "owm"):
+            raise Invalid("weather source: auto, om, hub or owm")
+        out["src"] = o["src"]
     if t == "weather" and o.get("locs") is not None:   # its places (the first is home: it drives the sky), set in the builder
         locs = o["locs"]
         if not isinstance(locs, list) or len(locs) > 6:
@@ -391,6 +468,12 @@ def options(t, o):
                     raise Invalid("bins: a first date")
                 x["from"] = b["from"]
             out["items"].append(x)
+    if t in NET_COLORS:
+        out.update(net(t, o))
+    if t == "trash":
+        out.update(trash(o))
+    if t == "timers":
+        out.update(timers(o))
     if t == "timer" and o.get("presets") is not None:   # minutes
         if not isinstance(o["presets"], list) or not 1 <= len(o["presets"]) <= 6:
             raise Invalid("timer presets: 1 to 6")
@@ -436,7 +519,7 @@ def options(t, o):
         if not isinstance(o["ids"], list) or len(o["ids"]) > 30:
             raise Invalid("which ones: up to 30")
         out["ids"] = list(dict.fromkeys(_dev(x) for x in o["ids"]))
-    if t == "spot":   # a picture with live values (when it moves, what a tap does, its rows) or a garage of 1-3 doors
+    if t == "spot":   # a picture with live values (when it moves, what a tap does, its rows) or a garage of 1-4 doors
         pic = o.get("pic")
         if pic is not None:
             if not isinstance(pic, str) or not (pic == "garage" or ICON.fullmatch(pic)):
@@ -482,8 +565,8 @@ def options(t, o):
             out["rows"].append(x)
         if out.get("pic") == "garage":
             doors = o.get("doors", [])
-            if not isinstance(doors, list) or len(doors) > 3:
-                raise Invalid("garage: 1 to 3 doors")
+            if not isinstance(doors, list) or len(doors) > 4:
+                raise Invalid("garage: 1 to 4 doors")
             out["doors"] = []
             for d in doors:
                 if not isinstance(d, dict):
@@ -491,8 +574,7 @@ def options(t, o):
                 x = {"id": _dev(d.get("id"), "garage door: opener")}
                 if d.get("contact") is not None:
                     x["contact"] = _dev(d["contact"], "garage door: contact")
-                if d.get("travel") is not None:
-                    x["travel"] = _int(d["travel"], 3, 60, "garage door: travel time (s)")
+                x.update(_door_extra(d))
                 if d.get("label") is not None and _text(d["label"], 30, "garage door: name"):   # (optional: the PIN question names it)
                     x["label"] = _text(d["label"], 30, "garage door: name")
                 out["doors"].append(x)
@@ -517,11 +599,21 @@ def options(t, o):
             out["items"].append(x)
         if o.get("look") in ("list", "tiles"):
             out["look"] = o["look"]
+    if t == "devices":   # (v3.0.4) one card for every device: its look, then its items
+        if o.get("look") in DEV_LOOKS:
+            out["look"] = o["look"]
+        if o.get("cols") is not None:
+            out["cols"] = _int(o["cols"], 1, 8, "columns")
+        items = o.get("items", [])
+        if not isinstance(items, list) or len(items) > DEV_ITEMS:
+            raise Invalid(f"devices: up to {DEV_ITEMS}")
+        out["items"] = [dev_item(it, n + 1) for n, it in enumerate(items)]
     if t == "blank":   # the owner's own pieces, arranged on the card (later ones in front)
         parts = o.get("parts", [])
         if not isinstance(parts, list) or len(parts) > MAX_PIECES:
             raise Invalid(f"blank card: at most {MAX_PIECES} pieces")
-        out["parts"] = [piece(p, n + 1) for n, p in enumerate(parts)]
+        fr = o.get("fr") == 1 and o.get("fr") is not True
+        out["parts"], out["fr"] = [piece(p, n + 1, fr) for n, p in enumerate(parts)], 1
     if USER_CARD.fullmatch(t):
         bind, sets = o.get("bind"), o.get("set")
         if bind is not None:
@@ -543,13 +635,81 @@ def options(t, o):
     return out
 
 
-def piece(p, n):
-    """One piece of a blank card: its kind, where it sits on the card's own 24 × 24 grid, and its settings."""
+def _num(v, what):
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or abs(v) > 1e9:
+        raise Invalid(f"{what}: a number")
+    return v
+
+
+def dev_item(it, n):
+    """(v3.0.4) One item of a Devices card (the module docstring has its keys); unknown keys dropped."""
+    if not isinstance(it, dict):
+        raise Invalid(f"devices: item {n}")
+    out = {}
+    if it.get("k") is not None:
+        if it["k"] not in DEV_KINDS:
+            raise Invalid("devices: an item is " + ", ".join(DEV_KINDS))
+        out["k"] = it["k"]
+    if it.get("id") is not None or out.get("k") not in ("button", "scene"):   # (a button / scene may only do its action)
+        out["id"] = _dev(it.get("id"), f"devices: item {n}'s device")
+    if isinstance(it.get("label"), str) and it["label"].strip():
+        out["label"] = _text(it["label"], 40, "name")
+    if it.get("show") is not None:
+        sh = it["show"]
+        if not isinstance(sh, list) or len(sh) > 4 or any(not isinstance(a, str) or not ATTR.fullmatch(a) for a in sh):
+            raise Invalid("devices: up to 4 values to show")
+        if sh:
+            out["show"] = list(dict.fromkeys(sh))
+    for k, rx, what in (("icon", ICON, "icon"), ("col", COLOR, "a color")):
+        if it.get(k) is not None:
+            if not isinstance(it[k], str) or not rx.fullmatch(it[k]):
+                raise Invalid(f"devices: {what}")
+            out[k] = it[k]
+    for k, allowed in (("motion", MOTIONS), ("bg", ("round", "none")), ("tp", DEV_TP), ("st", DEV_ST)):
+        if it.get(k) in allowed:
+            out[k] = it[k]
+    for k, lo, hi in (("iz", 50, 250), ("tz", 50, 250), ("sw", 1, 4), ("sh", 1, 4), ("dec", 0, 2), ("runW", 1, 10000), ("travel", 3, 60)):
+        if it.get(k) is not None:
+            out[k] = _int(it[k], lo, hi, f"devices: {k}")
+    if all(it.get(k) is not None for k in ("x", "y", "w", "h")):   # (Freeform: thousandths of the card, inside it)
+        x, y = _int(it["x"], 0, DEV_FREE - 1, "devices: place"), _int(it["y"], 0, DEV_FREE - 1, "devices: place")
+        out.update(x=x, y=y, w=_int(it["w"], 1, DEV_FREE - x, "devices: size"), h=_int(it["h"], 1, DEV_FREE - y, "devices: size"))
+    if isinstance(it.get("unit"), str):
+        out["unit"] = _text(it["unit"], 8, "unit")
+    for k in ("min", "max"):
+        if it.get(k) is not None:
+            out[k] = _num(it[k], f"devices: {k}")
+    if it.get("contact") is not None:
+        out["contact"] = _dev(it["contact"], "door contact")
+    if it.get("ask") is True:   # (v3.0.4) "Ask before doing it" (a garage door always asks: the panel's data.js)
+        out["ask"] = True
+    for k in ("tap", "hold", "dbl"):
+        a = action(it.get(k))
+        if a:
+            out[k] = a
+    wh = wheel(it.get("wheel"))
+    if wh:
+        out["wheel"] = wh
+    return out
+
+
+def _of24(v):
+    return round(v * DEV_FREE / INNER)   # (never a tie: v × 1000 / 24 ends in .0, .33 or .67 — as the builder's Math.round)
+
+
+def piece(p, n, fr=True):
+    """One piece of a blank card: its kind, where it sits (thousandths of the card; fr False: cells of the old 24 × 24
+    grid, moved over — devedit.js from24), and its settings."""
     if not isinstance(p, dict) or p.get("t") not in PIECES:
         raise Invalid(f"blank card: piece {n} is not a kind it knows")
     t, name = p["t"], PIECES[p["t"]]
-    x, y = _int(p.get("x"), 0, INNER - 1, "blank card: a piece's place"), _int(p.get("y"), 0, INNER - 1, "blank card: a piece's place")
-    out = {"t": t, "x": x, "y": y, "w": _int(p.get("w"), 1, INNER - x, "blank card: a piece's size"), "h": _int(p.get("h"), 1, INNER - y, "blank card: a piece's size")}
+    top = DEV_FREE if fr else INNER
+    x, y = _int(p.get("x"), 0, top - 1, "blank card: a piece's place"), _int(p.get("y"), 0, top - 1, "blank card: a piece's place")
+    w, h = _int(p.get("w"), 1, top - x, "blank card: a piece's size"), _int(p.get("h"), 1, top - y, "blank card: a piece's size")
+    if not fr:
+        x0, y0 = _of24(x), _of24(y)
+        x, y, w, h = x0, y0, max(1, _of24(x + w) - x0), max(1, _of24(y + h) - y0)
+    out = {"t": t, "x": x, "y": y, "w": w, "h": h}
     if t in ("light", "switch", "value", "door", "lock") or (t == "icon" and p.get("id") is not None):
         if not isinstance(p.get("id"), int) or isinstance(p.get("id"), bool) or not 0 < p["id"] < 10 ** 9:
             raise Invalid(f"blank card: the {name} needs its device")
@@ -572,8 +732,8 @@ def piece(p, n):
             out["wheel"] = wh
     if t == "garage":
         doors = p.get("doors", [])
-        if not isinstance(doors, list) or not 1 <= len(doors) <= 3:
-            raise Invalid("blank card: a garage has 1 to 3 doors")
+        if not isinstance(doors, list) or not 1 <= len(doors) <= 4:
+            raise Invalid("blank card: a garage has 1 to 4 doors")
         out["doors"] = []
         for d in doors:
             if not isinstance(d, dict) or not isinstance(d.get("id"), int) or isinstance(d.get("id"), bool) or not 0 < d["id"] < 10 ** 9:
@@ -581,8 +741,7 @@ def piece(p, n):
             x2 = {"id": d["id"]}
             if d.get("contact") is not None:
                 x2["contact"] = _dev(d["contact"], "garage door: contact")
-            if d.get("travel") is not None:
-                x2["travel"] = _int(d["travel"], 3, 60, "garage door: travel time (s)")
+            x2.update(_door_extra(d))
             if d.get("label") is not None and _text(d["label"], 30, "garage door: name"):   # (optional: the PIN question names it)
                 x2["label"] = _text(d["label"], 30, "garage door: name")
             out["doors"].append(x2)
@@ -596,6 +755,210 @@ def piece(p, n):
             out["align"] = p["align"]
         if p.get("bold") is True:
             out["bold"] = True
+    return out
+
+
+def _hhmm(v, what):
+    if not isinstance(v, str) or not HHMM.fullmatch(v):
+        raise Invalid(f"{what}: HH:MM")
+    return v
+
+
+def _day(v, what):
+    if not isinstance(v, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", v):
+        raise Invalid(f"{what}: a date")
+    return v
+
+
+def _iid(it, seen):
+    """An item's id (6–12 hex): kept, or a new one when it has none or another item has it."""
+    i = it.get("id")
+    if not isinstance(i, str) or not ITEM_ID.fullmatch(i) or i in seen:
+        i = secrets.token_hex(3)
+    seen.add(i)
+    return i
+
+
+def _subset(v, allowed, what):
+    if not isinstance(v, list) or any(x not in allowed for x in v):
+        raise Invalid(f"{what}: " + ", ".join(allowed))
+    return list(dict.fromkeys(v))
+
+
+def net(t, o):
+    """(v3.0.4) A UniFi card's own options (the module docstring has them); unknown keys dropped."""
+    out = {}
+    if o.get("look") in ("a", "b", "c"):
+        out["look"] = o["look"]
+    col = o.get("col")
+    if col is not None:
+        if not isinstance(col, dict) or any(k not in NET_COLORS[t] or not isinstance(v, str) or not COLOR.fullmatch(v) for k, v in col.items()):
+            raise Invalid("colors")
+        if col:
+            out["col"] = dict(col)
+    bools = {"netwan": ("lat",), "netmap": ("follow", "snap", "ports", "protect", "camEach"), "netdevs": ("group",), "netlog": ("wifi",)}.get(t, ())
+    for k in bools:
+        if isinstance(o.get(k), bool):
+            out[k] = o[k]
+    if t == "netwan":
+        if o.get("gm") in ("dl", "ul", "both"):
+            out["gm"] = o["gm"]
+        if o.get("parts") is not None:
+            out["parts"] = _subset(o["parts"], NET_WAN_PARTS, "side-panel pieces")
+    if t == "netmap":
+        if o.get("glow") is not None:
+            out["glow"] = _int(o["glow"], 0, 100, "orb glow")
+        pos = o.get("pos")
+        if pos is not None:
+            if not isinstance(pos, dict) or len(pos) > 300:
+                raise Invalid("map: up to 300 places")
+            out["pos"] = {}
+            for k, v in pos.items():
+                if not isinstance(k, str) or not NET_NODE.fullmatch(k) or not isinstance(v, list) or len(v) != 2:
+                    raise Invalid("map: a place is {node: [x, y]}")
+                out["pos"][k] = [_int(v[0], 0, 1000, "map x"), _int(v[1], 0, 1000, "map y")]
+    if t == "netdevs" and o.get("cols") is not None:
+        out["cols"] = _int(o["cols"], 1, 2, "columns")
+    if t == "netpoe" and isinstance(o.get("sw"), str) and re.fullmatch(r"[0-9a-f]{12}", o["sw"]):
+        out["sw"] = o["sw"]
+    if t == "netclients":
+        if o.get("sort") in NET_SORT:
+            out["sort"] = o["sort"]
+        if o.get("filter") in ("all", "wired", "wifi", "guest"):
+            out["filter"] = o["filter"]
+    if t == "netstrip" and o.get("items") is not None:
+        out["items"] = _subset(o["items"], NET_STRIP, "tabs")
+    if t == "netvals" and o.get("vals") is not None:
+        out["vals"] = _subset(o["vals"], NET_VALS, "values")
+    return out
+
+
+def _door_extra(d):
+    """(v3.0.4) A garage set's door: its open time ("travel") and close time ("tclose", s), its vibration / tilt sensor
+    ("vib": its "acceleration" says the door moves) and "wide": true (a double-wide door)."""
+    x = {}
+    if d.get("travel") is not None:
+        x["travel"] = _int(d["travel"], 3, 60, "garage door: travel time (s)")
+    if d.get("tclose") is not None:
+        x["tclose"] = _int(d["tclose"], 3, 60, "garage door: close time (s)")
+    if d.get("vib") is not None:
+        x["vib"] = _dev(d["vib"], "garage door: vibration sensor")
+    if d.get("wide") is True:
+        x["wide"] = True
+    return x
+
+
+def trash(o):
+    """(v3.0.4) A Bins / Trash card's own options (the format: above)."""
+    out = {}
+    if o.get("calm") is True:
+        out["calm"] = True
+    if o.get("rem") is not None:
+        r = o["rem"] if isinstance(o["rem"], dict) else {}
+        out["rem"] = {"when": "same" if r.get("when") == "same" else "before", "at": _hhmm(r.get("at"), "reminder")}
+    if o.get("alarm") is not None:
+        out["alarm"] = _hhmm(o["alarm"], "alarm")
+    items = o.get("items", [])
+    if not isinstance(items, list) or len(items) > 8:
+        raise Invalid("bins: up to 8")
+    out["items"], seen = [], set()
+    for b in items:
+        if not isinstance(b, dict):
+            raise Invalid("a bin")
+        x = {"id": _iid(b, seen), "name": _text(b.get("name") or "Trash", 24, "bin name"),
+             "icon": b.get("icon") if b.get("icon") in BIN_ICONS else "wheelie",
+             "color": b.get("color") if b.get("color") in BIN_COLORS else "gray"}
+        if isinstance(b.get("pic"), str) and re.fullmatch(r"up:[0-9a-f]{16}", b["pic"]):   # (v3.0.4: the owner's own picture)
+            x["pic"] = b["pic"]
+        for k in ("lid", "anim"):
+            if b.get(k) is True:
+                x[k] = True
+        x["btn"] = b.get("btn") if b.get("btn") in ("out", "emptied", "curb") else "out"
+        x["truck"] = _hhmm(b.get("truck") or "07:00", "truck")
+        x["hol"] = b.get("hol") if b.get("hol") in BIN_HOL else "none"
+        s = b.get("sch") if isinstance(b.get("sch"), dict) else {}
+        k = s.get("k") if s.get("k") in BIN_SCH else "weekly"
+        days = s.get("days", [1])
+        if not isinstance(days, list) or not 1 <= len(days) <= 7:
+            raise Invalid("bins: pickup days")
+        sch = {"k": k, "days": sorted({_int(d, 0, 6, "weekday") for d in days})}
+        if k == "monthly":
+            sch["days"] = sch["days"][:1]
+            sch["nth"] = _int(s.get("nth", 1), 1, 5, "which week")
+        if k == "every":
+            sch["every"] = _int(s.get("every", 2), 1, 8, "every")
+            sch["from"] = _day(s.get("from"), "bins: a known pickup")
+        if k == "evenodd":
+            sch["parity"] = "odd" if s.get("parity") == "odd" else "even"
+        if k == "seasonal":
+            m = s.get("months")
+            if not isinstance(m, list) or not 1 <= len(m) <= 12:
+                raise Invalid("bins: months")
+            sch["months"] = sorted({_int(x, 0, 11, "month") for x in m})
+        x["sch"] = sch
+        out["items"].append(x)
+    return out
+
+
+def timers(o):
+    """(v3.0.4) A Countdown & timers card's own options (the format: above)."""
+    items = o.get("items", [])
+    if not isinstance(items, list) or len(items) > 8:
+        raise Invalid("countdown & timers: up to 8")
+    out, seen = {"items": []}, set()
+    if o.get("pin") is True:   # (v3.0.4) PIN-protect the timers on this panel; pinFree false: the presets too
+        out["pin"] = True
+        if o.get("pinFree") is False:
+            out["pinFree"] = False
+    if o.get("presets"):   # (v3.0.4) the card's own presets — an old Timers card's minute buttons; none: the house's
+        try:
+            out["presets"] = timer_runs.clean_presets(o["presets"])
+        except timer_runs.Invalid as e:
+            raise Invalid(f"timer presets: {e}")
+    for it in items:
+        if not isinstance(it, dict):
+            raise Invalid("a timer")
+        k = "count" if it.get("k") == "count" else "timer"
+        mix = it.get("mix") if isinstance(it.get("mix"), str) else ("d" if k == "count" else "hms")
+        mix = "".join(u for u in "dhms" if u in mix) or "s"
+        x = {"id": _iid(it, seen), "k": k, "name": _text(it.get("name") or ("Countdown" if k == "count" else "Timer"), 24, "name"), "mix": mix}
+        if isinstance(it.get("col"), str) and COLOR.fullmatch(it["col"]):
+            x["col"] = it["col"]
+        if k == "count":
+            at = it.get("at")
+            if not isinstance(at, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d", at):
+                raise Invalid("a countdown: its date and time")
+            x["at"] = at
+            if it.get("icon") is not None:
+                if not isinstance(it["icon"], str) or not ICON.fullmatch(it["icon"]):
+                    raise Invalid("icon")
+                x["icon"] = it["icon"]
+        else:
+            if isinstance(it.get("preset"), str) and re.fullmatch(r"[a-z0-9]{1,12}", it["preset"]):
+                x["preset"] = it["preset"]
+            x["snd"] = it.get("snd") if it.get("snd") in ("chime", "speak", "none") else "chime"
+            if (x["snd"] == "speak" or it.get("speakers")) and isinstance(it.get("say"), str) and it["say"].strip():
+                x["say"] = _text(it["say"], 80, "words")
+            x["dismiss"] = _int(it.get("dismiss", 15), 3, 120, "closes after")
+            lights = it.get("lights") or []
+            if not isinstance(lights, list) or len(lights) > 4:
+                raise Invalid("timer up: up to 4 lights")
+            if lights:
+                x["lights"] = list(dict.fromkeys(_dev(d, "timer up: a light") for d in lights))
+            spk = it.get("speakers") or []   # (v3.0.4: none by default; the bridge speaks only on a speaker with "speak")
+            if not isinstance(spk, list) or len(spk) > MAX_SPEAKERS:
+                raise Invalid(f"timer up: up to {MAX_SPEAKERS} speakers")
+            if spk:
+                x["speakers"] = list(dict.fromkeys(_dev(d, "timer up: a speaker") for d in spk))
+                if it.get("spkVol") is not None:
+                    x["spkVol"] = _int(it["spkVol"], 1, 100, "speaker volume")
+            links = it.get("links") or {}
+            if not isinstance(links, dict) or len(links) > 12:
+                raise Invalid("timer links: up to 12 panels")
+            ln = {p: m for p, m in links.items() if isinstance(p, str) and PANEL_ID.fullmatch(p) and m in ("notify", "linked")}
+            if ln:
+                x["links"] = ln
+        out["items"].append(x)
     return out
 
 
@@ -652,11 +1015,17 @@ def card_devices(settings):
             if c.get("t") in ("device", "button", "lock", "garage", "player", "fan", "thermostat") and isinstance(o.get("id"), int) and not isinstance(o.get("id"), bool):
                 out.add(o["id"])
             for it in o.get("items") or [] if isinstance(o.get("items"), list) else []:
-                if isinstance(it, dict) and isinstance(it.get("id"), int) and not isinstance(it.get("id"), bool):
+                # (v3.0.4: a Devices card's value only shows — its device isn't one to switch; a scene item: its action)
+                if isinstance(it, dict) and isinstance(it.get("id"), int) and not isinstance(it.get("id"), bool) and it.get("k") != "value":
                     out.add(it["id"])
+                if isinstance(it, dict):
                     acts(it)
                 if isinstance(it, dict) and isinstance(it.get("a"), dict):   # (a scene button's action)
                     acts({"tap": it["a"]})
+                if isinstance(it, dict) and c.get("t") == "timers" and isinstance(it.get("lights"), list):   # (v3.0.4: a timer's lights)
+                    out.update(d for d in it["lights"] if isinstance(d, int) and not isinstance(d, bool))
+                if isinstance(it, dict) and c.get("t") == "timers" and isinstance(it.get("speakers"), list):   # (and its speakers)
+                    out.update(d for d in it["speakers"] if isinstance(d, int) and not isinstance(d, bool))
             # a Picture & values card's switches / locks / garage doors / tap switch, a blank card's pieces
             ids = [o.get("tid")]
             for r in o.get("rows") or [] if isinstance(o.get("rows"), list) else []:
@@ -713,9 +1082,13 @@ def card_refs(c):
     for it in o.get("items") or [] if isinstance(o.get("items"), list) else []:
         if not isinstance(it, dict):
             continue
-        if t == "group":
+        if t in ("group", "devices"):
             take(it.get("id"))
+            take(it.get("contact"))   # (a Devices item on a garage opener: its door's contact)
             acts(it)
+        if t == "timers":   # (v3.0.4: the lights a timer flashes)
+            for d in [*(it.get("lights") if isinstance(it.get("lights"), list) else []), *(it.get("speakers") if isinstance(it.get("speakers"), list) else [])]:
+                take(d)
         if isinstance(it.get("a"), dict):   # (a scene button's action: {do, id})
             take(it["a"].get("id"))
     for p in [o, *(o.get("parts") or [] if isinstance(o.get("parts"), list) else [])]:
@@ -728,6 +1101,7 @@ def card_refs(c):
             if isinstance(d, dict):
                 take(d.get("id"))
                 take(d.get("contact"))
+                take(d.get("vib"))   # (v3.0.4: its vibration / tilt sensor)
         if isinstance(p.get("bind"), dict):
             for v in p["bind"].values():
                 take(v)

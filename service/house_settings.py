@@ -37,6 +37,8 @@ FIELDS = {
     "GO2RTC_URL": ("Cameras", "Separate go2rtc address", URL, False, "EMPTY = the built-in go2rtc (recommended)"),
     "TILE_MEDIUM_MODELS": ("Cameras", "Cameras using the medium stream in grids", r"[A-Za-z0-9 |()\\._-]{0,100}", False,
                            "A pattern on Protect's camera type; default: older G3 cameras"),
+    # (v3.0.4) optional: One Call 3.0 — fetched by the server once for the house (service/weather_sources.py)
+    "OWM_API_KEY": ("Weather", "OpenWeatherMap key", r"[A-Za-z0-9]{16,64}", True, "Optional: 8 days, 48 hours and alerts in one call"),
     "SONOS_PANEL_URL": ("Music", "Music page (Sonos Panel)", URL, False, "The page the Music button opens"),
     "TZ": ("General", "Time zone", r"[A-Za-z_]{1,32}(/[A-Za-z0-9_+-]{1,32}){0,2}", False,
            "UTC — the default; set yours, e.g. America/New_York"),
@@ -178,3 +180,105 @@ class HouseSettings:
                     bad.append(k)
         self._save(found)
         return sorted(found), bad
+
+
+# ---------- (v3.0.4) house-wide units and date formats: Manager → Display settings (the admin) ----------
+# Kept in DATA_DIR/house/display.json (no secrets: every panel gets it with its own data, GET /api/panel/<id> "house").
+# The defaults are today's look: °F, mph, inHg, inches, the language's own date and time ("auto"), weeks from Sunday,
+# whole degrees. A panel's settings units.temp / units.wind stay as its own "this panel only" override ("" or unset:
+# it follows the house).
+DISPLAY_FILE = "display.json"
+DATE_FORMATS = ("auto", "m/d/yyyy 12", "m/d/yyyy 24", "mm/dd/yyyy 12", "mm/dd/yyyy 24", "d/m/yyyy 12", "d/m/yyyy 24",
+                "dd/mm/yyyy 12", "dd/mm/yyyy 24", "yyyy/mm/dd 24")
+DISPLAY = {   # key: (the choices, the default)
+    "temp": (("F", "C"), "F"),
+    "dist": (("mi", "km", "kn", "m"), "mi"),       # distance and speed: mi + mph, km + km/h, nmi + kn, m + m/s
+    "pres": (("inHg", "hPa"), "inHg"),
+    "prec": (("in", "mm"), "in"),                  # (snow depth: in / cm)
+    "dt": (DATE_FORMATS, "auto"),
+    "week": ((0, 1), 0),                           # the first day of the week: Sunday / Monday
+    "dT": ((0, 1), 0),                             # decimals: temperature and wind speed
+    "dP": ((0, 1, 2), 2),                          # … precipitation
+    "dPr": ((0, 1, 2), 2),                         # … pressure
+    # (v3.0.4) the unit the Hubitat hub reports in — readings are converted from it, set points go back in it; none
+    # saved: the house's temperature unit (as the panels showed the hub's numbers before 3.0.4 — display_clean)
+    "hubT": (("F", "C"), "F"),
+}
+WIND_OF = {"mi": "mph", "km": "km/h", "kn": "kn", "m": "m/s"}   # a panel's units.wind for the house's distance unit
+DIST_OF = {v: k for k, v in WIND_OF.items()}
+
+
+def display_check(changes):
+    """{key: value} → the checked values; Invalid on an unknown key or a value that isn't one of its choices."""
+    if not isinstance(changes, dict) or not changes:
+        raise Invalid("nothing to change")
+    out = {}
+    for k, v in changes.items():
+        if k not in DISPLAY:
+            raise Invalid(f"unknown display setting {k}")
+        if isinstance(v, bool) or v not in DISPLAY[k][0]:
+            raise Invalid(f"{k}: one of " + ", ".join(map(str, DISPLAY[k][0])))
+        out[k] = v
+    return out
+
+
+def display_clean(d):
+    """Whatever is stored → every key with a valid value (a bad or missing one: its default)."""
+    d = d if isinstance(d, dict) else {}
+    out = {k: (d[k] if k in d and not isinstance(d[k], bool) and d[k] in opts else dflt) for k, (opts, dflt) in DISPLAY.items()}
+    if d.get("hubT") not in DISPLAY["hubT"][0]:
+        out["hubT"] = out["temp"]
+    return out
+
+
+def display_migrate(panel_units):
+    """(once, no display.json yet) The panels' own units today → (the house's settings, {panel: {path: value}} the
+    changes to the panels). panel_units = {panel: {"temp": "F"|"C"|None, "wind": …}} (None = never set: °F / mph).
+    The house takes the unit most panels show (a tie: °F / mph); a panel showing the house's unit follows it ("");
+    one showing another keeps it as its own — set even where it was never set — so no panel looks different."""
+    def most(vals, first):
+        return max(dict.fromkeys([first] + vals), key=lambda u: (vals.count(u), u == first)) if vals else first
+    temps = {p: (u.get("temp") if u.get("temp") in ("F", "C") else "F") for p, u in panel_units.items()}
+    winds = {p: (u.get("wind") if u.get("wind") in DIST_OF else "mph") for p, u in panel_units.items()}
+    # ("" = already follows the house — a run that stopped half-way: not a vote, and it follows the result)
+    t = most([v for p, v in temps.items() if panel_units[p].get("temp") != ""], "F")
+    w = most([v for p, v in winds.items() if panel_units[p].get("wind") != ""], "mph")
+    temps.update({p: t for p, u in panel_units.items() if u.get("temp") == ""})
+    winds.update({p: w for p, u in panel_units.items() if u.get("wind") == ""})
+    changes = {}
+    for p, u in panel_units.items():
+        c = {}
+        for path, key, mine, house in (("units.temp", "temp", temps[p], t), ("units.wind", "wind", winds[p], w)):
+            want = "" if mine == house else mine
+            if (u.get(key) or "") != want:
+                c[path] = want
+        if c:
+            changes[p] = c
+    return display_clean({"temp": t, "dist": DIST_OF[w], "hubT": t}), changes
+
+
+class Display:
+    def __init__(self, house_dir):
+        self.path = pathlib.Path(house_dir) / DISPLAY_FILE
+
+    def exists(self):
+        return self.path.is_file()
+
+    def load(self):
+        try:
+            return display_clean(json.loads(self.path.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            return display_clean({})
+
+    def save(self, values):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.path.with_name(f".{self.path.name}.{secrets.token_hex(6)}.tmp")
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(display_clean(values), f, indent=1, sort_keys=True)
+        os.replace(tmp, self.path)
+
+    def change(self, changes):
+        """{key: value} → saved; returns the new settings. Invalid: nothing saved."""
+        values = {**self.load(), **display_check(changes)}
+        self.save(values)
+        return values

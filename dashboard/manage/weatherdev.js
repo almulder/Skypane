@@ -138,7 +138,8 @@
     // ("Weather device on" governs the rest: first, once a device is chosen)
     const rows = s.device ? [swRow("on", K.t("weather.on.label"), K.t("weather.on.hint"), may, K.t("weather.saved.on"), K.t("weather.saved.off")), deviceRow(may)] : [deviceRow(may)];
     if (s.device) {
-      rows.push(swRow("card", K.t("weather.card.label"), K.t("weather.card.hint"), may, K.t("weather.saved.cardOn"), K.t("weather.saved.cardOff")));
+      // (v3.0.4: no "Use it for the weather card" any more — each card picks its source; the stored switch stays as
+      // the default of a card set to Automatic)
       rows.push(swRow("warnings", K.t("weather.warnings.label"), K.t("weather.warnings.hint"), may, K.t("weather.saved.warningsOn"), K.t("weather.saved.warningsOff")));
       if (s.warnings) rows.push(panelsRow(may));
       const now = warningsNow();
@@ -146,8 +147,21 @@
       if (s.warnings) rows.push(levelsBlock(may));
       rows.push(moreBlock(may));
     }
+    rows.push(...owmRows());
     rows.push(K.row(K.t("weather.help.label"), K.t("weather.help.hint"), el("button.btn.sm", { type: "button", onclick: () => M.help && M.help("weather") }, ic("help", 13), K.t("weather.help.button"))));
     box.replaceChildren(el("div.grp", {}, rows), statusLine());
+  }
+
+  // (v3.0.4) the OpenWeatherMap key: integrations.js's own secret row (Set… / Replace… / Clear, "Save and restart" —
+  // never shown again), and how its calls go (sources.owmStatus: never the key)
+  function owmRows() {
+    const rows = M.settingRowsOf ? M.settingRowsOf("Weather") : [];   // i18n-ok (the server's group name)
+    const o = D.sources && D.sources.owmStatus;
+    if (o && o.key) {
+      rows.push(o.error ? el("p.gf.bad", {}, K.t(`weather.owm.err.${["key", "limit", "unreachable"].includes(o.error) ? o.error : "error"}`))
+        : el("p.gf", {}, K.t("weather.owm.calls", { calls: o.calls, budget: o.budget, min: Math.round(o.every / 60) })));
+    }
+    return rows;
   }
 
   // the group on Integrations (integrations.js puts it after Calendars); filled when the answer arrives

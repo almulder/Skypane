@@ -16,7 +16,11 @@
   - broker: the image's Mosquitto (service/broker.py) — only when MQTT_HOST is empty or "builtin". Internal port 1884
     (bridge + server, no login), 1883 (LAN devices, login "devices"), 9001 (pages, WebSocket, login "panel").
   - guestwifi: `service/guest_wifi.py` — only when UNIFI_API_KEY and UNIFI_HOST are set: the guest network's QR code
-    and its new password after guests (the only child with UNIFI_API_KEY).
+    and its new password after guests;
+  - unifinet: `service/unifi_net.py` — with the same two: the UniFi cards' model (internet lines, devices, the map,
+    clients, the client log), read only while someone looks. These two are the only children with UNIFI_API_KEY.
+  - (v3.0.4) OWM_API_KEY (the OpenWeatherMap key) is in no child's environment: the server reads it from
+    private/settings.json when it calls OpenWeatherMap (service/weather_sources.py).
   - A child that exits is restarted with backoff (1 s, 2 s, 4 s … 60 s; reset after it ran 60 s).
   - SIGTERM / SIGINT (docker stop) is passed on to the children; they get 8 s before they are killed.
   - Every child output line goes to stdout with a "[server]" / "[bridge]" prefix. Secret settings (tokens, API keys,
@@ -267,8 +271,9 @@ def main():
     guest = bool((os.environ.get("UNIFI_API_KEY") or "").strip() and (os.environ.get("UNIFI_HOST") or "").strip())
     if guest:
         os.environ["GUEST_WIFI"] = "1"   # the server: serve its status / QR code, the pages: show it
+        os.environ["UNIFI_NET"] = "1"    # (v3.0.4) and the UniFi cards' model (service/unifi_net.py)
     # the server only needs the MQTT login (it publishes settings-changed messages); never the other secrets
-    children = [Child("server", [py, "-u", "-m", "service.server"], drop_env=("HUBITAT_TOKEN", "PROTECT_API_KEY", "UNIFI_API_KEY"))]
+    children = [Child("server", [py, "-u", "-m", "service.server"], drop_env=("HUBITAT_TOKEN", "PROTECT_API_KEY", "UNIFI_API_KEY", "OWM_API_KEY"))]
     if broker_child:
         children.insert(0, broker_child)
 
@@ -276,7 +281,7 @@ def main():
     if protect or builtin:
         children.append(Child("cameras", [py, "-I", "-u", str(APP / "service" / "protect_sync.py"),
                                           "--house-dir", str(DATA_DIR / "house"), "--private-dir", str(DATA_DIR / "private")],
-                              drop_env=("HUBITAT_TOKEN", "MQTT_PASSWORD", "MQTT_WS_PASSWORD", "UNIFI_API_KEY"), config_exit=True))
+                              drop_env=("HUBITAT_TOKEN", "MQTT_PASSWORD", "MQTT_WS_PASSWORD", "UNIFI_API_KEY", "OWM_API_KEY"), config_exit=True))
     if not protect:
         say("run_all", "no Protect API key (Manager page → Integrations) — only cameras of your own (Manager page → Cameras)")
 
@@ -322,18 +327,22 @@ def main():
         if allow_file.is_file():  # stage 2's copied list: not used any more (it would add devices back) - delete it
             say("run_all", f"{allow_file} is not used any more (the house model decides what may be switched) - you can delete it")
         # SIGINT: the bridge treats it like Ctrl+C and publishes hubitat/bridge/status = offline before it exits
-        children.append(Child("bridge", argv, stop_signal=signal.SIGINT, drop_env=("PROTECT_API_KEY", "UNIFI_API_KEY", "MQTT_WS_PASSWORD")))
+        children.append(Child("bridge", argv, stop_signal=signal.SIGINT, drop_env=("PROTECT_API_KEY", "UNIFI_API_KEY", "MQTT_WS_PASSWORD", "OWM_API_KEY")))
     else:
         say("run_all", "Hubitat not set up (Manager page → Integrations) — bridge not started")
     if guest:
         # it only reads the bridge's device states (which guest modes are on): with the built-in broker its own
         # read-only login, never the internal one (with a separate broker: that broker's MQTT_USER / MQTT_PASSWORD)
-        drop = ("HUBITAT_TOKEN", "PROTECT_API_KEY", "MQTT_WS_PASSWORD")
+        drop = ("HUBITAT_TOKEN", "PROTECT_API_KEY", "MQTT_WS_PASSWORD", "OWM_API_KEY")
         genv = {k: v for k, v in os.environ.items() if k not in drop}
         if observer:
             genv.update(MQTT_USER=observer["user"], MQTT_PASSWORD=observer["pass"])
         children.append(Child("guestwifi", [py, "-I", "-u", str(APP / "service" / "guest_wifi.py"), "--data-dir", str(DATA_DIR)],
                               env=genv, config_exit=True))
+        # (v3.0.4) the UniFi cards: reads the console only while a panel's card or the Manager looks; no MQTT, no other secret
+        children.append(Child("unifinet", [py, "-I", "-u", str(APP / "service" / "unifi_net.py"), "--data-dir", str(DATA_DIR)],
+                              drop_env=("HUBITAT_TOKEN", "PROTECT_API_KEY", "MQTT_USER", "MQTT_PASSWORD", "MQTT_WS_PASSWORD", "OWM_API_KEY"),
+                              config_exit=True))
     else:
         say("run_all", "guest Wi-Fi not set up (Manager page → Integrations: UniFi console address + API key)")
 

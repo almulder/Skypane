@@ -177,6 +177,11 @@ tablets).
 - **A device shows on a panel but won't switch:** add the container variable `BRIDGE_ALLOW` with its Hubitat device
   number (several separated by commas) and re-create the container ([below](#setting-a-container-variable)). `none`
   clears a value saved in the Manager before v3.0.3.
+- **UniFi Network cards** (3.0.4): they read the UniFi console set under **Integrations → Guest Wi-Fi console**
+  (its address and a UniFi Network API key); **Integrations → UniFi Network** then says Connected. No new container
+  variable or port.
+- **Your own OpenWeatherMap key** (3.0.4, optional): **Integrations → Weather → OpenWeatherMap key**. Skypane fetches
+  it once for the house every 15 minutes (at most 800 calls a day); the key stays in `private/`.
 - **Keep it on your home network.** Don't port-forward Skypane to the internet.
 - **Secrets** (the Hubitat token, camera keys) are kept in the data folder's `private/`, never shown again and never
   logged. Back up the whole data folder.

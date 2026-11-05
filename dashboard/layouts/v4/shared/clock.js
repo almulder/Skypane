@@ -52,8 +52,9 @@
     document.head.appendChild(link);
   }
 
-  // (the panel's locale: 12 or 24 hours — strings.js T.clockParts; without it, 12 hours as before)
+  // (12 or 24 hours: the house's date and time format — fmt.js, "auto" the panel's language; without it, 12 hours as before)
   const parts = (d = new Date()) => {
+    if (window.Fmt) return Fmt.timeParts(d);
     if (window.T && T.clockParts) return T.clockParts(d);
     const h = d.getHours() % 12 || 12, m = String(d.getMinutes()).padStart(2, "0");
     return { h, m, ap: d.getHours() < 12 ? "AM" : "PM" };   // i18n-ok (only without strings.js)

@@ -172,14 +172,18 @@
     });
     return reauthing;
   }
-  // the version running: the numbered release and the container's image tag ("v3.0.0 · sha-1234567"), in the header
-  // and on the sign-in card
-  let VERSION = "";
-  fetch("/api/health", { cache: "no-store" }).then((r) => r.json()).then((h) => {
+  // the version running: just the numbered release ("v3.0.4" — every upload raises it, since v3.0.4), in the
+  // sidebar, the lower-right corner (#mver, signed in) and on the sign-in card; the container's image tag (the exact
+  // build, "sha-1234567") only in their tooltip and in Send feedback's About this install — for support
+  let VERSION = "", BUILD = "";
+  const verText = (h) => {
     const rel = typeof h.release === "string" && /^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h.release) ? `v${h.release}` : "";
-    // (the build tag once: "v2.4.0 · sha-1234567", never "v2.4.0 · 2.4.0" when the image tag is the release itself)
-    VERSION = [rel, typeof h.version === "string" && h.version !== h.release && h.version !== rel ? h.version.slice(0, 40) : ""].filter(Boolean).join(" · ");
-    document.querySelectorAll(".ver").forEach((v) => { v.textContent = VERSION; });
+    const build = typeof h.version === "string" && h.version !== h.release && h.version !== rel ? h.version.slice(0, 40) : "";
+    return [rel || build, rel && build ? `${rel} · ${build}` : ""];   // (no release number: the build tag is all there is)
+  };
+  fetch("/api/health", { cache: "no-store" }).then((r) => r.json()).then((h) => {
+    [VERSION, BUILD] = verText(h);
+    document.querySelectorAll(".ver").forEach((v) => { v.textContent = VERSION; if (BUILD) v.title = BUILD; });
   }).catch(() => {});
   const RIDGES = '<svg viewBox="0 0 1280 370" preserveAspectRatio="none"><path d="M0 170 L180 60 L300 140 L460 30 L640 150 L780 90 L960 170 L1110 70 L1280 140 L1280 370 L0 370Z" fill="#6b46c9"/>'
     + '<path d="M0 250 L160 170 L360 240 L560 150 L760 250 L980 180 L1280 240 L1280 370 L0 370Z" fill="#3b2286"/><path d="M0 320 L240 260 L520 320 L820 270 L1280 320 L1280 370 L0 370Z" fill="#1d1050"/></svg>';
@@ -227,7 +231,7 @@
     el("div.hint.lg-lang", {}, T("manage.login.language")), err,   // (v3.0.0: one language so far — said, not a one-choice list)
     // (a one-time sign-in code — from an admin, or the reset command: the login's new password, set here)
     setup ? null : el("button.linkish", { type: "button", onclick: () => showReset(user.value.trim()) }, T("manage.reset.title")),
-    el("small.ver", {}, VERSION));
+    el("small.ver", { title: BUILD || null }, VERSION));
     if (msg === RESET_MSG()) { go.hidden = true; go.disabled = true; }   // (nothing to try until the reset)
     showScene(form);
     if (name) user.value = name;
@@ -281,7 +285,7 @@
       el("p", {}, T("manage.dataFolder.text")),
       el("p.muted", {}, T("manage.dataFolder.fix")),
       el("button", { type: "button", onclick: () => location.reload() }, T("manage.dataFolder.reload")),
-      el("small.ver", {}, VERSION)));
+      el("small.ver", { title: BUILD || null }, VERSION)));
   }
   // (v3.0.0) "Save and restart": a box over the page until Skypane answers again — a new server process (/api/health
   // "boot" changed) — then the page reloads. before = the boot id read just before the save.
@@ -517,7 +521,7 @@
   // (same origin: the page's CSP, script-src 'self', allows them).
   // (v3.0.0) the panel's own string table and T() first: the builder's preview (roomlayoutG.js) and the drawings use them
   const LAZY = ["../layouts/v4/shared/strings/en.js", "../layouts/v4/shared/strings.js", "../layouts/v4/shared/art-extra.js",   // i18n-ok
-    "../layouts/v4/shared/roomlayoutG.js", "../layouts/v4/shared/motions.js", "pictures.js", "builder.js"];   // i18n-ok
+    "../layouts/v4/shared/roomlayoutG.js", "../layouts/v4/shared/motions.js", "pictures.js", "devedit.js", "builder.js"];   // i18n-ok (v3.0.4: devedit.js — the Devices card's item editor)
   // (v2.8.0) Manage.need(name) → a promise once those scripts are in: "art" (the drawings and the picture picker —
   // Backgrounds, Icons, Cards, a device's Picture) or "builder" (all of them). A computer still loads everything after
   // a sign-in (loadHeavy, as in v2.7.2); a phone only what the page it opens needs. Each script once, in this order.

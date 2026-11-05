@@ -1,7 +1,7 @@
 // Skypane Manager — Integrations → Calendars → Event icons (v3.0.2, the admin; service/event_icons.py, the CR
 // mockups/CR-event-icons.md, owner's guide docs/calendar-icons.md). The house's one list of which words in an event's
-// title show which icon and colour: a row per icon (its icon, name, colour, words as chips, on / off), dragged — or ▲ ▼ —
-// into order: the first match from the top wins. "Add an icon", "Try a title", "Reset to defaults" (the house
+// title show which icon and colour: a row per icon (its icon, name, colour, words as chips, on / off), dragged by its
+// grip — or ▲ ▼ — into order: the first match from the top wins. "Add an icon", "Try a title", "Reset to defaults" (the house
 // language's). Changes stay on this page until Save; the panels pick a saved list up within seconds (the server says
 // dashboard/calendars/changed). A phone shows the list to read. Drawn with DOM calls + textContent only.
 (function () {
@@ -15,7 +15,7 @@
   const PLAIN = { icon: "calendar", color: "#a99fd0" };   // (no word matched: the panel's plain calendar icon)
   // st: {saved, list (being edited), defaults, available, max, lang, edited, damaged}; kept while the Manager is open,
   // so the Integrations page drawing itself again (its checks, a save) never drops what's being changed
-  let st = null, box = null, open = false, tryText = "", picking = null, from = null, add = null, focusKey = null, saving = false;
+  let st = null, box = null, open = false, tryText = "", picking = null, add = null, focusKey = null, saving = false;
   let typed = {};   // (v3.0.2: icon id → a word typed in its box, not added yet — Save adds it, a redraw keeps it)
   const copy = (x) => JSON.parse(JSON.stringify(x));
   const hasTyped = () => Object.values(typed).some((v) => String(v).trim());
@@ -140,15 +140,9 @@
     const chips = c.words.map((w) => el("span.ei-chip", {}, el("span", {}, w),
       el("button.ei-x", { type: "button", title: K.t("eventIcons.removeWord", { word: w }), "aria-label": K.t("eventIcons.removeWord", { word: w }),
         onclick: () => { c.words = c.words.filter((x) => x !== w); focusKey = `word:${c.id}`; changed(true); } }, "×")));   // i18n-ok (a sign)
-    const r = el("div.ei-row" + (c.on ? "" : ".off"), { role: "listitem",
-      ondragstart: (e) => { from = i; r.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", c.id); } catch {} },
-      ondragover: (e) => { if (from == null) return; e.preventDefault(); r.classList.add("over"); },
-      ondragleave: () => r.classList.remove("over"),
-      ondrop: (e) => { e.preventDefault(); r.classList.remove("over"); if (from == null || from === i) return;
-        const [mv] = st.list.splice(from, 1); st.list.splice(i, 0, mv); from = null; changed(true); },
-      ondragend: () => { from = null; r.draggable = false; r.classList.remove("dragging"); } },
-      // (only the grip starts a drag: the row's fields stay selectable)
-      el("span.grip", { "aria-hidden": "true", title: K.t("eventIcons.dragTip"), onpointerdown: () => { r.draggable = true; }, onpointerup: () => { r.draggable = false; } }, "⠿"),   // i18n-ok (a sign)
+    const r = el("div.ei-row" + (c.on ? "" : ".off"), { role: "listitem" },
+      // (only the grip drags — Kit.reorder, v3.0.4: the row's fields stay selectable)
+      K.reorder.grip(c.id, c.name, { "data-fk": `grip:${c.id}` }),
       el("span.ei-n", { "aria-hidden": "true" }, String(i + 1)),
       face,
       el("div.ei-main", {},
@@ -275,7 +269,8 @@
       st.damaged ? el("p.warn", {}, K.t("eventIcons.damaged")) : null,
       tryBox(),
       addForm(),
-      el("div.ei-list", { role: "list", "aria-label": K.t("eventIcons.listLabel") }, st.list.map(row)),
+      K.reorder.list(el("div.ei-list", { role: "list", "aria-label": K.t("eventIcons.listLabel") }, st.list.map(row)), "eventIcons",
+        { name: (i) => st.list[i].name, move: (i, j) => { const [mv] = st.list.splice(i, 1); st.list.splice(j, 0, mv); focusKey = `grip:${mv.id}`; changed(true); } }),
       st.list.length ? null : el("p.muted", {}, K.t("eventIcons.empty")),
       bar);
     box.replaceChildren(marker, det);

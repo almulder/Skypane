@@ -2,7 +2,8 @@
 // (service/server.py, docs/dashboard-service.md, sync protocol: docs/dashboard-service-sync.md) and cached in this
 // browser so the page starts instantly and still works if the service is down.
 //   PanelStore.get(key) / PanelStore.set(key, value, paths?) / PanelStore.onChange(fn(keys))
-// Keys: "settings" (Settings.v), "cameraViews" (panel-made camera views), "weatherCustom" (added weather places).
+// Keys: "settings" (Settings.v), "cameraViews" (panel-made camera views), "weatherCustom" (added weather places);
+// (v3.0.4) "house" — read only: the house's units, date formats and camera labels, sent with the panel's data (fmt.js).
 // paths = the dotted sub-paths that changed (e.g. ["cameras.liveMax"]); none = the whole value changed.
 // Start: the local cache is used at once; then the service's copy replaces it (onChange). (v3.0.2: a panel never
 // creates itself on the service any more — the Manager makes it and a tablet is paired to it; no built-in "main".)
@@ -59,10 +60,13 @@
   }
 
   // take the service's data: keys not changed here are replaced, changed ones merged; listeners hear only real changes
-  function take(r, server) {
+  function take(r, server, house) {
     rev = r; server = server || {};
     const changed = [];
+    // ("house" only from a pull that brought it: a save's answer has none, and an older service none at all)
+    if (house !== undefined && json(house) !== json(data.house)) { data.house = house; changed.push("house"); }
     for (const k of new Set([...Object.keys(data), ...Object.keys(server)])) {
+      if (k === "house") continue;
       const before = json(data[k]);
       const v = dirty[k] ? mergeKey(server[k], data[k], dirty[k].paths) : server[k];
       if (v === undefined) delete data[k]; else data[k] = v;
@@ -154,7 +158,7 @@
       const res = await r.json();
       if ((res.rev || 0) < rev) return;   // older than what this browser already saw
       synced = true; blocked = false; window.PanelStore.notSetUp = false;
-      if (res.exists) take(res.rev, res.data);   // (v3.0.2: nothing there yet → nothing sent; no self-made panel)
+      if (res.exists) take(res.rev, res.data, res.house);   // (v3.0.2: nothing there yet → nothing sent; no self-made panel)
       if (Object.keys(dirty).length) schedule();
     } catch (e) {
       // no service (e.g. the old test web server): keep working from the cache, try again in a minute

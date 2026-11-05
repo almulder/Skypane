@@ -54,6 +54,7 @@ sys.path.insert(0, str(ROOT / "service"))
 import house_model  # noqa: E402  (service/house_model.py: rooms, devices, locks… from Hubitat's device list)
 import panel_pin  # noqa: E402  (service/panel_pin.py: the house's panel PIN, kept as a hash in the house dir)
 import weather_device  # noqa: E402  (service/weather_device.py, v3.0.0: a Hubitat weather device's warnings and weather)
+import timers  # noqa: E402  (service/timers.py, v3.0.4: a Hubitat rule's "Timer: <name>, <length>")
 
 # attributes the panel cares about (everything else is left out of hubitat/state and hubitat/event)
 KEEP = {
@@ -135,6 +136,17 @@ PANEL_NAME = re.compile(r"[a-z0-9_-]{1,40}")
 # {"to", "volume", "muted"} — the panels speak it / set their own volume (docs/hubitat-notifier.md)
 T_SAY, T_VOLUME = "hubitat/say", "hubitat/volume"
 SAY_RATE = 10          # spoken messages per minute, all notifiers together
+# (v3.0.4) a notify text "Timer: <name>, <preset | d HH:MM>" (timers.parse_command) starts timers instead of showing
+# an alert: on T_TIMER for the server (only the internal login reads it), the alert dismissed on the hub at once
+T_TIMER, TIMER_RATE = timers.TOPIC, 20   # (Hubitat timers a minute, all notifiers together)
+# (v3.0.4) "Timer up" on a house speaker: the server's signed {"id", "text", "vol"?, "rid", "exp", "sig"} (key: the
+# house ticket key, timers.SPEAK_LABEL) under manager/ (only the internal login). The only way "speak" is ever sent:
+# never from a panel or the Manager, only to a device with SpeechSynthesis and "speak" in its own command list
+# (speaker_ids), and then on_cmd's checks as for a light (the allowlist — a timer's speakers are card devices — and
+# the never list). "vol": setVolume first, only for a device whose own list has it.
+T_TIMER_SPEAK, SPEAK_RATE, SPEAK_MAX_BYTES = timers.SPEAK_TOPIC, 12, 600
+SPEAK_TEXT = re.compile(r"[^\x00-\x1f\x7f,]{1,80}")   # (no commas: the Maker API splits a value there)
+T_OWM = weather_device.OWM_TOPIC   # (v3.0.4) retained, from the server: the OpenWeatherMap warnings (they join the weather device's)
 # the server's health heartbeat (service/health.py, written by the internal login only): {"v": 1, "n", "lvl", "text"};
 # passed on to every notifier (serverHeartbeat) so Hubitat knows the server is alive and what's wrong
 T_HEALTH = "dashboard/health"
@@ -511,6 +523,18 @@ def media_cmds(devices):
     return out
 
 
+def speaker_ids(devices):
+    """(v3.0.4) The ids of the devices "Timer up" may speak on: SpeechSynthesis and "speak" in their own command list."""
+    out = set()
+    for d in devices if isinstance(devices, list) else []:
+        try:
+            if isinstance(d, dict) and str(d.get("id", "")).isdecimal() and house_model.is_speaker(d):
+                out.add(int(d["id"]))
+        except (TypeError, ValueError, AttributeError):
+            continue
+    return out
+
+
 def build_state(devices):
     st = {}
     for d in devices:
@@ -657,6 +681,7 @@ class Bridge:
         self.started = time.time()  # tickets issued before this bridge started are refused (no replay after a restart)
         self.kind_cmds = {}      # id → the only commands it accepts (locks, valves, garage openers)
         self.media = {}          # id → the MEDIA commands its own Hubitat command list names (media_cmds; every resync)
+        self.speakers = set()    # (v3.0.4) ids with SpeechSynthesis and "speak" (speaker_ids; every resync): T_TIMER_SPEAK
         self.garage_relays = set()  # garage openers that are plain relays: every command except refresh needs a ticket
         self.garage_doors = set()   # real garage door controllers: "close" without a ticket only while open
         self.state, self.lock = {}, threading.Lock()
@@ -675,6 +700,7 @@ class Bridge:
         self.ticket_acks = []               # (PIN-checked level 4–5 dismissals: TICKET_ACK_RATE)
         self.mgr_acks = []   # (the Manager's acknowledgements: their own budget)
         self.says = []                      # recent spoken messages (rate limit)
+        self.timer_cmds, self.timer_ids = [], set()   # (v3.0.4) recent Hubitat "Timer:" commands (rate limit); their alert ids (never shown)
         self.health_sent = (None, 0.0)      # the last heartbeat passed on to the hub, and when
         # the hub's modes (name → id, hub order; the last good list kept), recent mode changes (rate limit)
         self.modes, self.mode_lock, self.mode_sets, self._mode_thread = {}, threading.Lock(), [], None
@@ -710,9 +736,9 @@ class Bridge:
         self.hub_status(None, len(devices) if isinstance(devices, list) else 0)
         new = build_state(devices)
         if isinstance(devices, list):
-            media = media_cmds(devices)
+            media, speakers = media_cmds(devices), speaker_ids(devices)
             with self.allow_lock:
-                self.media = media
+                self.media, self.speakers = media, speakers
         changes = 0
         with self.lock:
             old = self.state
@@ -962,13 +988,41 @@ class Bridge:
             self.update_hsm(status="disarmed")
         answer(True, action)
 
+    def on_timer(self, nid, m):
+        """(v3.0.4) A Hubitat rule's notify "Timer: Emma, Free time": the server starts the timers (T_TIMER); the alert
+        is never shown and is dismissed on the hub (the driver's own quiet dismiss: no acknowledgement, no button)."""
+        cmd = timers.parse_command(m.get("text"))
+        aid = m.get("id") if isinstance(m.get("id"), str) and ALERT_ID.fullmatch(m["id"]) else None
+        now = time.time()
+        with self.note_lock:
+            if aid:
+                self.timer_ids = {*list(self.timer_ids)[-50:], aid}
+            self.timer_cmds = [t for t in self.timer_cmds if now - t < 60]
+            busy = len(self.timer_cmds) >= TIMER_RATE
+            if not busy:
+                self.timer_cmds.append(now)
+        if aid:
+            self.pub_alerts()
+            threading.Thread(target=self._maker_quiet, args=(f"devices/{int(nid)}/dismiss/{aid}", "timer"), daemon=True).start()
+        if busy:
+            return log.warning("notifier %s: a timer command — too many, dropped", nid)
+        log.info("notifier %s: timer %r for %s", nid, cmd["name"], cmd["len"])
+        if self.mqtt:
+            self.mqtt.publish(T_TIMER, json.dumps({"v": 1, "name": cmd["name"], "len": cmd["len"]}), qos=1)
+
+    def on_owm(self, payload):
+        """(v3.0.4) The server's OpenWeatherMap warnings (T_OWM): into the weather device's list; published when the
+        warnings changed (wx_flush)."""
+        if self._wx("on_owm", bytes(payload[:64 * 1024])):
+            self.wx_flush()
+
     def pub_alerts(self):
         now = int(time.time())
         with self.note_lock:
             out = []
             for nid, ids in self.active.items():
                 for i, (lvl, exp) in ids.items():
-                    if exp and exp <= now:
+                    if (exp and exp <= now) or i in self.timer_ids:
                         continue
                     a = self.alert_text.get(i)
                     out.append({k: v for k, v in a.items() if k != "nid"} if a else
@@ -997,6 +1051,8 @@ class Bridge:
             log.warning("notifier %s: a command in a format this bridge doesn't know — update the driver or the bridge", nid)
             return
         op = m.get("op")
+        if op == "notify" and timers.parse_command(m.get("text")):
+            return self.on_timer(nid, m)
         if op == "notify":
             a = clean_alert(m)
             if not a:
@@ -1733,8 +1789,9 @@ class Bridge:
         if self.mqtt:
             self.mqtt.publish(T_RESULT, json.dumps(msg), qos=1)
 
-    def on_cmd(self, payload, reply=None, deadline=None):
+    def on_cmd(self, payload, reply=None, deadline=None, speech=False):
         # reply(cid, command, ok, reason=None): where the answer goes — the panels' T_RESULT, or (v2.9.1) the Manager's
+        # (v3.0.4) speech: from on_timer_speak only — "speak" / "setVolume" and nothing else, "speak" only for a speaker
         reply = reply or self.result
         try:
             m = json.loads(payload)
@@ -1751,12 +1808,13 @@ class Bridge:
             log.warning("REJECTED command %r for device %s: not in allowlist", command, cid)
             reply(cid, command, False, "not allowed")
             return
-        if command not in COMMANDS or (cid in self.kind_cmds and command not in self.kind_cmds[cid]) or                 (command in ONLY_LISTED and command not in self.kind_cmds.get(cid, ())) or \
+        if (speech and command not in ("speak", "setVolume")) or (command == "speak" and (not speech or cid not in self.speakers)) or \
+                (command not in COMMANDS and command != "speak") or (cid in self.kind_cmds and command not in self.kind_cmds[cid]) or                 (command in ONLY_LISTED and command not in self.kind_cmds.get(cid, ())) or \
                 (command in MEDIA and command not in self.media.get(cid, ())):
             log.warning("REJECTED command %r for device %s: command not supported", command, cid)
             reply(cid, command, False, "command not allowed")
             return
-        if self.needs_pin(cid, command):
+        if not speech and self.needs_pin(cid, command):   # (speak / setVolume: a speaker's own, never a PIN — as MEDIA)
             # a valve, garage opener or a device the owner marked: opening / turning on needs the panel PIN. The page
             # gets a one-time ticket for exactly this command from the dashboard service (which checks the PIN over
             # HTTP); only the ticket comes over MQTT, and it's never logged.
@@ -1769,7 +1827,7 @@ class Bridge:
                 reply(cid, command, False, "pin-" + res)
                 return
         # (setColor: "hue,saturation[,level]" → the map Hubitat wants, built in device_rules — never passed through)
-        ok, arg = command_arg(command, value)
+        ok, arg = (isinstance(value, str) and bool(SPEAK_TEXT.fullmatch(value)), value) if command == "speak" else command_arg(command, value)
         if not ok:
             log.warning("REJECTED command %r for device %s: bad value", command, cid)
             reply(cid, command, False, "bad value")
@@ -1913,6 +1971,47 @@ class Bridge:
         self.on_cmd(json.dumps({k: v for k, v in m.items() if k in ("id", "command", "value", "ticket")}), reply=reply, deadline=m["exp"])
         return True
 
+    def on_timer_speak(self, payload):
+        """(v3.0.4) "Timer up" on a house speaker (T_TIMER_SPEAK, from the server): exactly {"id", "text", "vol"?, "rid",
+        "exp", "sig"}, signed, not past its deadline, each rid once, SPEAK_RATE a minute — then on_cmd(speech=True).
+        The answers are only logged."""
+        try:
+            m = json.loads(payload) if len(payload) <= SPEAK_MAX_BYTES else None
+        except ValueError:
+            m = None
+        if not isinstance(m, dict) or set(m) - {"id", "text", "vol", "rid", "exp", "sig"} or not isinstance(m.get("rid"), str) \
+                or not MGR_RID.fullmatch(m["rid"]) or not isinstance(m.get("id"), int) or isinstance(m.get("id"), bool) \
+                or not isinstance(m.get("text"), str) or not isinstance(m.get("exp"), int) or isinstance(m.get("exp"), bool) \
+                or ("vol" in m and (not isinstance(m["vol"], int) or isinstance(m["vol"], bool) or not 1 <= m["vol"] <= 100)):
+            log.warning("REJECTED Timer up speech: bad message")
+            return False
+        if not device_rules.signed_ok(self.mgr_key(timers.SPEAK_LABEL), m):
+            log.warning("REJECTED Timer up speech: not signed by the dashboard service")
+            return False
+        now = time.time()
+        if not now <= m["exp"] <= now + 60:
+            log.warning("REJECTED Timer up speech for device %s: past its deadline", m["id"])
+            return False
+        with self.allow_lock:   # (each rid once until its deadline; SPEAK_RATE a minute in all)
+            seen = self.__dict__.setdefault("speak_rids", {})
+            for r_old in [r for r, e in seen.items() if e < now]:
+                del seen[r_old]
+            sent = self.__dict__["speak_sent"] = [t for t in self.__dict__.get("speak_sent", []) if now - t < 60]
+            refused = "already handled" if m["rid"] in seen else "too many" if len(sent) >= SPEAK_RATE or len(seen) >= 500 else None
+            if not refused:
+                seen[m["rid"]] = m["exp"]
+                sent.append(now)
+        if refused:
+            log.warning("REJECTED Timer up speech for device %s: %s", m["id"], refused)
+            return False
+
+        def reply(cid, command, ok, reason=None):
+            (log.info if ok else log.warning)("Timer up: %s on device %s %s", command, cid, "sent" if ok else f"not sent ({reason})")
+        if m.get("vol") and "setVolume" in self.media.get(m["id"], ()):
+            self.on_cmd(json.dumps({"id": m["id"], "command": "setVolume", "value": m["vol"]}), reply=reply, deadline=m["exp"], speech=True)
+        self.on_cmd(json.dumps({"id": m["id"], "command": "speak", "value": m["text"]}), reply=reply, deadline=m["exp"], speech=True)
+        return True
+
     def manager_result(self, rid, cid, command, ok, reason=None):
         msg = {"rid": rid, "id": cid, "command": command, "ok": ok}
         if reason:
@@ -1950,9 +2049,11 @@ class Bridge:
             client.subscribe(T_ACK, qos=1)
             client.subscribe(T_ACK_MGR, qos=1)
             client.subscribe(T_MGR_CMD, qos=1)   # (v2.9.1: the Manager's device commands)
+            client.subscribe(T_TIMER_SPEAK, qos=1)   # (v3.0.4: "Timer up" on a house speaker, from the server)
             client.subscribe(T_MODE_SET, qos=1)
             client.subscribe(T_HSM_SET, qos=1)
             client.subscribe(T_HEALTH, qos=0)
+            client.subscribe(T_OWM, qos=1)   # (v3.0.4: retained — the warnings as last fetched)
             if self.state:
                 self.pub_state()
             if self.notifiers or self._wx("device_id") is not None:
@@ -1983,6 +2084,11 @@ class Bridge:
                     self.on_manager_cmd(bytes(msg.payload[:MGR_CMD_MAX_BYTES + 1]).decode("utf-8", errors="replace"))
                 except Exception as e:   # never let one message kill paho's network thread
                     log.warning("Manager command handling failed: %s", type(e).__name__)
+            elif msg.topic == T_TIMER_SPEAK and not msg.retain and msg.payload:
+                try:
+                    self.on_timer_speak(bytes(msg.payload[:SPEAK_MAX_BYTES + 1]).decode("utf-8", errors="replace"))
+                except Exception as e:
+                    log.warning("Timer up speech handling failed: %s", type(e).__name__)
             elif msg.topic == T_ACK_MGR and not msg.retain and msg.payload:
                 try:
                     self.on_manager_ack(bytes(msg.payload[:ACK_MAX_BYTES + 1]))
@@ -1998,6 +2104,11 @@ class Bridge:
                     self.on_health(bytes(msg.payload[:HEALTH_MAX_BYTES + 1]))   # (parse_health refuses anything longer)
                 except Exception as e:
                     log.warning("health heartbeat handling failed: %s", type(e).__name__)
+            elif msg.topic == T_OWM and msg.payload:   # (retained on purpose: the warnings as last fetched)
+                try:
+                    self.on_owm(msg.payload)
+                except Exception as e:
+                    log.warning("OpenWeatherMap warnings handling failed: %s", type(e).__name__)
             elif msg.topic == T_HSM_SET and not msg.retain and msg.payload:
                 try:
                     self.on_hsm_set(bytes(msg.payload[:HSM_SET_MAX_BYTES + 1]))   # (parse_hsm_set refuses anything longer)

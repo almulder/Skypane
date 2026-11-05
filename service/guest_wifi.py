@@ -48,6 +48,8 @@ DEFAULT_SETTINGS = {"ssid": "", "afterGuests": True, "days": 0}
 DAYS_CHOICES = (0, 1, 3, 7, 14, 30)
 
 SETTINGS = "guest-wifi-settings.json"
+# (v3.0.4) a dropped, cut-off or timed-out answer, in plain words: nearly always the console busy or restarting
+QUIET = "The UniFi console didn't answer — it may be restarting. Try again in a minute."
 REQUEST = "guest-wifi-request.json"
 STATE = "guest-wifi-state.json"
 STATUS = "guest-wifi-status.json"
@@ -190,6 +192,8 @@ class UniFi:
     """GET / PUT on https://<host>/proxy/network/integration/v1 with the X-API-KEY header. The console's certificate
     is self-signed: not verified (LAN only, like the Protect client); redirects are never followed (the key stays)."""
 
+    max_bytes = 4_000_000   # (v3.0.4: service/unifi_net.py reads bigger lists)
+
     def __init__(self, host, key, timeout=15):
         self.host, self.key, self.timeout = host, key, timeout
         self.base = f"https://{host}/proxy/network/integration/v1"
@@ -206,7 +210,7 @@ class UniFi:
                                               **({"Content-Type": "application/json"} if data else {})})
         try:
             with self.opener.open(req, timeout=self.timeout) as r:
-                raw = r.read(4_000_000)
+                raw = r.read(self.max_bytes)
         except urllib.error.HTTPError as e:
             if e.code in (401, 403):
                 # (v3.0.3: shown on Integrations itself — it no longer sends people to the page they're on)
@@ -221,7 +225,7 @@ class UniFi:
             raise Fail(f"Can't reach UniFi at {self.host} ({type(reason).__name__ if isinstance(reason, BaseException) else 'no answer'}). "
                        "Is the UniFi console address (Manager → Integrations) right?", unsure=method != "GET") from None
         except Exception as e:   # timeouts, cut-off answers, anything else: never a traceback (it could show the key)
-            raise Fail(f"UniFi request failed ({type(e).__name__})", unsure=method != "GET") from None
+            raise Fail(QUIET, unsure=method != "GET") from None
         try:
             v = json.loads(raw) if raw else {}
         except ValueError:

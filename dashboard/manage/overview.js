@@ -107,6 +107,7 @@
     if (from === "health") kids.push(el("p.ov-note", {}, ic("help", 15), K.t("overview.note.older")));
     const st = stale(), at = heardAt();
     if (st) kids.push(el("p.ov-note.bad", {}, ic("alert", 15), at ? K.t("overview.stale.noteHeard", { why: staleWhy(), when: day(at) }) : K.t("overview.stale.noteNotLive", { why: staleWhy() })));
+    if (UP && hasUp() && (!UP.seen || upOpen)) kids.push(upgradeCard());   // (v3.0.4: the admin's "What changed", once)
     kids.push(healthCard(), tiles(),
       el("div.ovg", {}, el("div", {}, lookCard(), activityCard()), el("div", {}, alertsCard(), M.houseCard ? M.houseCard(false) : null, linksCard())));   // (v2.9.3: Mode & alarm)
     M.swap(M.$main, el("div.ov-page", {}, kids));
@@ -247,6 +248,7 @@
     if (S.allowed("backgrounds")) L.push(["upload", K.t("overview.links.background"), () => M.go("backgrounds")]);
     if (S.allowed("guest")) L.push(["wifi", K.t("overview.links.guest"), () => M.go("guest")]);
     if (S.allowed("accounts")) L.push(["users", K.t("overview.links.addLogin"), () => M.go("accounts")]);
+    if (M.isAdmin() && UP && hasUp()) L.push(["sparkles", K.t("upgrade.link", { v: UP.version }), () => { upOpen = true; draw(); M.$main.scrollTo && M.$main.scrollTo(0, 0); }]);
     L.push(["help", K.t("overview.links.help"), () => M.help && M.help("overview")]);
     return el("section.card.flush", {}, el("h3.ch", {}, ic("zap", 15), K.t("overview.links.title")),
       el("div.qlinks", {}, L.map(([i, t, f]) => el("button.ql", { type: "button", onclick: f, title: t }, ic(i, 16), el("span", {}, t)))));
@@ -491,7 +493,52 @@
   }
 
   // ---------- the page in the shell ----------
-  M.renderOverview = () => { last = ""; draw(); load(true); };
+  // ---------- (v3.0.4) "What changed in 3.0.4": what the one-time moves did to the saved layouts (GET / PATCH
+  // /api/manage/upgrade — the record the moves wrote, read generically: panel → where → card → from → to → title; the
+  // saved cards; what could not move). The panels show nothing new (only their version glows); the admin sees this here
+  // once ("Got it": per admin, on the server), and again from Quick links → "What changed in 3.0.4". ----------
+  let UP = null, upOpen = false;
+  async function loadUpgrade() {
+    if (!M.isAdmin()) { UP = null; return; }
+    try { const r = await M.api("/api/manage/upgrade"); UP = r && r.version && Array.isArray(r.panels) ? r : null; } catch { UP = null; }
+  }
+  const hasUp = () => !!(UP.cards || (UP.saved || []).length || (UP.failed || []).length);
+  // what an old card became when the record doesn't say ("to"): devices_card.py's and time_cards.py's moves
+  const TO = { device: "devices", group: "devices", value: "devices", button: "devices", lock: "devices", fan: "devices", scenes: "devices",
+    bins: "trash", countdown: "timers", timer: "timers" };   // i18n-ok (card types)
+  const typeName = (t) => (t ? K.tOr(`builder.type.${t}.name`, t) : "");
+  const moveWords = (r) => { const to = r.to || TO[r.from]; return to && to !== r.from ? K.t("upgrade.move", { from: typeName(r.from), to: typeName(to) }) : K.t("upgrade.updated", { from: typeName(r.from) }); };
+  const whereWords = (w) => (w === "home" ? K.t("upgrade.where.home") : w === "rooms" ? K.t("upgrade.where.rooms")
+    : /^room:/.test(w || "") ? K.t("upgrade.where.room", { room: w.slice(5) }) : w || "");
+  function upgradeCard() {
+    const row = (title, sub, cls) => el("div.up-row" + (cls || ""), {}, el("span.ri", {}, ic(cls ? "alert" : "cards", 15)), el("div", {}, el("b", {}, title), sub ? el("small", {}, sub) : null));
+    const groups = UP.panels.map((p) => el("details.up-grp", { open: true }, el("summary", {}, ic("tablet", 15), el("b", {}, p.name), el("small.muted", {}, K.t("upgrade.cards", { n: p.rows.length })),
+      el("span.sp"), p.gone ? el("span.pill.idle", {}, K.t("upgrade.gone")) : S.allowed("panels") && !S.isPhone()
+        ? el("button.btn.sm", { type: "button", onclick: (e) => { e.preventDefault(); M.go(`panels/${p.id}/layout`); } }, ic("layout", 14), K.t("upgrade.openLayout")) : null),
+    p.rows.map((r) => row(moveWords(r), [r.title || r.dev, r.pos ? K.tOr(`upgrade.pos.${r.pos}`, "") : "", whereWords(r.where)].filter(Boolean).join(" · ")))));
+    if ((UP.saved || []).length) groups.push(el("details.up-grp", { open: true }, el("summary", {}, ic("cards", 15), el("b", {}, K.t("upgrade.saved")), el("small.muted", {}, K.t("upgrade.cards", { n: UP.saved.length }))),
+      UP.saved.map((r) => row(moveWords(r), r.name || ""))));
+    if ((UP.failed || []).length) groups.push(el("details.up-grp", { open: true }, el("summary", {}, ic("alert", 15), el("b", {}, K.t("upgrade.failed")), el("small.muted", {}, K.t("upgrade.failedHint"))),
+      UP.failed.map((r) => row(r.panel ? K.t("upgrade.failedPanel", { name: r.name || r.panel }) : K.t("upgrade.failedSaved"), [whereWords(r.where), r.error].filter(Boolean).join(" · "), ".bad"))));
+    const done = el("button.btn.pri", { type: "button", onclick: async () => {
+      done.disabled = true;
+      const r = await M.api("/api/manage/upgrade", { action: "seen" }).catch(() => null);
+      done.disabled = false;
+      if (!r || !r.ok) { M.toast((r && r.error) || K.t("upgrade.notSaved"), true); return; }
+      UP.seen = true; upOpen = false; draw();
+      M.toast(K.t("upgrade.dismissed", { v: UP.version }));
+    } }, ic("check", 15), K.t("upgrade.gotIt"));
+    const nf = (UP.failed || []).length;
+    return el("section.card.flush.up-card", { "aria-label": K.t("upgrade.title", { v: UP.version }) },
+      el("div.up-head", {}, el("span.ni", {}, ic("sparkles", 20)), el("div", {}, el("h2", {}, K.t("upgrade.title", { v: UP.version })), el("p", {}, K.t("upgrade.intro")),
+        el("div.up-sum", {}, el("span.pill.acc", {}, K.t("upgrade.sumCards", { n: UP.cards })), UP.saved.length ? el("span.pill.idle", {}, K.t("upgrade.sumSaved", { n: UP.saved.length })) : null,
+          nf ? el("span.pill.warn", {}, K.t("upgrade.sumFailed", { n: nf })) : null))),
+      ...groups,
+      el("div.up-foot", {}, el("small.muted", {}, K.t("upgrade.foot")), el("span.sp"), done));
+  }
+  M.onReset(() => { UP = null; upOpen = false; });
+
+  M.renderOverview = () => { last = ""; draw(); load(true); loadUpgrade().then(() => { if (onPage() && O) draw(); }); };
   M.onReset(() => { O = null; from = ""; down = false; last = ""; clearTimeout(timer); });
   // (a test or the help may ask for it)
   M.overview = () => O;

@@ -28,6 +28,8 @@
 // stops on this panel, the alert stays up everywhere until dismissed with the PIN, the sound comes back after
 // SILENCE_MS if it's still up — or at once when it happens again (count +1) —, and Hubitat hears it ({"id", "panel",
 // "level", "silenced": true} → panelSilence).
+// (v3.0.4) The panel's own reminders (HA.own: the Bins / Trash card, trash.js) join the list the same way, at their
+// level (a Reminder): never sent to Hubitat; their button is the card's ("Taken out"), and they go when it's pressed.
 (function () {
   const H = Home, esc = (s) => UI.esc(s);
   const GONE = "panel.hubalerts.gone";
@@ -112,7 +114,7 @@
   // the notification list (a pop-up): every alert up here, its level's name, when, × each, and Dismiss all
   const row = (a) => `<div class="hub-row l${a.lvl}${isWx(a) ? " wx" : ""}">${isWx(a) ? `<span class="hub-ri">${HA.icon(a, 20)}</span>` : ""}<div class="hub-rt"><small>${lvlLine(a)}</small>
     <span>${a.title ? `<b>${esc(a.title)}</b>${moreTag(a)} ` : ""}${esc(a.text)}${a.count > 1 ? ` ×${+a.count | 0}` : ""}</span></div>
-    <button class="hub-x"${Acts.on("hub.dismiss", a.id)} aria-label="${esc(T("alert.dismissOne"))}">${icon("x", 18)}</button></div>`;
+    ${a.act ? `<button class="hub-act"${Acts.on("hub.dismiss", a.id)}>${esc(a.act)}</button>` : `<button class="hub-x"${Acts.on("hub.dismiss", a.id)} aria-label="${esc(T("alert.dismissOne"))}">${icon("x", 18)}</button>`}</div>`;
   HA.openList = () => UI.popup(() => {
     const list = HA.shown();
     return { title: T("alert.notifications"), body: list.length
@@ -124,7 +126,7 @@
   HA.openAlert = (id) => UI.popup(() => {
     const a = HA.shown().find((x) => x.id === id);
     if (a) return { title: HA.NAMES[a.lvl], body: `<div class="hub-rows">${row(a)}</div>` };
-    const w = (window.Weather && Weather.warnings ? Weather.warnings() : []).find((x) => x.id === id);
+    const w = (window.Weather && Weather.warnings ? Weather.warnings("*") : []).find((x) => x.id === id);
     return { title: w ? HA.NAMES[w.lvl] || T("alert.weather") : T("alert.notifications"),
       body: w ? `<div class="hub-rows"><div class="hub-row l${w.lvl} wx dim"><span class="hub-ri">${icon("storm", 20)}</span><div class="hub-rt"><small>${esc(T("alert.dismissed"))}</small><span><b>${esc(w.title || "")}</b></span></div></div></div>`
         : `<p class="phint">${esc(T("alert.nothingNew"))}</p>` };
@@ -132,9 +134,10 @@
   // the weather card's warning ribbon: the highest weather warning for this panel (its "to", the panel's lowest level
   // shown); one dismissed here or elsewhere is still shown, subdued, while the device reports it. A tap: the warning, or
   // the list when several are up. "" = none.
-  HA.weatherRibbon = () => {
+  // (v3.0.4) id / source: the card's place and what it shows — that place's warnings only (Weather.warnings)
+  HA.weatherRibbon = (id, source) => {
     if (window.PANEL_DESIGN === true) return "";   // (nor the weather card's warning ribbon)
-    const ws = (window.Weather && Weather.warnings ? Weather.warnings() : []).filter((w) => forMe({ to: Array.isArray(w.to) ? w.to : ["all"] }) && allowed(w));
+    const ws = (window.Weather && Weather.warnings ? Weather.warnings(id, source) : []).filter((w) => forMe({ to: Array.isArray(w.to) ? w.to : ["all"] }) && allowed(w));
     if (!ws.length) return "";
     const up = new Set(HA.shown().filter(isWx).map((a) => a.id)), act = ws.filter((w) => up.has(w.id)).sort((x, y) => y.lvl - x.lvl);
     const top = act[0] || ws.slice().sort((x, y) => y.lvl - x.lvl)[0], dim = !act.length, n = Math.max(0, (dim ? ws.length : act.length) - 1);
@@ -198,6 +201,7 @@
   HA.dismiss = async (id) => {
     if (typeof id !== "string" || !/^[0-9a-f]{6,24}$/.test(id)) return false;
     const a = HA.list.find((x) => x.id === id);
+    if (a && a.own) { if (HA.front === id) HA.front = null; if (a.done) a.done(); after(); return true; }   // (its own button: the card says when it's gone)
     let ticket = null;
     if (a && a.lvl >= 4) {
       const t = await HA.tickets([id]);
@@ -218,7 +222,7 @@
   // "Dismiss all": every alert this panel shows (3–5 go everywhere through the hub). The level 4–5 ones each go on their
   // own with their ticket first (the bridge never clears a 4–5 through "all"), then one "all" for Hubitat
   HA.dismissAll = async () => {
-    const list = HA.shown(); if (!list.length) return false;
+    const list = HA.shown().filter((a) => !a.own); if (!list.length) return false;   // (a bin's reminder goes with its own button only)
     const was = HA.top();
     const big = list.filter((a) => a.lvl >= 4).slice(0, 20);   // (20 tickets a request; more than that: the rest stay up)
     const t = await HA.tickets(big.map((a) => a.id), T("alert.dismissAll"));
@@ -268,7 +272,7 @@
     n.className = `hub-toast l${a.lvl}`;
     n.setAttribute("role", "status");
     n.innerHTML = `${isWx(a) ? `<span class="hub-ri">${HA.icon(a, 22)}</span>` : ""}<div class="hub-tt"><small>${esc(HA.NAMES[a.lvl])}</small>${a.title ? `<b>${esc(a.title)}${moreTag(a)}</b>` : ""}<span>${esc(a.text)}${a.count > 1 ? ` ×${+a.count | 0}` : ""}</span></div>
-      <button class="hub-x" aria-label="${esc(T("alert.dismissOne"))}">${icon("x", 20)}</button>`;
+      ${a.act ? `<button class="hub-act">${esc(a.act)}</button>` : `<button class="hub-x" aria-label="${esc(T("alert.dismissOne"))}">${icon("x", 20)}</button>`}`;
     n.querySelector("button").addEventListener("click", () => HA.dismiss(a.id));
     document.body.append(n);
   }
@@ -276,8 +280,10 @@
 
   // ---------- a new list from the bridge ----------
   let first = true, tests = [];
+  const owns = {};   // (v3.0.4) source → the panel's own reminders (HA.own)
   function take(list) {
     list = list.concat(tests.filter((t) => live(t) && !list.some((a) => a.id === t.id)));   // (Settings → Test ones stay up)
+    for (const o of Object.values(owns)) list = list.concat(o.filter((t) => !list.some((a) => a.id === t.id)));
     const was = HA.top();   // (the one on screen before this list)
     const fresh = list.filter((a) => !HA.seen.has(`${a.id}|${a.count}`));
     HA.list = list;
@@ -340,9 +346,31 @@
     const TXT = { [lvl]: [T(`alert.test.${lvl}`), T(`alert.test.${lvl}text`)] };
     const id = Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => b.toString(16).padStart(2, "0")).join("");
     const now = Date.now() / 1000;
-    if (first) take(HA.list.filter((a) => !a.test));   // (before the bridge's first list: so this one still sounds)
-    tests = tests.filter(live).concat({ id, lvl, to: ["all"], tag: "test", title: TXT[lvl][0], text: TXT[lvl][1], exp: lvl <= 2 ? now + 60 : 0, at: now, count: 1, test: true });
+    const t = { id, lvl, to: ["all"], tag: "test", title: TXT[lvl][0], text: TXT[lvl][1], exp: lvl <= 2 ? now + 60 : 0, at: now, count: 1, test: true };
+    tests = tests.filter(live).concat(t);
+    if (first) { HA.seen.add(`${id}|1`); HA.front = id; early(); sound(t); return; }   // (it still sounds)
     take(HA.list.filter((a) => !a.test));
+  };
+  // before the bridge's first list: the tests and own reminders join HA.list without take() — `first` stays the
+  // bridge's, so after a reload the Hubitat alerts already up come in silently (that first take() adds these too)
+  function early() {
+    let list = HA.list.filter((a) => !a.test && !a.own).concat(tests.filter(live));
+    for (const o of Object.values(owns)) list = list.concat(o.filter((t) => !list.some((a) => a.id === t.id)));
+    HA.list = list;
+    after();
+  }
+  // (v3.0.4) the panel's own reminders from `src` (the whole list each time): {id (hex), lvl, tag, title, text, act (its
+  // button's words), done()} — shown and sounded as an alert of that level from Hubitat would be
+  HA.own = (src, list) => {
+    const now = Date.now() / 1000, prev = owns[src] || [];
+    owns[src] = (Array.isArray(list) ? list : []).filter((a) => a && /^[0-9a-f]{6,24}$/.test(a.id)).slice(0, 20).map((a) => {
+      const was = prev.find((x) => x.id === a.id);
+      return { id: a.id, lvl: Math.max(1, Math.min(3, a.lvl | 0)), to: ["all"], tag: String(a.tag || ""), title: cut(String(a.title || ""), 80), text: cut(String(a.text || ""), 300),
+        exp: 0, at: was ? was.at : now, count: 1, own: true, act: a.act ? cut(String(a.act), 24) : "", done: typeof a.done === "function" ? a.done : null };
+    });
+    if (prev.length === owns[src].length && prev.every((x, i) => x.id === owns[src][i].id && x.title === owns[src][i].title)) return;   // (nothing new: no redraw)
+    if (first) return early();
+    take(HA.list.filter((a) => !a.test && !a.own));
   };
   H.subscribe("hubitat/mode", (msg) => { try { const m = JSON.parse(msg); if (m && typeof m.mode === "string") HA.mode = m.mode.slice(0, 40); } catch {} });
   // a rule's camera pop-up for this panel (or all of them)
