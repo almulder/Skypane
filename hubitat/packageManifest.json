@@ -1,22 +1,22 @@
 {
   "packageName": "Skypane",
   "author": "Skypane",
-  "version": "3.0.5",
+  "version": "3.0.7",
   "minimumHEVersion": "2.3.0",
   "dateReleased": "2026-11-06",
   "documentationLink": "https://github.com/almulder/Skypane",
   "licenseFile": "",
-  "releaseNotes": "The Skypane Helper app and the Skypane Notifier driver. Your own Skypane serves the same manifest at http://<your Skypane>/hubitat/packageManifest.json.",
+  "releaseNotes": "The Skypane Helper app (3.0.7: Skypane's link to the hub, in place of Maker API; OAuth on) and the Skypane Notifier driver. Your own Skypane serves the same manifest at http://<your Skypane>/hubitat/packageManifest.json.",
   "apps": [
     {
       "id": "6d1c2f7e-5b8a-4f3e-9a51-3c0b2e7d9a11",
       "name": "Skypane Helper",
       "namespace": "skypane",
       "location": "https://raw.githubusercontent.com/almulder/Skypane/main/hubitat/SkypaneHelper.groovy",
-      "required": false,
-      "oauth": false,
+      "required": true,
+      "oauth": true,
       "primary": true,
-      "version": "3.0.5"
+      "version": "3.0.7"
     }
   ],
   "drivers": [
@@ -26,7 +26,7 @@
       "namespace": "skypane",
       "location": "https://raw.githubusercontent.com/almulder/Skypane/main/hubitat/SkypaneNotifier.groovy",
       "required": true,
-      "version": "3.0.5"
+      "version": "3.0.6"
     }
   ]
 }

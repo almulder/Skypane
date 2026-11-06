@@ -2,8 +2,10 @@
 
   - server: `python -m service.server` (always). Its environment has no HUBITAT_TOKEN / PROTECT_API_KEY (it never
     needs them); it keeps MQTT_USER / MQTT_PASSWORD because it publishes change notifications with that login.
-  - bridge: `scripts/hubitat_bridge.py` — only when HUBITAT_HOST, HUBITAT_APP_ID and HUBITAT_TOKEN are set AND
-    MQTT_HOST is set (no broker = nothing to bridge to). Its environment has no PROTECT_API_KEY.
+  - bridge: `scripts/hubitat_bridge.py` — only when HUBITAT_HOST, HUBITAT_APP_ID and HUBITAT_TOKEN are set (or, v3.0.7,
+    the Skypane Helper handed over its hub link: private/hubitat-hublink.json) AND MQTT_HOST is set (no broker =
+    nothing to bridge to). Its environment has no PROTECT_API_KEY. (v3.0.7) A new / changed / removed hub link restarts
+    the services, as a settings save does (the bridge reads it at start).
     Allowlist = every device the house model shows (minus the main panel's "never switch" list) + BRIDGE_ALLOW
     (comma list of extra ids). An old DATA_DIR/house/bridge-allow.txt is ignored (logged).
     MQTT broker = MQTT_HOST / MQTT_PORT (MQTT_USER / MQTT_PASSWORD are read by the bridge from the environment).
@@ -227,6 +229,10 @@ def main():
     py = sys.executable
     os.environ["SKYPANE_SUPERVISED"] = "1"   # (v3.0.0) the server knows a settings save restarts it (the Manager waits)
     settings_sig = apply_settings()
+    import hubitat_helper   # (v3.0.7) service/hubitat_helper.py: Maker API, or the Skypane Helper's hub link
+    # (v3.0.7 review) the hub link's signature is read now, before any service starts (as the settings file's): a link
+    # handed over while they start is a change, never missed
+    hublink_sig = hubitat_helper.hublink_sig(DATA_DIR / "private")
     # MQTT broker (stage 3): MQTT_HOST empty (or "builtin") = the image's own Mosquitto (service/broker.py). The bridge
     # and the server then use its internal port; the pages get its WebSocket login; LAN devices its "devices" login.
     broker_child, observer, builtin_failed = None, None, False
@@ -313,7 +319,7 @@ def main():
         say("run_all", f"go2rtc not found at {go2rtc_bin} — no built-in video")
 
 
-    hubitat = all(os.environ.get(k) for k in ("HUBITAT_HOST", "HUBITAT_APP_ID", "HUBITAT_TOKEN"))
+    hubitat = hubitat_helper.hub_link(DATA_DIR / "private", os.environ)["via"] is not None
     mqtt_host = (os.environ.get("MQTT_HOST") or "").strip()
     if hubitat and not mqtt_host:
         say("run_all", "bridge not started: the built-in MQTT broker didn't start (see above)" if builtin_failed else
@@ -374,6 +380,10 @@ def main():
         now = file_sig(settings_file)
         if now != settings_sig:   # saved on the Manager page: start everything again with the new settings
             say("run_all", "settings changed on the Manager page — restarting the services")
+            RESTART.set()
+            STOP.set()
+        elif hubitat_helper.hublink_sig(DATA_DIR / "private") != hublink_sig:   # (v3.0.7) linked, switched or unlinked
+            say("run_all", "the Skypane Helper's hub link changed — restarting the services")
             RESTART.set()
             STOP.set()
 

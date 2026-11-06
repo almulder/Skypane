@@ -134,6 +134,7 @@ class LiveState:
         self.lock = threading.Lock()
         self.values = {}      # id → {attr: value}
         self.last = {}        # id → epoch s of its last event
+        self.got_at = {}      # (v3.0.7) id → when this server received its last event (its own clock, never the hub's)
         self.ring = {}        # id → deque of its last EVENTS_KEPT events (v2.4.0)
         self._alerts = []     # the bridge's last list (cleaned)
         self.gone = {}        # alert id → when the Manager acknowledged it (hidden until the bridge's next list)
@@ -171,6 +172,7 @@ class LiveState:
         with self.lock:
             self.values = out
             self.last = {d: t for d, t in self.last.items() if d in out}
+            self.got_at = {d: t for d, t in self.got_at.items() if d in out}   # (v3.0.7)
             self.ring = {d: r for d, r in self.ring.items() if d in out}
             self.heard["state"] = self.clock()
         return True
@@ -196,6 +198,7 @@ class LiveState:
             if name in vals or len(vals) < MAX_ATTRS:
                 vals[name] = v
             self.last[did] = max(t, self.last.get(did) or 0)
+            self.got_at[did] = now   # (v3.0.7)
             r = self.ring.get(did)
             if r is None:
                 r = self.ring[did] = collections.deque(maxlen=EVENTS_KEPT)
@@ -227,6 +230,13 @@ class LiveState:
             return dict(self.newest) if self.newest else None
 
     # --- what the Manager reads ---
+    def got(self, did):
+        """(v3.0.7) When this server received the device's last event (epoch s, its own clock), or None: the Switch
+        card's test (service/server.py _manage_hublink) never judges by the hub's clock."""
+        did = _device_id(did)
+        with self.lock:
+            return self.got_at.get(did)
+
     def device(self, did):
         did = _device_id(did)
         with self.lock:

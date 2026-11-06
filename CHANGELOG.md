@@ -1,5 +1,25 @@
 # Changelog
 
+## 3.0.7
+
+### The Skypane Helper takes over from Maker API
+- **One app, one token:** the Skypane Helper app now does Maker API's job. It makes its own access token on the hub
+  and answers Skypane at its own local endpoint (the device list, one device, commands, modes and Hubitat Safety
+  Monitor). The token goes to Skypane once, when the app links, signed with the link's key. It's kept like the other
+  secrets and never shown.
+- **Set up with the Skypane Helper:** Integrations → Hubitat walks you through it in five steps: Hubitat Package
+  Manager (first) or by hand, Skypane's address and the import and manifest addresses with Copy buttons, the link
+  code, your devices, the hub login, and live checks for each step. "OAuth is off" shows as a problem, with the fix.
+- **The Notifier sets itself up:** with the hub login (or without Hub Login Security), the Helper saves the Notifier
+  driver code if it's missing and makes the Notifier as its own child device. Without it, the steps by hand are shown.
+- **Your devices:** pick them in the Helper ("Select all" is there, not required). Skypane tells you when the hub has
+  devices the Helper wasn't given, and never adds any by itself.
+- **Switch from Maker API:** the status side by side, a test on any light you pick, then "Remove Maker API settings"
+  once the test passes. Maker API settings are optional now.
+- **No fallback:** if the Helper stops answering, Skypane shows a problem. It never moves back to Maker API by itself.
+- **Live events** still come from the hub's own event stream, now only for the devices the Helper was given.
+- Skypane Helper app 3.0.7; the Package Manager manifest turns OAuth on for it.
+
 ## 3.0.6
 
 - **Devices → Detailed:** the Protocol column (from the Skypane Helper) now shows at every screen width. ID and

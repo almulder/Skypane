@@ -79,6 +79,8 @@ KINDS = {
     # (v3.0.5) the Skypane Helper app: a link code made, the app linked / unlinked, an update asked for and its result
     "helper.code": "settings", "helper.link": "settings", "helper.unlink": "settings", "helper.ask": "settings", "helper.update": "settings",
     "helper.cancelCode": "settings",   # (v3.0.5, tester: the link code canceled)
+    # (v3.0.7) the Helper as the hub link: its endpoint handed over, switched to / from it, the test, Maker API removed
+    "helper.hublink": "settings", "helper.use": "settings", "helper.test": "settings", "helper.removeMaker": "settings",
     "device.change": "devices", "device.command": "devices", "device.refused": "devices", "house.mode": "devices", "house.hsm": "devices", "feedback.send": "settings", "camera.add": "cameras", "camera.remove": "cameras", "camera.change": "cameras",
 }
 DATA_KEYS = {"perm", "old", "new", "keys", "panel", "tab", "count", "added", "moved", "removed", "level", "device",

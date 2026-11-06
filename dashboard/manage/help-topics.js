@@ -1072,6 +1072,12 @@ window.SKYPANE_HELP = {
         { h: "Keep it up to date: the Skypane Helper app" },
         "The optional **Skypane Helper** app on the hub can update this driver for you (**Integrations** → **Hubitat** → **Link the Helper**, then type the code in the app). The link gives the app a token and a key of its own; every update Skypane offers is signed with that key, and the app checks the signature, the code's sha256 and that it is the Skypane code before it saves anything.",
         { warn: "If Skypane answers the app with 401 or 403 (you unlinked it in the Manager, or Skypane lost the link), the app **unlinks itself**: it stops asking and its page says “Not linked”. Make a new link code in the Manager and type it in the app again." },
+        // (v3.0.7) the Helper is the hub link: OAuth, its own token, no Maker API, no fallback
+        { h: "The Skypane Helper is the hub link (3.0.7)" },
+        "Since 3.0.7 the Helper does Maker API's job: **Integrations** → **Hubitat** → **Set up with the Skypane Helper** walks you through it. The app makes its own access token (OAuth must be on for it: Hubitat Package Manager turns it on; by hand, **Apps Code** → **Skypane Helper** → **OAuth** → **Enable OAuth in App** → **Update**), makes the Skypane Notifier as its own child device, and Skypane sees only the devices you pick in the app.",
+        { warn: "There's no fallback: if the Helper stops answering, Skypane shows a problem on **Integrations** → **Hubitat** and never moves back to Maker API by itself. A hub that already uses Maker API moves over on **Switch from Maker API** (test one light, then remove the Maker API settings)." },
+        // (v3.0.7) review: the Helper's access token works through Hubitat's cloud endpoint too
+        { warn: "Treat the Helper's access token like a password: it also works through Hubitat's cloud endpoint, not only on your network. Skypane keeps it on the server only and never shows it. Unlinking or reinstalling the app makes a new one (the old one stops working)." },
       ],
       see: ["alerts-hubitat", "timers"],
     },

@@ -101,6 +101,11 @@
     "helper.unlink": (e) => [K.t("timeline.say.helperUnlink", { who: name(e.who) }), ""],
     "helper.ask": (e) => [K.t("timeline.say.helperAsk", { who: name(e.who) }), (e.data || {}).what || ""],
     "helper.update": (e) => [K.t("timeline.say.helperUpdate"), (e.data || {}).what || ""],
+    // (v3.0.7) the Helper as the hub link
+    "helper.hublink": () => [K.t("timeline.say.helperHublink"), ""],
+    "helper.use": (e) => [K.t((e.data || {}).what === "helper" ? "timeline.say.helperUseHelper" : "timeline.say.helperUseMaker", { who: name(e.who) }), ""],
+    "helper.test": (e) => [K.t("timeline.say.helperTest", { who: name(e.who) }), e.target || ""],
+    "helper.removeMaker": (e) => [K.t("timeline.say.helperRemoveMaker", { who: name(e.who) }), ""],
     "library.upload": (e) => [K.t("timeline.say.libraryUpload", { who: name(e.who), name: e.target }), ""],
     "library.remove": (e) => [K.t("timeline.say.libraryRemove", { who: name(e.who) }), ""],
     // (v3.0.5) a picture folder added / removed

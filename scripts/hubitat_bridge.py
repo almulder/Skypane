@@ -23,6 +23,12 @@
     (`hubitat/alerts/ack`) of a level 4–5 alert needs a one-time PIN ticket (id 0 / "alertAck" / the alert id; v2.3.2,
     ACK_TICKETS=off only logs it); a refusal → `hubitat/alerts/ack/result` {id, panel, ok: false, reason}.
 
+(v3.0.7) The hub link: the Skypane Helper app's (DATA_DIR/private/hubitat-hublink.json: its own access token, app id
+and the hub's address; service/hubitat_helper.py hub_link decides) once it is linked and either the admin switched to it
+or no Maker API is set up; else Maker API. The Helper serves Maker API's own paths and JSON at /apps/api/<its app id>/,
+so the Maker class below reads both. With the Helper, the event socket's DEVICE events are kept only for the devices
+the Helper was given. Never a fallback: when the Helper stops answering, the status file says so and nothing else.
+
 Secrets: HUBITAT_HOST / HUBITAT_APP_ID / HUBITAT_TOKEN (and optional MQTT_USER / MQTT_PASSWORD) come from ../.env,
 or from environment variables when there is no .env (the Docker container) — never printed. The token is sent
 as an Authorization header, never in a URL, and every log line is scrubbed of the token and query strings.
@@ -46,6 +52,7 @@ import struct
 import sys
 import threading
 import time
+import urllib.error   # (v3.0.7 review: the Helper's 401 retry)
 import urllib.parse
 import urllib.request
 
@@ -57,6 +64,7 @@ import weather_device  # noqa: E402  (service/weather_device.py, v3.0.0: a Hubit
 import timers  # noqa: E402  (service/timers.py, v3.0.4: a Hubitat rule's "Timer: <name>, <length>")
 import lists  # noqa: E402  (service/lists.py, v3.0.5: a Hubitat rule's "add to list: Shopping, milk" / "pin note: …")
 import notifier_driver  # noqa: E402  (service/notifier_driver.py, v3.0.5: the Notifier driver's version, for the Manager)
+import hubitat_helper  # noqa: E402  (service/hubitat_helper.py, v3.0.7: which hub link, the Skypane Helper's or Maker API)
 
 # attributes the panel cares about (everything else is left out of hubitat/state and hubitat/event) — (v3.0.5) one copy
 # in service/house_model.py (PANEL_ATTRS), so the layout builder's attribute list always keeps these first
@@ -229,15 +237,26 @@ def safe_err(e):
 
 # ---------- Maker API ----------
 class Maker:
-    def __init__(self, env):
+    def __init__(self, env, helper=False):
         self.host, self.app, self.token = env["HUBITAT_HOST"], env["HUBITAT_APP_ID"], env["HUBITAT_TOKEN"]
+        # (v3.0.7 review) the Skypane Helper's endpoint: a 401 with the Bearer header is tried once more with
+        # ?access_token= (a Hubitat app endpoint takes either); that URL is never logged (safe_err, "from None")
+        self.helper = helper
 
     def get(self, path, timeout=30):
         url = f"http://{self.host}/apps/api/{self.app}/{path}"
         req = urllib.request.Request(url, headers={"Authorization": f"Bearer {self.token}"})
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                body = r.read()
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as r:
+                    body = r.read()
+            except urllib.error.HTTPError as e:
+                if not (self.helper and e.code == 401):
+                    raise
+                e.close()
+                q = urllib.parse.urlencode({"access_token": self.token})   # (v3.0.7 review) once, in the query
+                with urllib.request.urlopen(url + ("&" if "?" in url else "?") + q, timeout=timeout) as r:
+                    body = r.read()
         except Exception as e:  # never let the exception text (which may hold the URL) escape
             raise RuntimeError(f"GET {path.split('?')[0]} failed: {safe_err(e)}") from None
         return json.loads(body) if body.strip() else None
@@ -628,6 +647,8 @@ class WS:
 # (v3.0.2) whether the hub really answers with this token: DATA_DIR/private/hubitat-status.json, read by the server's
 # health check — "online" on MQTT only ever meant the bridge runs, so a wrong token used to show "Working"
 HUB_STATUS = "hubitat-status.json"
+RESYNC_UNKNOWN = 60   # (v3.0.7 review) a device the Skypane Helper didn't give asks for a resync at most this often (s)
+PING_S = 60   # (v3.0.7) with the Skypane Helper as the link: a light GET /ping this often, so Trouble shows within a minute
 
 
 def read_rule(rule_file, fallback):
@@ -646,8 +667,17 @@ def read_rule(rule_file, fallback):
     return doc or {"switchRule": {}}   # (an empty rule file: the name rule alone — still read as "set")
 
 
-def hub_words(err):
-    """A failed Maker API read (safe_err text, never a URL or token) in the owner's words."""
+def hub_words(err, via="maker"):
+    """A failed Maker API read (safe_err text, never a URL or token) in the owner's words. (v3.0.7) via "helper": the
+    Skypane Helper's own endpoint, in its words (never "use Maker API": there is no fallback)."""
+    if via == "helper":
+        if "HTTP 401" in err or "HTTP 403" in err:
+            return "The hub refused the Skypane Helper's token. Is OAuth on for the app (Apps Code → Skypane Helper → OAuth)?"
+        if "HTTP 404" in err:
+            return "The hub has no Skypane Helper with that app number. Link the Helper again."
+        if "HTTP " in err:
+            return f"The Skypane Helper answered with an error ({err.split('failed: ')[-1]})."
+        return f"The Skypane Helper doesn't answer ({err.split('failed: ')[-1]}). Is the hub on?"
     if "HTTP 401" in err or "HTTP 403" in err:
         return "The hub refused the Maker API token. Copy it again from the Maker API app."
     if "HTTP 404" in err:
@@ -655,6 +685,16 @@ def hub_words(err):
     if "HTTP " in err:
         return f"The hub answered with an error ({err.split('failed: ')[-1]})."
     return f"The hub doesn't answer at that address ({err.split('failed: ')[-1]})."
+
+
+def hub_reason(err):
+    """(v3.0.7 review) A failed read of the Skypane Helper's endpoint as a code the Manager has words for (strings/en.js
+    hubhelper.reason.<code>): "token" (401/403) | "noapp" (404) | "http" (another HTTP error) | "down" (no answer)."""
+    if "HTTP 401" in err or "HTTP 403" in err:
+        return "token"
+    if "HTTP 404" in err:
+        return "noapp"
+    return "http" if "HTTP " in err else "down"
 
 
 def write_status(path, ok, error, **more):
@@ -672,9 +712,19 @@ def write_status(path, ok, error, **more):
 
 # ---------- bridge ----------
 class Bridge:
-    def __init__(self, args, env):
-        self.args, self.maker = args, Maker(env)
+    def __init__(self, args, env, via="maker"):
+        self.args, self.maker = args, Maker(env, helper=via == "helper")
         self.host = env["HUBITAT_HOST"]
+        # (v3.0.7) the hub link: "maker" | "helper" (the Skypane Helper's own endpoint). With the Helper, `only` = the
+        # ids it gives (its device list): the event socket's other devices are left out. The status file's last words.
+        # (v3.0.7 review) With the Helper it starts as an empty set, never None: until the first read nothing gets through
+        # (fails closed). An id it doesn't know asks for a resync, at most once a minute (RESYNC_UNKNOWN); one still not
+        # there after it is left out quietly (not_given) until the Helper's device list changes (its updated()).
+        self.via, self.only = via, (set() if via == "helper" else None)
+        self.unknown, self.not_given, self._resync_at, self._resync_busy = set(), set(), None, threading.Lock()
+        self.resync_file_sig = False   # (False: not read yet; then the file's signature, None without one)
+        self._hub_st, self.ws_at = (None, 0, None), None
+        self._ping_wake = threading.Event()   # (v3.0.7) the event socket dropped: ping the Helper now, not in a minute
         self.mqtt_user, self.mqtt_password = env.get("MQTT_USER"), env.get("MQTT_PASSWORD")
         self.extra_allow = set(args.allow)  # --allow / BRIDGE_ALLOW / --allow-file: always allowed on top
         self.allow = set(args.allow)        # with a house model: + everything the panel shows (house_model.switchable)
@@ -746,9 +796,12 @@ class Bridge:
         try:
             devices = self.maker.get("devices/all", timeout=60)
         except Exception as e:
-            self.hub_status(hub_words(str(e)))
+            # (v3.0.7 review) with the Helper also a reason code: the Manager shows its own (translated) words
+            self.hub_status(hub_words(str(e), self.via), 0, hub_reason(str(e)) if self.via == "helper" else None)
             raise
         self.hub_status(None, len(devices) if isinstance(devices, list) else 0)
+        if self.via == "helper" and isinstance(devices, list):   # (v3.0.7) only the Helper's devices from the event socket
+            self.only = {int(d["id"]) for d in devices if isinstance(d, dict) and str(d.get("id", "")).isdecimal()}
         new = build_state(devices)
         if isinstance(devices, list):
             media, speakers = media_cmds(devices), speaker_ids(devices)
@@ -777,10 +830,85 @@ class Bridge:
         self.wx_flush(alerts=False)
         return devices
 
-    def hub_status(self, error, devices=0):
+    def hub_status(self, error, devices=0, reason=None):
+        self._hub_st = (error, devices, reason)
         data_dir = os.environ.get("DATA_DIR")
         if data_dir:
-            write_status(pathlib.Path(data_dir) / "private" / HUB_STATUS, error is None, error, devices=devices)
+            # (v3.0.7) which link, and since when the event socket is up (None: down): Integrations → Hubitat's checks.
+            # (v3.0.7 review) reason: hub_reason's code (None when fine, or with Maker API)
+            write_status(pathlib.Path(data_dir) / "private" / HUB_STATUS, error is None, error, devices=devices,
+                         link=self.via, events=self.ws_at, reason=reason)
+
+    def hub_down(self, e):
+        """(v3.0.7) A failed command or Helper ping (the Helper as the link): the status file says the hub link is down
+        now — Integrations → Hubitat's Trouble and step 5's Commands line — not only after the next resync."""
+        if self.via != "helper":
+            return
+        err = str(e)
+        self.hub_status(hub_words(err, self.via), self._hub_st[1], hub_reason(err))
+
+    def hub_up(self):
+        """(v3.0.7) The Helper answered again (a command or a ping) after it was marked down: a resync says fine (and
+        catches up on what was missed); until it has, the status stays as it is."""
+        if self.via == "helper" and self._hub_st[0] is not None:
+            self.resync_soon()
+
+    def ping_loop(self):
+        """(v3.0.7) While the Skypane Helper is the link: GET /ping about every PING_S seconds (sooner when the event
+        socket drops). A failure marks the hub link down at once; an answer after one resyncs."""
+        while not self.stop.is_set():
+            self._ping_wake.wait(PING_S)
+            self._ping_wake.clear()
+            if self.stop.is_set():
+                return
+            try:
+                self.maker.get("ping", timeout=10)
+            except Exception as e:
+                log.warning("Skypane Helper ping failed: %s", safe_err(e))
+                self.hub_down(e)
+                continue
+            self.hub_up()
+
+    def resync_soon(self, gap=None):
+        """(v3.0.7 review) A resync in the background: one at a time and, with `gap` (seconds), not sooner than that after
+        the last one asked for with a gap. True when one was started."""
+        now = time.monotonic()
+        if gap is not None and self._resync_at is not None and now - self._resync_at < gap:
+            return False
+        if not self._resync_busy.acquire(blocking=False):
+            return False
+        if gap is not None:
+            self._resync_at = now
+
+        asked = set(self.unknown)   # (the ids that asked for it: still not the Helper's after it → left out quietly)
+
+        def run():
+            try:
+                self.resync()
+                if self.only is not None:
+                    self.not_given |= {d for d in asked if d not in self.only}
+                self.unknown -= asked
+            except Exception as e:
+                log.warning("resync (asked for) failed: %s", safe_err(e))
+            finally:
+                self._resync_busy.release()
+        threading.Thread(target=run, daemon=True).start()
+        return True
+
+    def check_resync_file(self):
+        """(v3.0.7 review) The Skypane Helper's updated() (its device list may have changed): Skypane touched its
+        RESYNC_FILE — resync now, and the devices left out as not given are asked about again. True when one started."""
+        data_dir = os.environ.get("DATA_DIR")
+        if self.via != "helper" or not data_dir:
+            return False
+        sig = hubitat_helper.resync_sig(pathlib.Path(data_dir) / "private")
+        if sig == self.resync_file_sig:
+            return False
+        first, self.resync_file_sig = self.resync_file_sig is False, sig
+        if first:   # (the file as it was when the bridge started: the start's own read covers it)
+            return False
+        self.not_given = set()
+        return self.resync_soon()
 
     # --- the Skypane Notifier (release 2) ---
     def resync_notifiers(self, devices):
@@ -826,7 +954,8 @@ class Bridge:
         try:
             self.maker.get(path, timeout=10)
         except Exception as e:
-            log.warning("notifier %s failed: %s (is the notifier in the Maker API app?)", what, safe_err(e))
+            log.warning("notifier %s failed: %s (%s)", what, safe_err(e), "is the notifier one of the Skypane Helper's devices?"
+                        if self.via == "helper" else "is the notifier in the Maker API app?")   # (v3.0.7)
 
     def set_mode(self, name, force_pub=False):
         name = _short(name, 40)
@@ -1635,6 +1764,10 @@ class Bridge:
                 self.check_owner()
             except Exception as e:  # never let the watcher die
                 log.warning("settings check failed: %s", safe_err(e))
+            try:   # (v3.0.7 review) the Skypane Helper's updated(): read its device list again
+                self.check_resync_file()
+            except Exception as e:
+                log.warning("resync check failed: %s", safe_err(e))
             try:   # (v3.0.0: the weather setting saved in the Manager; once a minute: stale data, ended warnings)
                 if self._wx("reload"):
                     self.wx_setting_changed()
@@ -1801,6 +1934,18 @@ class Bridge:
             elif isinstance(v, str) and v in HSM_ALERTS:
                 self.update_hsm(alert=v)
             return
+        if isinstance(m, dict) and m.get("source") == "DEVICE" and self.only is not None:   # (v3.0.7) the Helper's devices only
+            try:
+                did = int(m.get("deviceId"))
+            except (TypeError, ValueError):
+                return
+            if did not in self.only:
+                # (v3.0.7 review) maybe just given to the Helper: a resync (at most once a minute); still not there after
+                # it, it is left out quietly until the Helper's device list changes
+                if did not in self.not_given and len(self.unknown) < 10000:
+                    self.unknown.add(did)
+                    self.resync_soon(RESYNC_UNKNOWN)
+                return
         if isinstance(m, dict) and m.get("source") == "DEVICE" and m.get("name") in ("activeAlerts", "panelCommand", "driverVersion"):
             try:
                 nid = int(m.get("deviceId"))
@@ -1855,6 +2000,8 @@ class Bridge:
                 ws = WS(self.host, "/eventsocket")
                 log.info("event socket connected")
                 backoff = 1
+                self.ws_at = int(time.time())   # (v3.0.7: the status file says the events come)
+                self.hub_status(*self._hub_st)
                 try:  # catch up on anything missed while disconnected
                     self.resync()
                 except Exception as e:
@@ -1867,6 +2014,10 @@ class Bridge:
             finally:
                 if ws:
                     ws.close()
+                if self.ws_at is not None:   # (v3.0.7)
+                    self.ws_at = None
+                    self.hub_status(*self._hub_st)
+                    self._ping_wake.set()   # (v3.0.7) is the Helper still there? Trouble within seconds, not minutes
             self.stop.wait(backoff)
             backoff = min(backoff * 2, 60)
 
@@ -1989,6 +2140,9 @@ class Bridge:
         except Exception as e:
             log.warning("command %s to device %s failed: %s", command, cid, safe_err(e))
             reply(cid, command, False, "hub error")
+            self.hub_down(e)   # (v3.0.7) the hub link is down now, not after the next resync
+            return
+        self.hub_up()   # (v3.0.7)
 
     def mgr_key(self, label):
         """The key for the Manager's signed topics (device_rules labels), from the house ticket key — None without one."""
@@ -2274,6 +2428,8 @@ class Bridge:
         threading.Thread(target=self.watch_owner, daemon=True).start()
         threading.Thread(target=self.cmd_worker, daemon=True).start()
         threading.Thread(target=self.ws_loop, daemon=True).start()
+        if self.via == "helper":   # (v3.0.7) the light ping (Maker API: the periodic resync, as before)
+            threading.Thread(target=self.ping_loop, daemon=True).start()
         try:
             while not self.stop.wait(1):
                 pass
@@ -2327,8 +2483,10 @@ def main():
                     bad_lines.append(n)  # logged once logging is set up; a typo never stops the bridge
 
     env = load_env()
+    # (v3.0.7) the hub link: the Skypane Helper's (its own token, from DATA_DIR/private) or Maker API's, never both
+    link = hubitat_helper.hub_link(pathlib.Path(data_dir) / "private" if data_dir else None, env)
     handler = logging.StreamHandler(sys.stdout)
-    handler.addFilter(Scrub([env.get("HUBITAT_TOKEN"), env.get("MQTT_PASSWORD")]))
+    handler.addFilter(Scrub([env.get("HUBITAT_TOKEN"), env.get("MQTT_PASSWORD"), link.get("token")]))
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s", "%H:%M:%S"))
     log.addHandler(handler)
     log.setLevel(logging.INFO)
@@ -2339,7 +2497,12 @@ def main():
     if bad_lines:
         log.warning("allow file: ignored line(s) %s (not a device id)", ", ".join(map(str, bad_lines)))
 
-    bridge = Bridge(args, env)
+    if link["via"]:
+        log.info("hub link: %s", "the Skypane Helper (its own endpoint)" if link["via"] == "helper" else "Maker API")
+        env = {**env, "HUBITAT_HOST": link["host"], "HUBITAT_APP_ID": link["app"], "HUBITAT_TOKEN": link["token"]}
+    else:   # (run_all starts the bridge only with a hub link; by hand without one it stops at the missing settings)
+        log.error("no hub link: link the Skypane Helper, or set up Maker API (Manager → Integrations → Hubitat)")
+    bridge = Bridge(args, env, via=link["via"] or "maker")
     if args.once:
         devices = bridge.maker.get("devices/all", timeout=60)
         st = build_state(devices)

@@ -225,7 +225,8 @@ PANEL_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-in
 # agent without root — used only when the panel's agentNoRoot setting is on)
 AGENT_STATES = ("ok", "off", "none")   # a check-in's agent=: connected / running but not connected / no agent answered
 # (v3.0.5) the Skypane Helper app's routes — the only ones that take POST (service/hubitat_helper.py)
-HELPER_POSTS = ("/api/hubitat/helper/link", "/api/hubitat/helper/report", "/api/hubitat/helper/result")
+HELPER_POSTS = ("/api/hubitat/helper/link", "/api/hubitat/helper/report", "/api/hubitat/helper/result",
+                "/api/hubitat/helper/hublink")   # (v3.0.7: the hub link, once, signed)
 # (v3.0.5) a check-in's agentv=
 AGENT_VERSION_RE = re.compile(r"\d{1,4}(?:\.\d{1,4}){0,3}")
 LOCAL_HOSTS = {"", "localhost", "127.0.0.1", "::1"}
@@ -1813,6 +1814,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._agent_update(path.rsplit("/", 1)[1])
         if path == "/api/manage/helper":   # (v3.0.5) Integrations → Hubitat: the Helper app
             return self._manage_helper()
+        if path == "/api/manage/hublink":   # (v3.0.7) Set up with the Skypane Helper, Switch from Maker API
+            return self._manage_hublink()
         if path == "/api/manage/agent.zip":   # (v3.0.5) Help & guides → Download the LED agent
             return self._manage_agent_zip()
         if path == "/api/pair":
@@ -2659,9 +2662,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
         """None (fine), or a state for the group: "nokey" / "noaddress" / "waiting" (no answer since the last save) /
         "problem" (the child's own words)."""
         host, key, key_label, _fname = self.SETTINGS_PROOF[group]
-        if not st.get(host):
+        if group == "Hubitat" and self.app.hub_no_link():   # (v3.0.7 review: never "waiting" on a bridge that isn't run)
+            return {"state": "problem", "reason": "nohublink", "words": "Switched to the Skypane Helper, but it has no hub link. Link the Helper again.", "since": None}
+        if group == "Hubitat" and self.app.hub_via() == "helper":
+            # (v3.0.7) the Skypane Helper's hub link: no Maker API settings needed; its answer since the link was handed over
+            saved_at = max(saved_at, self.app.helper.hublink_info().get("at") or 0)
+        elif not st.get(host):
             return {"state": "problem", "reason": "noaddress", "words": "The address isn't set yet.", "since": None}
-        if not st.get(key):
+        elif not st.get(key):
             return {"state": "problem", "reason": "nokey", "words": f"The {key_label} isn't set yet.", "since": None}
         got = self._status_got(group)
         at = got.get("readAt") if isinstance(got, dict) else None
@@ -3541,7 +3549,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._act("helper.link", what=str(req.get("hub") or "")[:60])
             return self._json(200, {"token": token, "key": key}, {"Cache-Control": "no-store"})
         routes = {"poll": ("GET", hubitat_helper.POLL_RATE), "report": ("POST", hubitat_helper.REPORT_RATE),
-                  "result": ("POST", hubitat_helper.RESULT_RATE)}
+                  "result": ("POST", hubitat_helper.RESULT_RATE), "hublink": ("POST", hubitat_helper.HUBLINK_RATE)}   # (v3.0.7)
         if what not in routes:
             raise ApiError(404, "Not found")
         method, limit = routes[what]
@@ -3554,6 +3562,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if what == "poll":
             return self._json(200, H.poll())
         req = self._json_body()
+        if what == "hublink":   # (v3.0.7) the app's access token, app id and the hub's address — never logged
+            why = H.hublink(req)
+            if why:
+                log(f"helper: a hub link refused ({why}, from {ip})")
+                return self._json(403 if why == "bad-signature" else 409 if why == "no-key" else 400, {"ok": False, "error": why})
+            log(f"helper: the Skypane Helper handed over its hub link (from {ip})")
+            # (v3.0.7 review) no Maker API: the Helper is the link, and the switch is kept on its own, so a reinstall or
+            # an unlink later is "no hub link", never Maker API (only when it's off: the same link again restarts nothing)
+            if not hubitat_helper.maker_set(self.app.settings.load()) and not hubitat_helper.read_use(self.app.data_dir / "private"):
+                H.set_use(True)
+            self._act("helper.hublink")
+            return self._json(200, {"ok": True})
         ok = H.report(req) if what == "report" else H.result(req)
         if what == "result" and ok:
             r = H.status().get("result") or {}
@@ -3608,6 +3628,176 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._act("helper.unlink")
             return self._json(200, {"ok": True})
         raise ApiError(400, "action: link, cancelcode, update or unlink")   # (v3.0.5: cancelcode)
+
+    # ---- (v3.0.7) the Helper as the hub link: Set up with the Skypane Helper, Switch from Maker API ----------
+    HUB_TEST_SECONDS = 20   # (v3.0.7) the Switch card's test: the event must come back within this long
+
+    def _hub_bridge(self):
+        """(v3.0.7) What the bridge last said (its status file): {ok, error, readAt, devices, link, events} or {}."""
+        got = read_json_file(self.app.data_dir / "private" / HUB_STATUS_FILE)
+        return got if isinstance(got, dict) else {}
+
+    def _hub_lights(self):
+        """(v3.0.7) The lights (then switches and outlets) the Switch card's test may flip: the panels' own, minus the
+        never list. [{id, name, room}], at most 200."""
+        model = self.app.house_model() or {}
+        try:
+            ok = self._manager_switchable(model) - self._never_now(self.app.rule.load(), model)
+        except Exception:   # (an unreadable rule: nothing to test on, never a wider list)
+            return []
+        out = {"light": [], "switch": [], "outlet": []}
+        for r in model.get("rooms") or []:
+            for d in (r.get("devices") or []) if isinstance(r, dict) else []:
+                if isinstance(d, dict) and d.get("kind") in out and d.get("id") in ok:
+                    out[d["kind"]].append({"id": d["id"], "name": str(d.get("name") or f"#{d['id']}")[:60], "room": str(r.get("name") or "")[:60]})
+        live = getattr(self.app, "live", None)
+        lights = (out["light"] + out["switch"] + out["outlet"])[:200]
+        for x in lights:   # (its switch now, for the bulb on the card)
+            v = (((live.device(x["id"]) if live is not None else None) or {}).get("values") or {}).get("switch")
+            x["value"] = v if v in ("on", "off") else None
+        return lights
+
+    def _hub_checks(self, h, via, bridge, maker, no_link=False):
+        """(v3.0.7) Step 5's live checks, each {"state": "ok" | "bad" | "wait", "why"?}: the Notifier driver, the Notifier
+        device, events and commands through the Helper, Maker API no longer needed. `why` names the problem (the page
+        has its words and its fix)."""
+        res = h.get("result") or {}
+        mine = res.get("what") in ("notifier", "driver") and not res.get("ok")
+        helper_on, fresh = via == "helper" and bridge.get("link") == "helper", isinstance(bridge.get("readAt"), (int, float))
+        c = {}
+        if h.get("notifierCount"):
+            c["drv"] = c["dev"] = {"state": "ok"}
+        elif mine and res.get("error") in ("dni", "child"):   # (v3.0.7 review) the driver is there; the device couldn't be made
+            c["drv"] = {"state": "ok"}
+            c["dev"] = {"state": "bad", "why": res["error"]}
+        elif mine:
+            c["drv"] = {"state": "bad", "why": res.get("error") or "endpoint"}
+            c["dev"] = {"state": "bad", "why": "driver"}
+        else:
+            c["drv"] = c["dev"] = {"state": "wait"}
+        if h.get("oauth") is False:
+            c["cmd"] = {"state": "bad", "why": "oauth"}
+        elif no_link:   # (v3.0.7 review) switched to the Helper, but no hub link (reinstalled, unlinked): never Maker API
+            c["cmd"] = {"state": "bad", "why": "nolink"}
+        elif not (h.get("hubLink") or {}).get("set"):
+            c["cmd"] = {"state": "wait"}
+        elif via != "helper":
+            c["cmd"] = {"state": "bad", "why": "maker"}   # (Maker API set up: the Switch card moves it)
+        elif helper_on and fresh and bridge.get("ok") is True:
+            c["cmd"] = {"state": "ok"}
+        elif helper_on and bridge.get("ok") is False:
+            c["cmd"] = {"state": "bad", "why": "down"}
+        else:
+            c["cmd"] = {"state": "wait"}
+        if c["cmd"]["state"] == "ok":
+            c["evt"] = {"state": "ok"} if bridge.get("events") else {"state": "wait"}
+        else:
+            c["evt"] = {"state": "bad", "why": "cmd"} if c["cmd"]["state"] == "bad" else {"state": "wait"}
+        bad = any(v["state"] == "bad" for v in c.values())
+        c["mk"] = {"state": "bad", "why": "above"} if bad else {"state": "ok"} if via == "helper" and not maker \
+            else {"state": "bad", "why": "switch"} if maker and c["cmd"]["state"] != "wait" else {"state": "wait"}
+        return c
+
+    def _manage_hublink(self):
+        """/api/manage/hublink (v3.0.7, the admin; mockups/prototypes/helper-setup-307.html, helper-switch-307.html):
+        GET → {helper (Helper.status: never the hub token), via ("helper" | "maker" | null: the link the bridge uses),
+        maker {set}, bridge {ok, error, readAt, devices, link, events} (its status file), checks (step 5), test, lights,
+        address (this Skypane, as the request reached it), restarting}.
+        PATCH {action}:
+          "use" {to: "helper" | "maker"}: Switch to the Helper / Use Maker API again (only while Maker API is set up) — the
+            bridge starts again with it. A switch forgets the last test.
+          "teststart" {device} → {ok, at, value}: the Switch card's test on a light the panels may switch, the Helper in use
+          "testcheck" {device, want} → {ok: true, ms} once the device's switch came back as `want` since teststart;
+            {ok: false, waiting: true} until then (HUB_TEST_SECONDS)
+          "removemaker": only after a passing test with the Helper in use — the Maker API address, app number and token
+            are cleared (a settings save: Skypane restarts)
+          "hidenew" {ids}: the "not given to the Helper" warning leaves these out
+          "setup": ask the Helper again to make the Notifier (it saves the driver code first when it's missing).
+        Never a fallback to Maker API: a Helper that stops answering is a problem here, nothing moves by itself."""
+        self._manage_need("admin")
+        H, priv = self.app.helper, self.app.data_dir / "private"
+        settings = self.app.settings.load()
+        link = hubitat_helper.hub_link(priv, settings)
+        via, maker = link["via"], hubitat_helper.maker_set(settings)
+        # (v3.0.7 review) run by run_all, a switch restarts the services by itself; without it (python -m service.server
+        # by hand) nothing restarts: the page asks the admin to restart Skypane instead of "Starting…" for ever
+        restarting = os.environ.get("SKYPANE_SUPERVISED") == "1"
+        if self.command in ("GET", "HEAD"):
+            h, bridge = H.status(), self._hub_bridge()
+            base = hubitat_helper.base_url(self.headers.get("Host"), self.client_address[0], self.headers)
+            # (v3.0.7 review) bridge.reason: a code the page has words for (strings/en.js hubhelper.reason.*), never the
+            # bridge's English text; noHubLink: switched to the Helper, but no hub link to use (never Maker API)
+            return self._json(200, {"helper": h, "via": via, "maker": {"set": maker}, "address": base, "supervised": restarting,
+                                    "noHubLink": self.app.hub_no_link(link),   # (v3.0.7: or linked once)
+                                    "bridge": {k: bridge.get(k) for k in ("ok", "reason", "readAt", "devices", "link", "events")},
+                                    "checks": self._hub_checks(h, via, bridge, maker, self.app.hub_no_link(link)),
+                                    "test": H.test(), "lights": self._hub_lights()},
+                              {"Cache-Control": "no-store"})
+        if self.command != "PATCH":
+            raise ApiError(405, "Method not allowed")
+        req = self._json_body()
+        act = req.get("action")
+        if act == "use":
+            to = req.get("to")
+            if to not in ("helper", "maker"):
+                raise ApiError(400, '"to": helper or maker')
+            if to == "maker" and not maker:
+                return self._json(409, {"ok": False, "error": "no-maker"})
+            if not H.set_use(to == "helper"):   # (v3.0.7 review: under the Helper's lock)
+                return self._json(409, {"ok": False, "error": "no-hublink"})
+            H.set_test(None)
+            log(f"manager: the hub link is now {'the Skypane Helper' if to == 'helper' else 'Maker API'} (from {self.client_address[0]})")
+            self._act("helper.use", what=to)
+            return self._json(200, {"ok": True, "restarting": restarting})
+        if act in ("teststart", "testcheck"):
+            did = req.get("device")
+            if not (isinstance(did, int) and not isinstance(did, bool)) or did not in {x["id"] for x in self._hub_lights()}:
+                raise ApiError(400, '"device": a light the panels may switch')
+            if via != "helper" or self._hub_bridge().get("link") != "helper":
+                return self._json(409, {"ok": False, "error": "not-helper"})
+            live = getattr(self.app, "live", None)
+            dev = (live.device(did) if live is not None else None) or {}
+            value = (dev.get("values") or {}).get("switch")
+            now = time.time()
+            # (v3.0.7 review) when Skypane itself got the device's last event (its own clock, never the hub's)
+            got = live.got(did) if live is not None and hasattr(live, "got") else None
+            if act == "teststart":
+                self.app.hub_test = {"device": did, "at": now, "value": value, "got": got}
+                return self._json(200, {"ok": True, "at": int(now), "value": value})
+            start, want = getattr(self.app, "hub_test", None), req.get("want")
+            if want not in ("on", "off") or not start or start["device"] != did or now - start["at"] > self.HUB_TEST_SECONDS:
+                return self._json(409, {"ok": False, "error": "no-test"})
+            # (v3.0.7 review) passed: the switch is `want` now, and either Skypane received an event for it after the test
+            # started, or the value changed from the one at the start
+            fresh = isinstance(got, (int, float)) and got >= start["at"] and got != start.get("got")
+            if value == want and (fresh or (start.get("value") is not None and start.get("value") != want)):
+                name = next((x["name"] for x in self._hub_lights() if x["id"] == did), f"#{did}")
+                H.set_test({"ok": True, "at": int(now), "device": did, "name": name})
+                self.app.hub_test = None
+                self._act("helper.test", target=name, device=did)
+                return self._json(200, {"ok": True, "ms": int((now - start["at"]) * 1000)})
+            return self._json(200, {"ok": False, "waiting": True})
+        if act == "removemaker":
+            t = H.test()
+            if via != "helper" or not (t and t.get("ok")):
+                return self._json(409, {"ok": False, "error": "test-first"})
+            try:
+                self.app.settings.change({"HUBITAT_HOST": None, "HUBITAT_APP_ID": None, "HUBITAT_TOKEN": None})
+            except house_settings.Invalid as e:
+                raise ApiError(400, str(e))
+            log(f"manager: the Maker API settings were removed (the Skypane Helper is the hub link; from {self.client_address[0]})")
+            self._act("helper.removeMaker")
+            return self._json(200, {"ok": True, "restarting": restarting})
+        if act == "hidenew":
+            n = H.hide_new(req.get("ids"))
+            return self._json(200, {"ok": True, "hidden": n})
+        if act == "setup":
+            rid = H.request("notifier")
+            if not rid:
+                return self._json(409, {"ok": False, "error": "not-linked"})
+            self._act("helper.ask", what="notifier")
+            return self._json(200, {"ok": True, "id": rid})
+        raise ApiError(400, "action: use, teststart, testcheck, removemaker, hidenew or setup")
 
     # ---- (v3.0.5) the LED agent: the Manager's download, the agent's self-update (service/led_agent.py) ----------
     def _manage_agent_zip(self):
@@ -6748,7 +6938,7 @@ class App:
         setting = lambda key: lambda: (self.settings.load().get(key) or "").strip()   # noqa: E731
         priv = self.data_dir / "private"
         checks = [health.mqtt_check(self.notifier.connected),
-                  health.service_check("hubitat.hub", "Hubitat hub not reachable", health.tcp_probe(setting("HUBITAT_HOST"), 80), 4),
+                  health.service_check("hubitat.hub", "Hubitat hub not reachable", health.tcp_probe(self.hub_host, 80), 4),   # (v3.0.7: or the Helper's)
                   health.service_check("protect", "UniFi Protect not reachable", health.tcp_probe(setting("PROTECT_HOST"), 443), 3),
                   # (a Protect API key without the console's address — no default address since v2.2.0: the sync waits)
                   health.service_check("protect.host", "UniFi Protect: no console address",
@@ -6757,7 +6947,7 @@ class App:
                   health.panels_check(self.panel_names), self._calendar_check, self._moved_panel_check,
                   # (v3.0.2) what the bridge / the camera sync really got with the saved token / key (their status files)
                   health.service_check("hubitat.maker", "Hubitat: Skypane can't read the hub", lambda: health.status_file_probe(
-                      priv / HUB_STATUS_FILE, max_age=1800)() if setting("HUBITAT_HOST")() and setting("HUBITAT_TOKEN")() else None, 4),
+                      priv / HUB_STATUS_FILE, max_age=1800)() if self.hub_via() else None, 4),   # (v3.0.7: Maker API or the Helper)
                   health.service_check("protect.api", "UniFi Protect: Skypane can't read the cameras", lambda: health.status_file_probe(
                       priv / PROTECT_STATUS_FILE, max_age=900)() if setting("PROTECT_HOST")() and setting("PROTECT_API_KEY")() else None, 3),
                   health.service_check("music", "Music page (Sonos Panel) not reachable", health.url_probe(setting("SONOS_PANEL_URL")), 2)]
@@ -6785,7 +6975,26 @@ class App:
         has = lambda key: bool((st.get(key) or "").strip())   # noqa: E731
         # (v3.0.2: not "go2rtc.yaml exists" — the camera sync always writes one, empty on a fresh install: "Working" with nothing set)
         cams = has("PROTECT_HOST") or has("PROTECT_API_KEY") or bool(self.cfg.page_config.get("go2rtc"))             or bool(own_cameras.load(self.data_dir / "private")["cameras"])
-        return {"hub": has("HUBITAT_HOST"), "broker": bool(self.cfg.mqtt_host), "cameras": cams}
+        # (v3.0.7) or the Skypane Helper's hub link (no Maker API address needed)
+        # (v3.0.7) and switched to the Helper (or it handed over a hub link once) with no hub link now: set up, in Trouble
+        return {"hub": has("HUBITAT_HOST") or self.hub_via() == "helper" or self.hub_no_link(), "broker": bool(self.cfg.mqtt_host), "cameras": cams}
+
+    def hub_via(self):
+        """(v3.0.7) The hub link the bridge uses: "helper" | "maker" | None (hubitat_helper.hub_link)."""
+        return hubitat_helper.hub_link(self.data_dir / "private", self.settings.load())["via"]
+
+    def hub_no_link(self, link=None):
+        """(v3.0.7 review) Switched to the Skypane Helper, but there is no hub link to use (reinstalled, unlinked, an
+        unreadable link file): a problem — never Maker API. (v3.0.7) Also when the Helper handed over a hub link once,
+        Maker API isn't set up, and that link is gone (no link at all now): Trouble, never "not set up"."""
+        link = link or hubitat_helper.hub_link(self.data_dir / "private", self.settings.load())
+        if link.get("reason") == "no-hub-link":
+            return True
+        return link.get("via") is None and self.helper.hub_linked_once()
+
+    def hub_host(self):
+        """(v3.0.7) The hub's address the bridge talks to (the Helper's, or the Maker API setting), "" when none."""
+        return hubitat_helper.hub_link(self.data_dir / "private", self.settings.load()).get("host") or ""
 
     # (v3.0.5) the System card's rows (layouts.SYS_ROWS) a health problem belongs to: its id's start
     SYS_OF = (("hubitat.bridge", "bridge"), (notifier_driver.PROBLEM, "notifier"), ("hubitat", "hubitat"), ("mqtt", "mqtt"), ("protect", "protect"), ("go2rtc", "cameras"),

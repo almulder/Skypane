@@ -258,10 +258,13 @@
     if (!r || r.status !== 200) { toast(r && r.error === "not-linked" ? K.t("integrations.helper.err.notLinked") : K.t("integrations.helper.failed"), true); return null; }
     return r;
   };
-  const hpRedraw = () => { const x = M.$main.querySelector(".in-main [data-hp]"); if (x) x.replaceWith(helperRows()); };
+  // (v3.0.7) Maker API set up (its address, app number and token): the Switch card is offered then
+  const makerSet = () => ["HUBITAT_HOST", "HUBITAT_APP_ID", "HUBITAT_TOKEN"].every((k) => { const f = (DATA.fields || []).find((x) => x.key === k); return !!f && (f.secret ? f.set : !!f.value); });   // i18n-ok (setting keys)
   function helperRows() {
-    const st = stateOf("Hubitat"), h = st && st.state !== "off" && st.helper;
+    // (v3.0.7: shown with no Maker API too — the Helper is the hub link now; "Set up with the Skypane Helper" opens the steps)
+    const st = stateOf("Hubitat"), h = st && st.helper;
     if (!h) return el("div.in-hp", { "data-hp": "" });
+    const setupBtn = (pri) => el("button.btn.sm" + (pri ? ".pri" : ""), { type: "button", onclick: () => M.go("hubhelper") }, ic("link", 14), K.t("integrations.helper.setUp"));
     const P = !h.linked ? [".idle", "notLinked"] : h.updateRequired ? [".warn", "required"] : !h.online ? [".warn", "offline"] : h.appState === "old" ? [".warn", "appOld"] : ["", "linked"];
     const pill = el("span.pill" + P[0], {}, el("span.dot" + P[0], { "aria-hidden": "true" }), K.t(`integrations.helper.${P[1]}`));
     const copyBtn = (text) => el("button.btn.sm", { type: "button", onclick: async () => {
@@ -269,29 +272,24 @@
     const addr = (p) => el("div.in-nt-addr", {}, el("code", {}, hpAddr(p)), copyBtn(hpAddr(p)));
     const rows = [];
     if (!h.linked) {
-      rows.push(K.row(K.t("integrations.helper.label"), K.t("integrations.helper.notLinkedLine"), el("span.in-nt-c", {}, pill,
-        el("button.btn.sm.pri", { type: "button", onclick: async () => {
-          const r = await hpSend({ action: "link" });
-          if (r && r.code) { hpCode = { code: r.code, until: Date.now() + (r.seconds || 600) * 1000 }; hpRedraw(); }
-        } }, K.t("integrations.helper.link")))));
-      const code = hpCode && Date.now() < hpCode.until ? hpCode.code : null;
-      rows.push(el("div.grp-row.in-det.in-nt-steps", {}, el("b", {}, K.t("integrations.helper.installTitle")), el("ol", {},
-        el("li", {}, K.t("integrations.helper.instImport"), addr()),
-        el("li", {}, K.t("integrations.helper.instAdd")),
-        el("li", {}, K.t("integrations.helper.instAddress", { address: location.origin })),
-        el("li", {}, code ? [K.t("integrations.helper.instCode"), " ", el("code.in-hp-code", {}, `${code.slice(0, 4)} ${code.slice(4)}`), " ",
-          // (v3.0.5, tester) Cancel: the code stops working now (the server's "cancelcode")
-          el("button.btn.sm", { type: "button", "aria-label": K.t("integrations.helper.cancelCodeLabel"), onclick: async () => {
-            const r = await hpSend({ action: "cancelcode" });
-            if (r && r.ok) { hpCode = null; hpRedraw(); toast(K.t("integrations.helper.codeCancelled"), false); }
-          } }, K.t("integrations.helper.cancelCode"))] : K.t("integrations.helper.instCodeFirst")),
-        el("li", {}, K.t("integrations.helper.instDone"))),
-        el("p.gf", {}, ic("info", 14), " ", K.t("integrations.helper.hpm", { address: hpAddr("/hubitat/packageManifest.json") }))));   // i18n-ok (an address)
+      // (v3.0.7) the guided setup (#hubhelper: Package Manager or by hand, the link code, the live checks)
+      rows.push(K.row(K.t("integrations.helper.label"), K.t("integrations.helper.notLinkedHub"), el("span.in-nt-c", {}, pill, phone() ? null : setupBtn(true))));
       return el("div.in-hp", { "data-hp": "" }, ...rows);
     }
     const line = [h.online ? K.t("integrations.helper.heard", { when: ago(h.lastPoll) }) : h.lastPoll ? K.t("integrations.helper.notHeard", { when: ago(h.lastPoll) }) : K.t("integrations.helper.neverHeard"),
       h.have ? K.t("integrations.helper.version", { have: h.have }) : ""].filter(Boolean).join(" · ");   // i18n-ok (a separator)
     rows.push(K.row(K.t("integrations.helper.label"), line, el("span.in-nt-c", {}, pill)));
+    // (v3.0.7) the hub link: through the Helper, or still Maker API (the Switch card), OAuth off, devices not given
+    const hl = h.hubLink || {}, viaHelper = hl.set && (hl.use || !makerSet());
+    rows.push(K.row(K.t("integrations.helper.hubLink"), viaHelper ? K.t("integrations.helper.viaHelper") : hl.set ? K.t("integrations.helper.viaMaker") : K.t("integrations.helper.noHubLink"),
+      el("span.in-nt-c", {}, phone() ? null : setupBtn(!viaHelper && !hl.set), !phone() && hl.set && makerSet() ? el("button.btn.sm" + (viaHelper ? "" : ".pri"), { type: "button", onclick: () => M.go("hubhelper/switch") }, K.t("integrations.helper.switch")) : null)));
+    if (h.oauth === false) {
+      rows.push(el("div.grp-row.in-det.in-nt-steps.in-nt-hot", {}, el("b", {}, K.t("integrations.helper.oauthOff")), el("p", {}, K.t("integrations.helper.oauthFix"))));
+    }
+    if (Array.isArray(h.missing) && h.missing.length) {
+      rows.push(el("div.grp-row.in-det.in-nt-steps.in-nt-hot", {}, el("b", {}, K.t("integrations.helper.missing", { n: h.missing.length })),
+        el("p", {}, K.t("integrations.helper.missingFix", { names: h.missing.slice(0, 3).map((m) => m.name).join(", ") }))));
+    }
     const req = h.request, res = h.result;
     const ask = (what) => async (e) => {
       e.currentTarget.disabled = true;

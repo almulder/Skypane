@@ -19,9 +19,10 @@ NAME = r"[A-Za-z0-9._-]{1,64}"
 
 # key: (group, label, pattern, secret, help) — the keys are the old template variables' names
 FIELDS = {
-    "HUBITAT_HOST": ("Hubitat", "Hub address", HOST, False, "The Hubitat hub's IP, e.g. 192.168.1.10"),
-    "HUBITAT_APP_ID": ("Hubitat", "Maker API app number", r"\d{1,6}", False, "The number in the Maker API app's address"),
-    "HUBITAT_TOKEN": ("Hubitat", "Maker API token", TOKEN, True, "From the Maker API app"),
+    # (v3.0.7) Maker API is optional: the Skypane Helper app (Integrations → Hubitat) is the hub link without these
+    "HUBITAT_HOST": ("Hubitat", "Hub address", HOST, False, "Maker API only: the Hubitat hub's IP, e.g. 192.168.1.10. Not needed with the Skypane Helper"),
+    "HUBITAT_APP_ID": ("Hubitat", "Maker API app number", r"\d{1,6}", False, "Maker API only: the number in the Maker API app's address"),
+    "HUBITAT_TOKEN": ("Hubitat", "Maker API token", TOKEN, True, "Maker API only: from the Maker API app"),
     "PROTECT_HOST": ("UniFi Protect", "Protect console address", HOST, False, "The UNVR / console running Protect"),
     "PROTECT_API_KEY": ("UniFi Protect", "Protect API key", TOKEN, True, "Live camera list + camera video"),
     "UNIFI_HOST": ("Guest Wi-Fi", "UniFi console address", HOST, False, "UniFi Network 10 or newer (e.g. a UDM Pro)"),
