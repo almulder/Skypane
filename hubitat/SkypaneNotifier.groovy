@@ -2,6 +2,7 @@
  *  Skypane Notifier — lets Hubitat rules (Rule Machine, webCoRE, Basic Rules, HSM, Notifications, Switchboard…)
  *  put alerts on the Skypane wall panels, and hear back when someone dismisses them.
  *
+ *  Version 3.0.6 (Skypane 3.0.6): only the version changed, so the Skypane Helper's "Update the driver" can be tried.
  *  Version 3.0.5 (Skypane 3.0.5): the driver says its version — the `driverVersion` attribute (DRIVER_VERSION), set when
  *  the device starts and with the server's heartbeat, so it's right within a minute of saving new driver code. The
  *  Skypane bridge reads it, and the Manager (Integrations → Hubitat) says "Up to date" or how to update. Nothing else
@@ -147,7 +148,7 @@ metadata {
 
 // the level's own expiry when a rule gives none or 0 (seconds; 0 = until dismissed —)
 private Integer defaultSeconds(Integer lvl) { [1: 60, 2: 60, 3: 0, 4: 0, 5: 0][lvl] ?: 0 }
-@Field static final String DRIVER_VERSION = "3.0.5"   // (v3.0.5) Skypane reads it from here, the bridge from driverVersion
+@Field static final String DRIVER_VERSION = "3.0.6"   // (v3.0.5) Skypane reads it from here, the bridge from driverVersion
 @Field static final Integer MAX_ALERTS = 20
 @Field static final Integer BUTTONS = 7          // 1–5: an alert of that level dismissed on a panel; 6: Dismiss all; 7: silenced
 @Field static final Integer DISMISS_ALL = 6

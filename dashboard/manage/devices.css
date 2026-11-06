@@ -253,8 +253,7 @@ table.dv-dt { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 @container dvtable (max-width: 860px) { .dv-dt .c-use { display: none; } }
 /* (v3.0.5) the Protocol column (the Skypane Helper's report): goes with the driver when room runs out */
 .dv-dt td.c-pro { white-space: nowrap; }
-@media (max-width: 1151px) { .dv-dt .c-pro { display: none; } }
-@container dvtable (max-width: 980px) { .dv-dt .c-pro { display: none; } }
+/* (v3.0.6) Protocol stays on every width: ID and then Driver go first; a narrow table scrolls (above, 640px) */
 /* (the page narrower than ~900 px — a small window or the sidebar pinned: the facets go above the table, in columns) */
 .dv-dwrap { container-type: inline-size; container-name: dvpage; }   /* (not on .dv-page: the slide-over is fixed inside it) */
 @container dvpage (max-width: 880px) {

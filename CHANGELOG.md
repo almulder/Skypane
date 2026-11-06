@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.6
+
+- **Devices → Detailed:** the Protocol column (from the Skypane Helper) now shows at every screen width. ID and
+  Driver hide first on narrow screens.
+- **Notifier driver 3.0.6:** only the version number changed, so you can try the Helper's "Update the driver" in
+  Integrations → Hubitat.
+
 ## 3.0.5
 
 ### One blank card for everything
