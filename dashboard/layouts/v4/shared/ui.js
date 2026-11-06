@@ -168,11 +168,16 @@
     UI.render();
   }, 30000);
 
+  // (v3.0.5) a Calendar card set to "Choose": only its calendars (o.cals) — while that card is drawn (the panel's own
+  // "Shown here" already decided what the panel may show; a card only ever narrows it)
+  let calOnly = null;
+  const evOn = (d) => (calOnly ? H.eventsOn(d).filter((e) => calOnly.has(e.cal)) : H.eventsOn(d));
+  const evAll = () => (calOnly ? H.events().filter((e) => calOnly.has(e.cal)) : H.events());
   UI.weekStrip = () => {
     const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(cal.weekStart); d.setDate(d.getDate() + i); return d; });
     return `<div class="wk"><button class="wk-nav"${Acts.on("ui.calShift", -1)} aria-label="${esc(T("cal.prevWeek"))}">${icon("chevronLeft", 22)}</button>
       ${days.map((d) => {
-        const ev = H.eventsOn(d), sel = H.sameDay(d, cal.selected), today = H.sameDay(d, new Date());
+        const ev = evOn(d), sel = H.sameDay(d, cal.selected), today = H.sameDay(d, new Date());
         return `<button class="wk-day ${sel ? "sel" : ""} ${today ? "today" : ""}" ${Acts.on("ui.calPick", d.getTime())} aria-label="${esc(T.date(d))}"${sel ? ` aria-pressed="true"` : ""}>
           <span class="wk-dow">${esc(T.weekday(d))}</span><b class="num">${d.getDate()}</b>
           <span class="wk-dots">${ev.slice(0, 3).map((e) => `<i style="background:${e.cat.color}"></i>`).join("")}</span></button>`;
@@ -181,7 +186,7 @@
   };
 
   UI.agenda = () => {
-    const ev = H.eventsOn(cal.selected);
+    const ev = evOn(cal.selected);
     const isToday = H.sameDay(cal.selected, new Date());
     const head = esc(isToday ? T("cal.today") : T.date(cal.selected, { weekday: "long", month: "short", day: "numeric" }));
     return `<div class="ag-head"><span class="label">${head}</span>${isToday ? "" : `<button class="chip"${Acts.on("ui.calToday")}>${esc(T("cal.backToToday"))}</button>`}</div>
@@ -205,7 +210,7 @@
         <button class="wk-nav" style="height:40px"${Acts.on("ui.monthShift", 1)} aria-label="${esc(T("cal.nextMonth"))}">${icon("chevron", 22)}</button></div>
       <div class="cal-mo">${Array.from({ length: 7 }, (_, i) => `<span class="dow">${esc(T.weekday(new Date(2000, 0, 2 + wk0() + i), "narrow"))}</span>`).join("")}
       ${cells.slice(0, rows).map((d) => {
-        const ev = H.eventsOn(d);
+        const ev = evOn(d);
         return `<button class="${d.getMonth() !== m ? "other" : ""} ${H.sameDay(d, new Date()) ? "today" : ""} ${H.sameDay(d, cal.selected) ? "sel" : ""}" ${Acts.on("ui.monthPick", d.getTime())}>
           <span class="num">${d.getDate()}</span><span class="wk-dots">${ev.slice(0, 3).map((e) => `<i style="background:${e.cat.color}"></i>`).join("")}</span></button>`;
       }).join("")}</div>`;
@@ -214,8 +219,11 @@
   // (guest mode with "blur the calendar" on this panel — guestlock.js G.blurred, v2.9.3 the same card, its
   // place kept by an empty veil — blurred shapes, not one event (none is even loaded: data.js hideEvents) — with "Hidden
   // while guests stay" on it; a tap: the panel PIN)
-  UI.calendar = (upcomingMax = 3) => {
-    if (!(window.GuestLock && GuestLock.blurred)) return UI.calendarBody(upcomingMax);
+  UI.calendar = (upcomingMax = 3, only = null) => {
+    if (!(window.GuestLock && GuestLock.blurred)) {
+      calOnly = Array.isArray(only) ? new Set(only) : null;
+      try { return UI.calendarBody(upcomingMax); } finally { calOnly = null; }
+    }
     const live = window.PANEL_LIVE ? `<p class="gl-live gb-live">${esc(T("guest.calLive"))}</p>` : "";
     const rows = Array.from({ length: 6 }, (_, i) => `<i class="gb-row${i % 3 === 0 ? " gb-head" : ""}"></i>`).join("");
     return `<div class="card-head"><span class="label">${esc(T("cal.title"))}</span></div><div class="gb-veil" aria-hidden="true" inert><i class="gb-strip"></i>${rows}</div>
@@ -224,13 +232,13 @@
   UI.calendarBody = (upcomingMax = 3) => `<div class="card-head"><span class="label">${esc(T("cal.title"))}</span>
       <div class="cal-toggle"><button class="${cal.mode === "week" ? "cur" : ""}" ${Acts.on("ui.calMode", "week")}>${esc(T("cal.week"))}</button><button class="${cal.mode === "month" ? "cur" : ""}" ${Acts.on("ui.calMode", "month")}>${esc(T("cal.month"))}</button></div></div>
     <div class="cal-body">${cal.mode === "week" ? UI.weekStrip() : UI.monthGrid()}${UI.agenda()}
-    ${H.eventsOn(cal.selected).length < (cal.mode === "week" ? 5 : 3) && upcomingMax ? UI.upcoming(cal.mode === "week" ? upcomingMax : 2) : ""}
+    ${evOn(cal.selected).length < (cal.mode === "week" ? 5 : 3) && upcomingMax ? UI.upcoming(cal.mode === "week" ? upcomingMax : 2) : ""}
     ${H.calNote && H.calNote() ? `<div class="cal-note">${UI.esc(H.calNote())}</div>` : ""}</div>`;
 
   // next events after the selected day (fills the space under a short day)
   UI.upcoming = (n = 3) => {
     const after = new Date(cal.selected); after.setHours(23, 59, 59, 999);
-    const next = H.events().filter((e) => e.date > after && !e.cont).sort((a, b) => a.date - b.date).slice(0, n);   // (cont: a long event's later days)
+    const next = evAll().filter((e) => e.date > after && !e.cont).sort((a, b) => a.date - b.date).slice(0, n);   // (cont: a long event's later days)
     if (!next.length) return "";
     return `<div class="ag-head" style="margin-top:6px"><span class="label">${esc(T("cal.comingUp"))}</span></div><div class="ag up">${next.map((e) =>
       `<button class="ag-ev"${Acts.on("ui.calJump", e.date.getTime())}${calBar(e)}><span class="ag-ic" style="color:${e.cat.color};background:${e.cat.color}22">${icon(e.cat.icon, 22)}</span>

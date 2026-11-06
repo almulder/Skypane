@@ -39,7 +39,8 @@
   const loadGone = () => { try { const v = JSON.parse(localStorage.getItem(GONE) || "[]"); return new Set(Array.isArray(v) ? v.filter((x) => typeof x === "string").slice(-200) : []); } catch { return new Set(); } };
   const gone = loadGone();
   const saveGone = () => { try { localStorage.setItem(GONE, JSON.stringify([...gone].slice(-200))); } catch {} };
-  const me = () => [((window.PanelStore && PanelStore.id) || "main").toLowerCase(), H.kiosk()];
+  // (v3.0.5: no "main" fallback any more — no built-in main panel since 3.0.2; a page with no panel is only "all")
+  const me = () => [String((window.PanelStore && PanelStore.id) || "").toLowerCase(), H.kiosk()].filter(Boolean);
   const S = () => (window.Settings && Settings.v) || {};
 
   // ---------- which alerts this panel shows ----------
@@ -331,7 +332,8 @@
   const receive = HA.receive = (msg) => {
     let m; try { m = JSON.parse(msg); } catch { return; }
     if (!m || m.v !== 1 || !Array.isArray(m.alerts)) return;
-    take(m.alerts.filter(ok).slice(0, 40).map((a) => ({ id: a.id, lvl: a.lvl, to: a.to.filter((t) => typeof t === "string"), tag: String(a.tag || ""),
+    // (v3.0.5: up to 120, as the bridge sends — the Notifications card lists 100, then "+ N more"; was 40)
+    take(m.alerts.filter(ok).slice(0, 120).map((a) => ({ id: a.id, lvl: a.lvl, to: a.to.filter((t) => typeof t === "string"), tag: String(a.tag || ""),
       title: cut(String(a.title || ""), 80), text: cut(a.text, 300), exp: +a.exp || 0, at: +a.at || Date.now() / 1000, count: +a.count || 1,
       // (v3.0.0 weather warnings from a Hubitat weather device: kind "weather", where, who sent it, how many more are up)
       kind: /^[a-z]{1,20}$/.test(String(a.kind || "")) ? a.kind : "", place: cut(String(a.place || ""), 60), sender: cut(String(a.sender || ""), 60),

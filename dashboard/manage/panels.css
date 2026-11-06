@@ -271,6 +271,13 @@ html.phone .pn-kpis { gap: 8px; } html.phone .pn-kpis .kpi { padding: 8px 10px; 
 .pn-later { margin-top: 26px; }
 .pn-body .grp-row .rc:has(> .seg) { flex-basis: auto; }   /* (a segmented switch keeps one line: it takes the room it needs) */
 .pn-body .grp-row .rc > .seg { flex-wrap: nowrap; }
+/* (v3.0.5, tester) a phone-wide window (Look → Screensaver at 390 px): the switch gets its own line and wraps — its
+   buttons (Start after: 1 / 5 / 10 / 30 minutes) never run off the edge, its label (Order) is never cut */
+@container pnmain (max-width: 640px) {
+  .pn-body .grp-row .rc:has(> .seg) { flex: 1 1 100%; max-width: 100%; }
+  .pn-body .grp-row .rc > .seg { flex-wrap: wrap; max-width: 100%; }
+  .pn-body .grp-row:has(> .rc > .seg) > .rl { flex: 1 1 100%; }
+}
 .pn-tile.st-offline .pn-thumb .pn-map, .pn-tile.st-never .pn-thumb .pn-map { filter: saturate(.75); }   /* (only a little quieter than an online one) */
 /* (v2.9.2) Open live: the "Sound on" switch in the bar */
 .pn-lsound { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--t2); white-space: nowrap; cursor: pointer; }

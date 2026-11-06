@@ -5,3 +5,5 @@
 *.jpg binary
 *.woff2 binary
 *.apk binary
+# (v3.0.5) the LED agent build (linux/arm64) for the Manager's download and its self-update
+*.arm64 binary

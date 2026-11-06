@@ -204,7 +204,10 @@ def panel_cameras_js(entries, liveviews=(), hub=None, own_views=()):
         pid[e["id"]] = num
         # stream = go2rtc's stream name (differs from the name's slug for duplicate names / names without letters)
         cams.append({"id": num, "name": e["name"], "stream": e["slug"], "room": room, "doorbell": bool(h and h.get("doorbell")), "online": e["online"], "video": e["video"],
-                     **({"tileHd": True} if e.get("tileHd") else {})})
+                     **({"tileHd": True} if e.get("tileHd") else {}),
+                     # (v3.0.5) the doorbell's own Hubitat device (its "pushed" rings, its screen text) from the house model
+                     **({"doorbellDevice": h["doorbellDevice"]} if h and h.get("doorbell") and isinstance(h.get("doorbellDevice"), int)
+                        and not isinstance(h.get("doorbellDevice"), bool) else {})})
     views = []
     for lv in sorted(liveviews, key=lambda v: (not v.get("isDefault"), v.get("name", ""))):
         slots = [{"cameras": [pid[c] for c in (s.get("cameras") or []) if c in pid], "cycleMode": s.get("cycleMode") or "time",

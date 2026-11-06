@@ -1,5 +1,71 @@
 # Changelog
 
+## 3.0.5
+
+### One blank card for everything
+- **Devices and Text are now pieces of the blank card.** + Add gives a Device, Fan, Text, Value or Picture piece.
+  Your Devices and Text cards become blank cards on their own and keep their look. List, Tiles and Single item stay
+  as Arrange helpers.
+- **Grow and shrink with the card:** one checkbox on every card and every piece. It's off by default, so content
+  keeps its size.
+- **Pieces have no borders**, and labels wrap and shrink before they're ever cut off.
+- **Editing:** a double-click edits a card where it is; zoom is a builder option, off by default. Grip dots at a
+  card's top-left move it. Edge margin (0 / 8 / 16 / 24 px) sits next to Spacing.
+- **Icons:** the background can be a Circle, a Rounded square or None, with transparency, and it's sized to the
+  icon's larger side. Icons are white by default. The icon and the name each have their own color.
+- **Undo and redo everywhere:** buttons, plus Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z (⌘ on a Mac).
+
+### Deleting safely
+- **In use:** something used on a panel or card can't be deleted. The message lists each place, as links. The lists
+  show an In use badge.
+- **Trash:** deleted things are kept for 7, 14 or 30 days, with Restore, Delete now and Empty. Big things ask first;
+  small things go at once, with Undo in the message.
+
+### Cards
+- **Notifications:** the Alert note and Notifications cards are now one card (Compact or List). It holds up to 100
+  alerts, then "+ N more", and keeps its place when a new one arrives.
+- **System card:** pick its rows. Each shows OK or Trouble, and there's a new Notifier driver row.
+- **Rooms card:** several rooms on one card. Room pages get Back, with a history. A Home button stays next to the
+  security status when the room bar hides. A room hidden from the bar can still be opened from a Rooms card.
+- **Calendar card:** "Same as the panel" or choose its calendars. A card can only narrow the panel's list.
+- **Batteries:** your own device group with its own low level, and "Always show" or "Only when low".
+  **Power now:** pick the devices.
+- **Pictures:**
+  - Slide show and Picture are now one card, with 10 transitions plus Mix (Match is marked "try").
+  - Rotating background pictures per panel or page, with a dim setting.
+  - A screensaver uses the same engine; the touch that wakes it never presses anything.
+  - Read-only picture folders, from a /pictures folder you map in Docker / Unraid.
+- **Network map:** fills the whole card. Snap is on by default. "Arrange for me" spreads it out. There are sizes for
+  the parts, the names and the title, and moves can be undone. Port tags never cover names, and crowded maps are much
+  lighter.
+- **New UniFi cards:**
+  - **UPS / battery backup**, from a UniFi UPS or a NUT server. It only reads, and its password is kept secret.
+  - **Doorbell**, with three looks. Rings come from your Hubitat doorbell, and the message buttons work only on the
+    doorbell itself.
+  - **Activity feed.**
+- **UniFi values** can be pieces. Weather places can be dragged into order.
+
+### Lists & notes
+- A Manager page for lists and notes: rename, delete empty lists, an "On the panel" preview and Undo. The quick-add
+  chips are bigger and never add twice.
+- **Hubitat commands** (notify text to the Skypane device): `add to list: Shopping, milk`, `remove from list: …`,
+  `tick: …`, `pin note: …`. A command that doesn't work out is shown as the original alert, so nothing is lost.
+
+### Hubitat and tablets
+- **Notifier driver 3.0.5:** it reports its version. Integrations → Hubitat says "Up to date" or how to update.
+- **Skypane Helper app (new, optional):**
+  - link it with a one-time code;
+  - it reports each device's protocol, last activity and health;
+  - it updates the Notifier driver from the Manager. Every update is signed, and your hub login stays on the hub.
+  - It installs from Apps Code or Hubitat Package Manager.
+- **LED agent:** a guide for tablets without root, a download under Help & guides, and self-update. Each update is
+  signed, the agent is pinned to its own Skypane server, and it falls back to the old build if a new one fails.
+
+### Upgrading
+- The Manager's "What changed" note lists every card that moved. Earlier versions are backed up first, and anything
+  that can't move is left as it was.
+- **Redeploy the bridge** (it's part of the image) to get the higher alert limit (120) and the list commands.
+
 ## 3.0.4
 
 ### Devices card

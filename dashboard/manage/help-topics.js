@@ -5,6 +5,7 @@
 //   { steps: [...] }       numbered steps          { list: [...] }   a bullet list
 //   { tip: "text" }        a green note            { warn: "text" }  a yellow note
 //   { h: "text" }          a small heading
+//   { download: "agent" }  (v3.0.5) the LED agent's download and guide buttons
 // In any text: **Button name** is shown bold, [[topic-id]] or [[topic-id|words]] is a link to another topic.
 // Everything is shown with textContent (help.js): nothing here is parsed as HTML.
 window.SKYPANE_HELP = {
@@ -165,8 +166,9 @@ window.SKYPANE_HELP = {
           "**Recent activity** — what went wrong and when it was fixed (more kinds of activity come later).",
           "**Quick links** — the things you do most, for what your login may use.",
         ] },
-        { h: "What changed in 3.0.4" },
-        "After the upgrade to 3.0.4, each admin sees **What changed in 3.0.4** once, on top of the Overview: every card the upgrade replaced with its newer version, panel by panel (old → new, which screen, its name), with **Open the layout** for each panel, your saved cards, and anything kept as it was. Each card kept its place, size and settings, so the panels look the same. **Got it** hides it for your login; **Quick links** → **What changed in 3.0.4** shows it again. A copy of every panel from before the upgrade is in backups/.",
+        // (v3.0.5) the notice is 3.0.5's now; from 3.0.3 it also lists 3.0.4's moves, as the cards they are today
+        { h: "What changed in 3.0.5" },
+        "After the upgrade to 3.0.5, each admin sees **What changed in 3.0.5** once, on top of the Overview: every card the upgrade replaced with its newer version, panel by panel (old → new, which screen, its name), with **Open the layout** for each panel, your saved cards, and anything kept as it was. Upgraded straight from 3.0.3? The same notice lists the 3.0.4 changes too, each with the card it is now (for example Device → Blank card). Each card kept its place, size and settings, so the panels look the same. **Got it** hides it for your login; **Quick links** → **What changed in 3.0.5** shows it again. A copy of every panel from before the upgrade is in backups/.",
         { h: "Acknowledge an alert from the Manager" },
         "The admin can clear an alert here — handy when you're not at home, without giving anyone the PIN.",
         { steps: [
@@ -548,7 +550,8 @@ window.SKYPANE_HELP = {
           "The air purifier in Auto shows its speed: “Auto · Speed 4”.",
         ] },
         "In the builder a click only picks an item: the preview shows on / off without sending anything.",
-        { tip: "Upgraded from 3.0.3? Your old Device, Value, Button, Lock, Fan and Scene buttons cards became Devices cards and keep their old look until you press **Use the new look** (Undo takes it back). [[overview|What changed in 3.0.4]] lists them." },
+        // (v3.0.5) since 3.0.5 they are blank cards
+        { tip: "Upgraded from 3.0.3 or 3.0.4? Your old Device, Devices, Value, Button, Lock, Fan and Scene buttons cards are blank cards now and look the same. [[overview|What changed in 3.0.5]] lists them." },
       ],
       see: ["card-settings", "card-types"],
     },
@@ -556,7 +559,7 @@ window.SKYPANE_HELP = {
       id: "blank-card", section: "builder", title: "A blank card: your own pieces", where: "Layout builder → Devices → Blank card",
       words: "blank card pieces add a piece picture light switch value door lock garage text edit pieces done custom guides alignment bring forward send back",
       body: [
-        "A blank card is yours to fill with up to 16 pieces.",
+        "A blank card is yours to fill with up to 25 pieces.",
         { steps: [
           "Drop **Blank card** (in **Devices**, first in the list).",
           "Double-click it (or **Edit pieces**). It is edited where it is: the rest dims a little and “Editing pieces — Esc to finish” shows on top.",
@@ -1065,6 +1068,10 @@ window.SKYPANE_HELP = {
         { tip: "Example for a leak: Trigger: kitchen leak sensor wet → Skypane: critical(“Water leak — kitchen sink”, “leak”). Trigger: sensor dry → Skypane: dismiss(“leak”)." },
         { h: "Start a timer" },
         "notify(“Timer: Emma, Free time”) starts every Countdown & timers timer named Emma with the Free time preset; Timer: Pizza, 0d00:20 runs it for 20 minutes (days, then hours:minutes). It isn't shown as an alert ([[timers]]).",
+        // (v3.0.5) the Skypane Helper app: how it links, the signed updates, and what unlinks it
+        { h: "Keep it up to date: the Skypane Helper app" },
+        "The optional **Skypane Helper** app on the hub can update this driver for you (**Integrations** → **Hubitat** → **Link the Helper**, then type the code in the app). The link gives the app a token and a key of its own; every update Skypane offers is signed with that key, and the app checks the signature, the code's sha256 and that it is the Skypane code before it saves anything.",
+        { warn: "If Skypane answers the app with 401 or 403 (you unlinked it in the Manager, or Skypane lost the link), the app **unlinks itself**: it stops asking and its page says “Not linked”. Make a new link code in the Manager and type it in the app again." },
       ],
       see: ["alerts-hubitat", "timers"],
     },
@@ -1206,10 +1213,28 @@ window.SKYPANE_HELP = {
           "FreeKiosk → MQTT: broker <your server> port 1883, the user and password from **Integrations → Message broker → Login for devices** (use **Copy user** and **Copy password**), and the panel's **FreeKiosk device name** (**Panels** → **Setup** → the panel → **General** → **Set up the tablet**).",
           "Check that the version tag in the panel's lower-left corner matches the Manager's.",
         ] },
-        "**The PoE wall tablet's LED agent** (its LED strip and sensors) keeps MQTT settings of its own, apart from FreeKiosk's. With the built-in broker the panel page sets the agent up by itself (on the tablet, port 852): within a minute **Its tablet** shows **LED agent: Connected**. Put the 3.0.2 agent on each such tablet once (docs/panel-agent.md). On such a tablet, open Skypane by its IP address (http://192.168.1.5/, not a name): the agent connects to that address. A separate broker: the agent's agent.args is still set by hand.",
+        "**The PoE wall tablet's LED agent** (its LED strip and sensors) keeps MQTT settings of its own, apart from FreeKiosk's. With the built-in broker the panel page sets the agent up by itself (on the tablet, port 852): within a minute **Its tablet** shows **LED agent: Connected**. Put the agent on each such tablet once, with or without root ([[led-agent]]); after that it updates itself. On such a tablet, open Skypane by its IP address (http://192.168.1.5/, not a name): the agent connects to that address. A separate broker: the agent's agent.args is still set by hand.",
         "An iPad or any browser works too. If you skip the MQTT part, you go without screen wake, volume control and spoken alerts. On an iPad, open Skypane's address in Safari, Share → **Add to Home Screen** first, then open it from the Home Screen icon and connect it there (a Home Screen app keeps its own storage, apart from Safari) (sorry iPad users — blame Apple).",
       ],
-      see: ["panel-pairing", "add-panel", "tablet-settings", "not-set-up"],
+      see: ["panel-pairing", "add-panel", "tablet-settings", "not-set-up", "led-agent"],
+    },
+    // (v3.0.5) the LED agent: the download (served by this Skypane), the guide, self-update, no root
+    {
+      id: "led-agent", section: "tablet", title: "The LED agent (PoE wall tablet)", where: "Help & guides → LED agent",
+      words: "led agent strip light sensors poe wall tablet adb root no root developer mode usb debugging download zip install update self-update 8852",
+      body: [
+        "Only for the PoE wall tablet with a built-in LED strip: a small program, the **LED agent**, drives the strip and reads the tablet's sensors. Any other tablet doesn't need it.",
+        { download: "agent" },
+        { steps: [
+          "Download the LED agent (above) on a computer and unzip it.",
+          "Open the step-by-step guide (above): developer mode, USB or network debugging, adb, then one install command — with root, or without it.",
+          "Without root: switch on **LED agent without root** for the panel (**Panels** → **Setup** → the panel → **General** → **This tablet**).",
+          "Within a minute **Its tablet** says **LED agent: Connected**, with its version.",
+        ] },
+        "From then on the agent **updates itself** from this Skypane: it asks only the Skypane that set it up, with its own token, and checks each new build (its version and sha256) before it runs it. **Its tablet** says **update available** while it is older; an agent from before Skypane 3.0.5 can't update itself, so put the new one on once.",
+        { warn: "Without root the agent can't start by itself after the tablet restarts: run the one start line from the guide again then. The LED strip works without root only when the tablet lets adb's shell user use it (the guide's check tells)." },
+      ],
+      see: ["tablet-setup", "panel-general"],
     },
     {
       id: "tablet-settings", section: "tablet", title: "The tablet's own Settings (the gear)", where: "On the panel: the settings gear",

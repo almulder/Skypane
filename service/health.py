@@ -38,10 +38,15 @@ CHECK_SECONDS = 30       # how often the checks run (and the heartbeat goes to H
 CONFIRM = 2              # a problem counts after this many checks in a row
 PANEL_MINUTES = 5        # a panel not heard from for this long is "disconnected" (still listed by its name)
 HEALTH_TOPIC = "dashboard/health"   # (MQTT; only the internal login may write dashboard/#)
+# (v3.0.5) problem ids that stay in the Manager: never in the hub's heartbeat (healthLevel / healthAlert) — the
+# Notifier driver's "out of date" (notifier_driver.py adds its id)
+MANAGER_ONLY = {"hubitat.notifier"}
 ID_RE = re.compile(r"[a-z0-9_.:-]{1,80}")
 TEXT_MAX, DETAILS_MAX = 80, 300
 LEVELS = (2, 3, 4)       # 2 notice, 3 warning, 4 alert (as the notifier's levels; 5 is for life safety only)
-CHECKIN_FIELDS = {"version", "page", "agent", "from"}   # what a panel's check-in may tell (short strings; "from": the
+# (v3.0.5) agentVersion: the LED agent's version (the check-in's agentv=); agentWarn: "1" while the page refused what
+# answers on the agent's port (it couldn't prove the agent's key — agentk=bad)
+CHECKIN_FIELDS = {"version", "page", "agent", "from", "agentVersion", "agentWarn"}   # what a panel's check-in may tell (short strings; "from": the
 # address it came from — set by the server, not the panel: check-ins need no login, so the Health page shows where one
 # came from and a made-up one from another address shows up; real pairing of tablets is stage 6)
 
@@ -405,8 +410,8 @@ class Monitor:
     def heartbeat(self):
         """The message for Hubitat (HEALTH_TOPIC, every check): {"v": 1, "n": problems, "lvl": the worst level (0 =
         none), "text": the worst problems' titles, ≤ 120 characters, "OK" when none}. Short: the bridge passes it to the
-        hub in a Maker API URL."""
-        probs = self.current()
+        hub in a Maker API URL. (v3.0.5) The MANAGER_ONLY ones are left out."""
+        probs = [p for p in self.current() if p["id"] not in MANAGER_ONLY]
         text, more = "", 0
         for p in probs:
             t = p["title"] if not text else f"{text}; {p['title']}"

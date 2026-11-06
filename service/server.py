@@ -71,9 +71,17 @@ try:  # `python -m service.server` / tests; or run from inside service/
     from service import device_rules
     from service import panel_devices, switch_rule
     from service import devices_card
+    from service import blank_card
+    from service import notices_card   # (v3.0.5) Alert note → Notifications (Compact)
+    from service import picture_card   # (v3.0.5) Picture → Slide show / Picture
+    from service import picture_folders   # (v3.0.5) picture folders under the media root (PICTURES_DIR)
     from service import bins, time_cards, timers
     from service import unifi_net
+    from service import nut_ups   # (v3.0.5) the UPS card's NUT readings
     from service import broker
+    from service import trash   # (v3.0.5) the Trash
+    from service import notifier_driver   # (v3.0.5) the Notifier driver's version check
+    from service import hubitat_helper, led_agent   # (v3.0.5) the Skypane Helper app, the LED agent's download and self-update
 
 except ImportError:  # pragma: no cover
     from panel_pin import PanelPin
@@ -90,6 +98,10 @@ except ImportError:  # pragma: no cover
     import art_sources
     import guest_wifi
     import unifi_net
+    import nut_ups   # (v3.0.5)
+    import trash   # (v3.0.5)
+    import notifier_driver   # (v3.0.5)
+    import hubitat_helper, led_agent   # (v3.0.5)
     import health
     import own_cameras
     import house_devices
@@ -103,6 +115,10 @@ except ImportError:  # pragma: no cover
     import overview
     import device_rules
     import devices_card
+    import blank_card
+    import notices_card
+    import picture_card
+    import picture_folders
     import bins
     import time_cards
     import timers
@@ -200,13 +216,18 @@ MANAGE_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-i
 # the design / live views ('self'); the plain panel page sends frame-ancestors 'none' (_send). The page's own settings
 # come as data (_layout), not as an inline script.
 PANEL_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; "
-             "media-src 'self' blob: data: http: https:; connect-src 'self' ws: wss: https: http://127.0.0.1:852; frame-src 'self' http: https:; "
+             "media-src 'self' blob: data: http: https:; connect-src 'self' ws: wss: https: http://127.0.0.1:852 http://127.0.0.1:8852; frame-src 'self' http: https:; "
              "font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'")
 # (worker-src: mqtt.js runs its keep-alive timer in a blob: worker — without it the pings stop and every panel drops off
 # the broker about every 95 s; v2.7.1)
 # (connect-src http://127.0.0.1:852, v3.0.2: the LED agent on the panel's own tablet — shared/agentlink.js,
-# mockups/AGENT-AUTOCONFIG.md — only that address on the loopback, nothing else over plain http)
+# mockups/AGENT-AUTOCONFIG.md — only that address on the loopback, nothing else over plain http; v3.0.5: and :8852, the
+# agent without root — used only when the panel's agentNoRoot setting is on)
 AGENT_STATES = ("ok", "off", "none")   # a check-in's agent=: connected / running but not connected / no agent answered
+# (v3.0.5) the Skypane Helper app's routes — the only ones that take POST (service/hubitat_helper.py)
+HELPER_POSTS = ("/api/hubitat/helper/link", "/api/hubitat/helper/report", "/api/hubitat/helper/result")
+# (v3.0.5) a check-in's agentv=
+AGENT_VERSION_RE = re.compile(r"\d{1,4}(?:\.\d{1,4}){0,3}")
 LOCAL_HOSTS = {"", "localhost", "127.0.0.1", "::1"}
 MAX_PANEL_EVENTS = 1500   # a panel's calendar answer: the soonest this many (a huge feed must not cost every poll 1 MB)
 BLANK_GRID = {"v": 2, "cols": 192, "rows": 128, "gap": 14, "cards": []}   # a new panel's Home (builder.js FC × FR)
@@ -269,6 +290,8 @@ class Config:
         self.mqtt_user = env.get("MQTT_USER") or None
         self.mqtt_password = env.get("MQTT_PASSWORD") or None
         self.version = env.get("VERSION") or "dev"
+        # (v3.0.5) the media root picture folders are read from (service/picture_folders.py; unset: the feature is off)
+        self.pictures_dir = (env.get("PICTURES_DIR") or "").strip()
         self.release = release_number()   # (the numbered release, service/RELEASE: "2.0.0" — shown next to the version)
         # Host header check (DNS rebinding): IP addresses and localhost always work; names only when listed here
         self.allowed_hosts = {h.strip().lower() for h in (env.get("ALLOWED_HOSTS") or "").split(",") if h.strip()}
@@ -317,6 +340,10 @@ class Config:
         self.unifi_net = env.get("UNIFI_NET") == "1"
         if self.unifi_net:
             page["unifiNet"] = True
+        # (v3.0.5) the UPS card's NUT server runs (service/nut_ups.py): /api/panel/<id>/ups has its readings too
+        self.nut_ups = env.get("NUT_UPS") == "1"
+        if self.nut_ups:
+            page["nutUps"] = True
         page["version"] = self.version
         if self.release:
             page["release"] = self.release
@@ -728,6 +755,7 @@ class Notifier:
         self.alerts = []            # the bridge's retained hubitat/alerts: [(level, expiry)] — only for alert_up()
         self._modes, self._mode, self._hsm = [], None, None   # (v2.9.3) retained hubitat/modes and hubitat/hsm (house())
         self.weather = None         # (v3.0.0) the bridge's retained hubitat/weather, in short (weather_status) — Integrations
+        self.driver_report = None   # (v3.0.5) the bridge's retained hubitat/notifier: [{"id", "version"}] (None = not heard)
         if not cfg.mqtt_host or paho_mqtt is None:
             log(f"mqtt: {'disabled (MQTT_HOST empty)' if not cfg.mqtt_host else 'paho-mqtt not installed'}"
                 " - no change notifications")
@@ -751,6 +779,8 @@ class Notifier:
                     client.subscribe("hubitat/hsm", qos=0)
                     client.subscribe(weather_device.TOPIC, qos=0)   # (v3.0.0: the weather device, as the bridge sees it)
                     client.subscribe(timers.TOPIC, qos=1)   # (v3.0.4: a Hubitat rule's "Timer: <name>, <length>", from the bridge)
+                    client.subscribe(lists.TOPIC, qos=1)    # (v3.0.5: a Hubitat rule's "add to list: …" / "pin note: …")
+                    client.subscribe(notifier_driver.TOPIC, qos=0)   # (v3.0.5: the hub's Notifier driver version — retained)
                     if self.live is not None:   # (the Overview: device values, batteries, last activity)
                         client.subscribe("hubitat/state", qos=0)
                         client.subscribe("hubitat/event", qos=0)
@@ -779,6 +809,13 @@ class Notifier:
                         self.after_timer(msg.payload[:2048])
                     except Exception as e:
                         log(f"timers: a Hubitat timer not started ({type(e).__name__})")
+                elif msg.topic == lists.TOPIC and not msg.retain and callable(getattr(self, "after_list", None)):   # (v3.0.5)
+                    try:
+                        self.after_list(msg.payload[:2048])
+                    except Exception as e:
+                        log(f"lists: a Hubitat list command not done ({type(e).__name__})")
+                elif msg.topic == notifier_driver.TOPIC:   # (v3.0.5; an empty payload clears it)
+                    self.driver_report = notifier_driver.parse_report(msg.payload[:8192]) if msg.payload else None
                 if self.live is not None and msg.topic in live_state.TOPICS:
                     try:
                         self.live.on_message(msg.topic, msg.payload)
@@ -828,6 +865,16 @@ class Notifier:
         try:
             if c is not None and c.is_connected():
                 c.publish(health.HEALTH_TOPIC, json.dumps(beat, separators=(",", ":")), qos=0, retain=False)
+        except Exception:
+            pass
+
+    def list_result(self, aid, ok):
+        """(v3.0.5) The answer to a Hubitat list command, for the bridge (lists.RESULT_TOPIC; only the internal login
+        reads dashboard/lists/result): ok — its alert stays off the panels; not ok — the bridge shows it after all."""
+        c = self.client
+        try:
+            if c is not None and c.is_connected():
+                c.publish(lists.RESULT_TOPIC, json.dumps({"v": 1, "id": aid, "ok": bool(ok)}, separators=(",", ":")), qos=1, retain=False)
         except Exception:
             pass
 
@@ -1171,7 +1218,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._json(405, {"error": "Method not allowed"}, {"Allow": "GET, HEAD, PATCH"})
         self._drain()
 
-    do_POST = do_PUT = do_DELETE = do_OPTIONS = do_TRACE = do_CONNECT = _not_allowed
+    do_PUT = do_DELETE = do_OPTIONS = do_TRACE = do_CONNECT = _not_allowed
+
+    def do_POST(self):
+        # (v3.0.5) only the Skypane Helper app on the hub posts (Hubitat's asynchttpPost): _dispatch answers 405 to
+        # every other route (HELPER_POSTS)
+        self._dispatch()
 
     def _dispatch(self):
         self._t0 = time.monotonic()
@@ -1179,7 +1231,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.manager = None       # who is calling a Manager API (manager_auth.Caller; set by _manage_ok)
         self._dk_set = None       # (v3.0.2) "<pid>.<key>" to send in the device-key cookie with this response
         self._dk_seen = None      # (v3.0.2) this request's device key, checked once: (pid, result) — _dk_check
-        self._body_read = self.command != "PATCH"
+        self._body_read = self.command not in ("PATCH", "POST")   # (v3.0.5: POST — the Helper app's routes only)
         if self.command in ("GET", "HEAD") and (self.headers.get("Transfer-Encoding") or
                                                 (self.headers.get("Content-Length") or "0").strip() != "0"):
             # unexpected body: answer, then discard it (_drain, bounded) and close - it must never be parsed as
@@ -1193,6 +1245,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         try:
             path = self._clean_path()
+            if self.command == "POST" and path not in HELPER_POSTS:   # (v3.0.5)
+                self.close_connection = True
+                raise ApiError(405, "Method not allowed")
             if path == "/api" or path.startswith("/api/"):
                 self._api(path)
             else:
@@ -1207,12 +1262,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             patchable = (bare.startswith(("/api/panel/", "/api/manage/panels")) and not re.fullmatch(r"/api/manage/panels/[^/]+/(live|bench)", bare)) \
                 or re.fullmatch(r"/api/manage/devices/\d{1,9}/command", bare) is not None or bare in (
                 "/api/pin", "/api/guest-wifi", "/api/manage/login", "/api/manage/users", "/api/manage/devices", "/api/manage/settings",
-                "/api/manage/never", "/api/manage/guest-wifi", "/api/manage/pictures", "/api/manage/cameras", "/api/manage/groups", "/api/manage/rooms",
-                "/api/manage/cards", "/api/manage/templates", "/api/manage/calendars", "/api/manage/prefs", "/api/lists", "/api/bins", "/api/timers",
+                "/api/manage/never", "/api/manage/guest-wifi", "/api/manage/pictures", "/api/manage/picture-folders", "/api/manage/cameras", "/api/manage/groups", "/api/manage/rooms",
+                "/api/manage/cards", "/api/manage/templates", "/api/manage/trash", "/api/manage/calendars", "/api/manage/prefs", "/api/lists", "/api/bins", "/api/timers",
                 "/api/manage/bins", "/api/manage/timers",
                 "/api/manage/health", "/api/manage/guest-lockdown", "/api/manage/house/command", "/api/manage/activity/retention", "/api/manage/feedback",
                 "/api/manage/weather", "/api/manage/unifi", "/api/manage/upgrade", "/api/pair", "/api/manage/pairing", "/api/manage/pin", "/api/manage/event-icons")
-            extra = {"Allow": "GET, HEAD, PATCH" if patchable else "GET, HEAD"} if e.code == 405 else None
+            extra = {"Allow": "POST" if bare in HELPER_POSTS else "GET, HEAD, PATCH" if patchable else "GET, HEAD"} if e.code == 405 else None
             self._json(e.code, {"error": e.message, **e.extra}, extra)
         except (ConnectionError, TimeoutError):
             self.close_connection = True
@@ -1474,6 +1529,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                                                                 "Content-Security-Policy": "default-src 'none'",
                                                                                 # (v3.0.2: Hubitat's Import reads it from the hub's page in the browser — a public file, no cookies)
                                                                                 "Access-Control-Allow-Origin": "*"})
+        if path == "/hubitat/SkypaneHelper.groovy":   # (v3.0.5) Apps Code → Import (as the driver above)
+            f = hubitat_helper.APP
+            if not f.is_file():
+                raise ApiError(404, "Not found")
+            return self._send(200, f.read_bytes(), "text/plain; charset=utf-8", {"Cache-Control": "no-cache", "Content-Security-Policy": "default-src 'none'",
+                                                                                "Access-Control-Allow-Origin": "*"})
+        if path == "/hubitat/packageManifest.json":   # (v3.0.5) Hubitat Package Manager → Install → From a URL
+            return self._helper_manifest()
+        if path == "/guides/led-agent.html":   # (v3.0.5) the public LED agent guide (docs/guides), linked from Help & guides
+            f = pathlib.Path(__file__).resolve().parent.parent / "docs" / "guides" / "led-agent.html"
+            if not f.is_file():
+                raise ApiError(404, "Not found")
+            return self._send(200, f.read_bytes(), "text/html; charset=utf-8", {"Cache-Control": "no-cache",
+                              "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"})
         m = re.fullmatch(r"/pictures/([0-9a-f]{16})", path)
         if m:   # the owner's own pictures (service/pictures.py) — the panels show them. (v3.0.2: no device key asked — a card's
             # sandboxed frame has no origin, so the browser never sends the SameSite=Strict key cookie with its pictures; the
@@ -1738,6 +1807,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                                          "dataWritable": writable, "mqtt": self.app.notifier.connected(), "boot": BOOT_ID})
         if path == "/api/status":   # (v3.0.2: pairing — open to anyone, rate-limited per address)
             return self._status()
+        if path.startswith("/api/hubitat/helper/"):   # (v3.0.5) the Skypane Helper app on the hub
+            return self._helper_api(path.rsplit("/", 1)[1])
+        if path in ("/api/agent/update", "/api/agent/binary"):   # (v3.0.5) the LED agent's self-update
+            return self._agent_update(path.rsplit("/", 1)[1])
+        if path == "/api/manage/helper":   # (v3.0.5) Integrations → Hubitat: the Helper app
+            return self._manage_helper()
+        if path == "/api/manage/agent.zip":   # (v3.0.5) Help & guides → Download the LED agent
+            return self._manage_agent_zip()
         if path == "/api/pair":
             return self._pair()
         if path == "/api/manage/pairing":
@@ -1787,6 +1864,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._manage_guest_wifi()
         if path == "/api/manage/unifi":
             return self._manage_unifi()
+        if path == "/api/manage/picture-folders":   # (v3.0.5) picture folders under the media root
+            return self._manage_folders()
+        m = re.fullmatch(r"/api/manage/picture-folders/([0-9a-f]{12})(?:/([0-9a-f]{20})/([sml]))?", path)
+        if m:
+            return self._manage_folder(m.group(1), m.group(2), m.group(3))
+        if path == "/api/manage/ups":   # (v3.0.5) the UPS card's picker: the UPSes there are (read only)
+            return self._manage_ups()
         if path == "/api/manage/upgrade":   # (v3.0.4) the admin's "What changed in 3.0.4"
             return self._manage_upgrade()
         if path == "/api/manage/cameras":
@@ -1813,6 +1897,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if self.command not in ("GET", "HEAD"):
                 raise ApiError(405, "Method not allowed")
             return self._json(200, {"sources": art_sources.public(), **({"updates": art_sources.check()} if check else {})})
+        if path == "/api/manage/trash":   # (v3.0.5) the Trash: restore, delete now, empty, how long
+            return self._manage_trash()
         if path == "/api/manage/templates":
             return self._manage_templates()
         if path == "/api/manage/health":
@@ -1839,8 +1925,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path in ("/api/manage/bins", "/api/manage/timers"):   # (v3.0.4) the builder: the holidays, the timer presets
             return self._manage_bins_timers(path[12:])
         if path == "/api/lists":   # the shared lists and notes (lists.py): every panel reads and changes them
-            self._device()   # (v3.0.2: a paired panel or a Manager login)
-            return self._lists()
+            return self._lists(self._device())   # (v3.0.2: a paired panel or a Manager login)
         if path == "/api/cards":   # the panels: which cards there are (no code: that comes with each card's frame)
             self._device()
             if self.command not in ("GET", "HEAD"):
@@ -1882,9 +1967,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         m = re.fullmatch(r"/api/panel/([^/]+)/unifi", path)
         if m:
             return self._panel_unifi(m.group(1))
+        m = re.fullmatch(r"/api/panel/([^/]+)/(ups|doorbell)", path)   # (v3.0.5) the UPS and Doorbell cards
+        if m:
+            return self._panel_ups(m.group(1)) if m.group(2) == "ups" else self._panel_doorbell(m.group(1))
         m = re.fullmatch(r"/api/panel/([^/]+)/agent", path)
         if m:
             return self._panel_agent(m.group(1))
+        m = re.fullmatch(r"/api/panel/([^/]+)/folder/([0-9a-f]{12})(?:/([0-9a-f]{20})/([sml]))?", path)
+        if m:   # (v3.0.5) a picture folder's list, or one of its pictures resized (service/picture_folders.py)
+            return self._panel_folder(m.group(1), m.group(2), m.group(3), m.group(4))
         m = re.fullmatch(r"/api/manage/panels/([^/]+)/live", path)
         if m:   # v2.5.0: "Open live" for a login that may only view — the house now, read only
             return self._manage_panel_live(m.group(1))
@@ -2638,7 +2729,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.app.unifi_demand()   # (v3.0.4: the Manager asks — the UniFi child reads now, so "Checking…" turns into an answer)
         out = {}
         for group, kinds in self.SETTINGS_PROBLEMS.items():
-            mine = [p for p in probs if re.split(r"[:.]", p["id"])[0] in kinds]
+            # (v3.0.5: an old Notifier driver is its own row — the hub itself is still "Working")
+            mine = [p for p in probs if re.split(r"[:.]", p["id"])[0] in kinds and p["id"] != notifier_driver.PROBLEM]
             proof = self._proof(group, st, saved_at) if on.get(group) and group in self.SETTINGS_PROOF else None
             got = self._status_got(group) if on.get(group) and group in self.SETTINGS_PROOF else None
             if got is not None and proof is None:   # (the file says fine now: its older health problem is over)
@@ -2658,8 +2750,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 out[group]["needsSetup"] = True   # (v3.0.3: Connected; the page's "Open →" says "set up")
         if on.get("Calendars"):
             out["Calendars"] = self._calendars_status(probs)
+        out["UPS"] = self._ups_status(st, saved_at)   # (v3.0.5)
         if "Hubitat" in out and self.app.live is not None:   # (v3.0.2: the Notifier's test, seen without a panel)
             out["Hubitat"]["lastAlert"] = self.app.live.last_alert()
+        if "Hubitat" in out:   # (v3.0.5) the Notifier driver: "ok" | "old" | "unknown" | "none", the hub's and Skypane's versions
+            out["Hubitat"]["notifier"] = self.app.notifier_status()
+            out["Hubitat"]["helper"] = self.app.helper.status()   # (v3.0.5) the Skypane Helper app
         # (v3.0.0) the weather device, as the bridge last said (the page words it: reason, device, last change)
         cfg, wst = self.app.weather_setting(), self.app.notifier.weather or {}
         if not (cfg.get("on") and cfg.get("device")):
@@ -2672,6 +2768,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
             out["Weather"] = {"state": "problem" if bad else "ok", "words": "", "since": None, "reason": wst.get("reason") if wst else "waiting",
                               "device": ((wst.get("device") or {}).get("name") or "") if wst else "", "updatedAt": wst.get("updatedAt") if wst else None}
         return out
+
+    def _ups_status(self, st, saved_at):
+        """(v3.0.5) Integrations → UPS: off (no NUT address), waiting (no read since the last save), the NUT server's
+        answer in our own words (service/nut_ups.py — never the address or the login), or working."""
+        if not st.get("NUT_HOST"):
+            return {"state": "off", "words": "", "since": None}
+        self.app.nut_demand()
+        got = read_json_file(self.app.data_dir / "private" / nut_ups.STATUS) or {}
+        at = got.get("readAt")
+        if not isinstance(at, (int, float)) or at < saved_at - 1:
+            return {"state": "waiting", "words": "", "since": None}
+        if got.get("ok") is not True:
+            return {"state": "problem", "words": str(got.get("error") or "The NUT server reports a problem.")[:300], "since": at}
+        return {"state": "ok", "words": "", "since": None}
 
     def _calendars_status(self, probs):
         """(v3.0.3) Integrations → Calendars from the calendars themselves, not from the health monitor's last round
@@ -2859,7 +2969,233 @@ class Handler(http.server.BaseHTTPRequestHandler):
         for t in self.app.templates.all():
             for i in found(t.get("card"), set()):
                 add(i, {"kind": "savedCard", "name": t.get("name")})
+        # (v3.0.5) the picture in the middle of the guest Wi-Fi QR code (the admin's choice)
+        qr = read_json_file(self.app.data_dir / "house" / guest_wifi.LOGO_CHOICE).get("picture")
+        if isinstance(qr, str) and re.fullmatch(r"[0-9a-f]{16}", qr):
+            add(qr, {"kind": "guestQr"})
         return uses
+
+    # ---- (v3.0.5) the Trash: deletes wait here 7 / 14 / 30 days (service/trash.py, mockups/CR-trash-and-in-use.md) ----
+    def _trash_put(self, kind, name, payload, files=(), what=None):
+        """An item into the Trash, said in the activity log. → its note ({id, …})."""
+        note = self.app.trash.put(kind, name, payload, by=self.manager.user if self.manager else None, what=what, files=files)
+        self._act("trash.put", target=str(name)[:80], what=kind, id=note["id"])
+        return note
+
+    def _picture_to_trash(self, pid):
+        """A picture into the Trash → its note. (v3.0.5) Its file moves and its note is written first; only then does it
+        leave the library's index. The index can't be written: the file goes back and the Trash forgets it."""
+        box = {}
+
+        def move(item, f):
+            box["f"] = f
+            box["note"] = self.app.trash.put("picture", item.get("name") or pid, item, by=self.manager.user if self.manager else None,
+                                             what=item.get("style"), files=[(f, f.name)])
+            return box["note"]
+        try:
+            _, note = self.app.pictures.take_out(pid, move)
+        except Exception:
+            if "note" in box:   # (moved in, but still in the index: back where it was)
+                here = self.app.trash.file(box["note"]["id"], box["f"].name)
+                try:
+                    if here and not box["f"].exists():
+                        shutil.move(str(here), str(box["f"]))
+                    self.app.trash.erase(box["note"]["id"])
+                except OSError:
+                    pass
+            raise
+        self._act("trash.put", target=str(note["name"])[:80], what="picture", id=note["id"])
+        return note
+
+    def _card_uses(self, cid, who):
+        """(v3.0.5) The layouts a card people made is on: [{kind: "cards", panel, id, where: "home" | "rooms" | "room",
+        room?}] — a panel `who` doesn't see: only {kind: "otherPanel"} (counted, never named)."""
+        rooms = {r.get("id"): r.get("name") for r in (self.app.house_model() or {}).get("rooms") or [] if isinstance(r, dict)}
+        out = []
+        for p in self.app.store.panel_ids():
+            s = self.app.store.get(p)["data"].get("settings") or {}
+            grids = s.get("roomGrids") if isinstance(s.get("roomGrids"), dict) else {}
+            for where, g in [({"where": "home"}, s.get("homeGrid"))] + [({"where": "rooms"} if r == "*" else {"where": "room", "room": str(rooms.get(r) or r)}, g)
+                                                                         for r, g in grids.items()]:
+                cs = g.get("cards") if isinstance(g, dict) else None
+                n = sum(1 for c in cs if isinstance(c, dict) and c.get("t") == f"card:{cid}") if isinstance(cs, list) else 0
+                if n:
+                    out.append({"kind": "cards", "n": n, "panel": s.get("panelName") or p, "id": p, **where} if who.sees(p) else self.OTHER_PANEL)
+        for t in self.app.templates.all():   # (v3.0.5) a saved card that is this card
+            if isinstance(t.get("card"), dict) and t["card"].get("t") == f"card:{cid}":
+                out.append({"kind": "savedCard", "name": t.get("name")})
+        return out
+
+    def _trash_restore(self, me, tid):
+        """One item back where it was → {kind, id, name}. Raises ApiError when it can't go back now (404: not in the
+        Trash any more; 409: its place is taken, the library is full). (v3.0.5) Atomic: the item is claimed first under
+        the Trash's lock (a second Undo finds nothing), put back, then removed; a failure puts it back in the Trash."""
+        tr = self.app.trash
+        # (v3.0.5, tester) the permission first, from a look at the note: a login that may not put it back never claims
+        # it (a claimed item is out of the Trash's list for a moment — someone else's Undo would find nothing)
+        peek = tr.get(tid)
+        if peek and not self._trash_may(me, peek):
+            raise ApiError(403, "not-allowed")
+        note = tr.claim(tid)
+        if not note:
+            raise ApiError(404, "It isn't in the Trash any more")
+        try:
+            if not self._trash_may(me, note):
+                raise ApiError(403, "not-allowed")
+            out = self._trash_put_back(note)
+        except BaseException:
+            tr.unclaim(tid)
+            raise
+        tr.forget(tid)
+        self._act("trash.restore", target=out["name"], what=note["kind"], id=tid)
+        log(f"manager: {note['kind']} {out['id']} restored from the Trash from {self.client_address[0]}")
+        try:   # (what the change means elsewhere: after the item is back — never a reason to put it in the Trash again)
+            if note["kind"] == "card":
+                self.app.notifier.cards_changed()
+            elif note["kind"] == "panel":
+                self.app.write_card_devices()
+        except Exception as e:
+            log(f"trash: after a restore ({type(e).__name__})")
+        return out
+
+    def _restored_panel_settings(self, settings):
+        """(v3.0.5) A panel's settings from the Trash checked as a save would be (panel_settings): a value that isn't
+        valid any more is left out (the panel's default), never stored as it was."""
+        s = json.loads(json.dumps(settings)) if isinstance(settings, dict) else {}
+        for path, value in panel_settings.managed(s).items():
+            if value is None:
+                continue
+            try:
+                good = panel_settings.PATHS[path](value)
+            except (panel_settings.Invalid, TypeError, ValueError):
+                good = None
+            keys = path.split(".")
+            node = s
+            for k in keys[:-1]:
+                node = node.get(k) if isinstance(node.get(k), dict) else {}
+            if good is None:
+                node.pop(keys[-1], None)
+            else:
+                node[keys[-1]] = good
+        return s
+
+    def _restored_name(self, name):
+        """(v3.0.5) A restored panel's name: its own, or — taken since — "<name> (restored)" (2, 3… while that is taken
+        too), never more than the 40 characters a panel's name may have."""
+        try:
+            name = panel_settings.PATHS["panelName"](name)
+        except panel_settings.Invalid:
+            name = ""
+        if not name.strip() or not self._panel_by_name(name):
+            return name
+        for n in range(1, 100):
+            tag = " (restored)" if n == 1 else f" (restored {n})"
+            cand = name[:40 - len(tag)].rstrip() + tag
+            if not self._panel_by_name(cand):
+                return cand
+        raise ApiError(409, "Pick another name for a panel first", why="taken")
+
+    def _trash_put_back(self, note):
+        """The item itself back where it was (the claimed note) → {kind, id, name}."""
+        kind, p, tid = note["kind"], note.get("payload"), note["id"]
+        try:
+            if kind == "picture":
+                f = self.app.trash.file(tid, (note["files"] or [""])[0])
+                if not f or not isinstance(p, dict):
+                    raise ApiError(409, "Its file is missing — it can't come back")
+                back = self.app.pictures.put_back(p, f)
+                out = {"kind": kind, "id": back["id"], "name": back["name"], "style": back["style"]}
+            elif kind == "card":
+                back = self.app.cards.put_back(p)
+                out = {"kind": kind, "id": back["id"], "name": back.get("name")}
+            elif kind == "template":
+                back = self.app.templates.put_back(p)
+                out = {"kind": kind, "id": back["id"], "name": back["name"]}
+            elif kind == "panel":
+                pid = p.get("id") if isinstance(p, dict) else None
+                if not isinstance(pid, str) or not PANEL_RE.fullmatch(pid) or not isinstance(p.get("data"), dict):
+                    raise ApiError(409, "This panel can't come back")
+                if pid in self.app.store.panel_ids():
+                    raise ApiError(409, "A panel has that address now", why="taken")
+                why = self._address_problem(pid)   # (v3.0.5: as a new panel's address would be checked)
+                if why:
+                    raise ApiError(409, why, why="taken")
+                data = json.loads(json.dumps(p["data"]))
+                # (v3.0.5) its settings checked as a save would be; a name taken since: "(restored)", at most 40 characters
+                s = self._restored_panel_settings(data.get("settings"))
+                name = self._restored_name(s.get("panelName") or pid) or pid
+                s["panelName"] = name
+                data["settings"] = s
+                try:
+                    self.app.store.patch(pid, data, create=True)
+                except StoreError as e:
+                    raise ApiError(409, str(e.body.get("error") or "The panel can't come back now"))
+                out = {"kind": kind, "id": pid, "name": name}
+            else:
+                raise ApiError(409, "This can't come back")
+        except (pictures.Invalid, cards.Invalid, templates.Invalid) as e:
+            raise ApiError(409, "That place is taken now" if str(e) == "taken" else str(e), why="taken" if str(e) == "taken" else "cant")
+        return out
+
+    def _trash_may(self, me, note):
+        """May this login put the item back (the Undo right after a delete)? The admin: anything. Others: what they
+        deleted themselves, with the permission that kind needs."""
+        if me.admin:
+            return True
+        if not note or str(note.get("by") or "").lower() != me.user.lower():
+            return False
+        kind, p = note["kind"], note.get("payload") or {}
+        if kind == "picture":
+            return me.can("backgrounds") if p.get("style") == "background" else me.can("icons")
+        return kind in ("card", "template") and me.can("cards")
+
+    def _manage_trash(self):
+        """(v3.0.5) GET (the admin): {items: [{id, kind, name, what, by, at, days, bytes}], keep, choices, bytes, low}.
+        PATCH {action: "restore", id} (the admin, or the login that deleted it — the Undo in its message) |
+        {action: "erase", id} | {action: "empty"} | {action: "keep", days: 7 | 14 | 30} (the admin). Each in the
+        activity log. Sign-in codes, accounts and secrets never come here."""
+        me = self._manage_ok()
+        tr = self.app.trash
+        if self.command in ("GET", "HEAD"):
+            if not me.admin:
+                raise ApiError(403, "not-allowed")
+            try:
+                items = tr.items()
+            except (trash.Invalid, OSError):
+                raise ApiError(503, "The Trash can't be read")
+            return self._json(200, {"items": items, "keep": tr.keep(), "choices": list(trash.KEEP_DAYS), "bytes": sum(i["bytes"] or 0 for i in items),
+                                    "low": tr.low_notice}, extra={"Cache-Control": "no-store"})
+        if self.command != "PATCH":
+            raise ApiError(405, "Method not allowed")
+        req = self._json_body()
+        action = req.get("action")
+        if not self.app.rate("trash", me.user.lower(), 60):
+            raise ApiError(429, "Too many changes — wait a minute")
+        try:
+            if action == "restore":   # (v3.0.5: claimed first — two quick Undos restore it once)
+                return self._json(200, {"ok": True, **self._trash_restore(me, req.get("id"))})
+            if not me.admin:
+                raise ApiError(403, "not-allowed")
+            if action == "erase":
+                note = tr.get(req.get("id"))
+                if not note or not tr.erase(note["id"]):
+                    raise ApiError(404, "It isn't in the Trash any more")
+                self._act("trash.erase", target=note.get("name"), what=note.get("kind"), id=note["id"])
+                return self._json(200, {"ok": True})
+            if action == "empty":
+                n = tr.empty()
+                self._act("trash.empty", count=n)
+                return self._json(200, {"ok": True, "count": n})
+            if action == "keep":
+                days = tr.set_keep(req.get("days"))
+                self._act("trash.keep", value=days)
+                return self._json(200, {"ok": True, "keep": days})
+        except trash.Invalid as e:
+            raise ApiError(400, str(e))
+        except OSError as e:
+            log(f"trash: {action} failed ({type(e).__name__})")
+            raise ApiError(503, "The Trash couldn't be changed on the server")
+        raise ApiError(400, '"action" must be "restore", "erase", "empty" or "keep"')
 
     def _manage_cards(self):
         """GET: the cards people made (full, with what the scan found and the permissions in plain words, and which
@@ -2902,11 +3238,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.app.notifier.cards_changed()
                 return self._json(200, {"ok": True, "card": c})
             if action == "delete":
-                lib.delete(req.get("id"))
-                log(f"manager: card {req.get('id')} deleted from {self.client_address[0]}")
-                self._act("library.card-remove", id=req.get("id"))
+                c = lib.get(req.get("id"))
+                if not c:
+                    raise cards.Invalid("no such card")
+                # (v3.0.5) on a panel's layout: blocked, with each place (a link in the Manager); else to the Trash
+                where = self._card_uses(c["id"], me)
+                if where:
+                    return self._json(409, {"ok": False, "error": "in-use", "uses": where})
+                note = self._trash_put("card", c.get("name") or c["id"], c, what=c.get("tier"))
+                lib.delete(c["id"])
+                log(f"manager: card {c['id']} moved to the Trash from {self.client_address[0]}")
+                self._act("library.card-remove", id=c["id"])
                 self.app.notifier.cards_changed()
-                return self._json(200, {"ok": True})
+                return self._json(200, {"ok": True, "trash": note["id"], "days": self.app.trash.keep()})
         except cards.Invalid as e:
             return self._json(400 if str(e) != "exists" else 409, {"ok": False, "error": str(e)})
         raise ApiError(400, "unknown action")
@@ -2955,47 +3299,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 pid = req.get("id")
                 if not lib.get(pid):
                     raise ApiError(404, "no such picture")
-                users, panels = self._picture_users(pid), self._picture_panels(pid)
+                # (v3.0.5) in use anywhere — a device's picture, a background, a card, a person's or calendar's icon, a
+                # saved card: the delete is blocked, and the answer lists what uses it (this login's view of it — a
+                # panel it doesn't see is only "another panel"), each a link in the Manager. Take it off those first.
                 uses = self._picture_uses().get(pid) or []
-                gone = f"up:{pid}"
-                # the panels it changes: its background, or a person's / calendar's icon there
-                changes = {p for p, _ in panels} | {p for p in set(self.app.store.panel_ids())
-                                                     if self._picture_on_people(p, gone)}
                 if uses:
-                    if any(not me.sees(p) for p in changes):
-                        raise ApiError(403, "not-allowed")   # (it would change a panel this login may not change)
-                    if req.get("password") is None:
-                        return self._json(409, {"ok": False, "error": "in-use", "uses": self._picture_uses(me).get(pid) or uses})
-                    # (the caller's own password: a user's wrong tries count for that user, never lock the admin)
-                    ok, why = self.app.auth.verify(me.user, req.get("password"), self.client_address[0])
-                    if not ok:
-                        return self._json(423 if why in ("locked", "reset-needed") else 403, {"ok": False, "error": why})
-                    model = self.app.house_model() or {}
-                    for did, _ in users:   # those devices go back to their automatic picture
-                        entry = next((d for d in model.get("devices") or [] if isinstance(d, dict) and d.get("id") == did), {"options": []})
-                        self.app.devices.change(did, {"icon": None}, entry)
-                    for p, _ in panels:   # those panels go back to the built-in landscape
-                        rev = self.app.store.modify(p, lambda data: {"settings": panel_settings.apply(data.get("settings"), {"look.background": "mountains"})})
-                        self.app.notifier.changed(p, rev, ["settings"], "manager")
-                    # people and calendars with it as their icon go back to their colour (cards using it show no picture
-                    # until another is picked)
-                    for p in self.app.store.panel_ids():
-                        if not self._picture_on_people(p, gone):
-                            continue
-
-                        def unicon(data):
-                            st_ = dict(data.get("settings") or {})
-                            for k in ("people", "calendars"):
-                                if isinstance(st_.get(k), list):
-                                    st_[k] = [{kk: vv for kk, vv in x.items() if not (kk == "icon" and vv == gone)}
-                                              if isinstance(x, dict) else x for x in st_[k]]
-                            return {"settings": st_}
-                        rev = self.app.store.modify(p, unicon)
-                        self.app.notifier.changed(p, rev, ["settings"], "manager")
-                lib.delete(pid)
-                log(f"manager: picture {pid} deleted from {self.client_address[0]}")
+                    return self._json(409, {"ok": False, "error": "in-use", "uses": self._picture_uses(me).get(pid) or uses})
+                note = self._picture_to_trash(pid)
+                log(f"manager: picture {pid} moved to the Trash from {self.client_address[0]}")
                 self._act("library.remove", id=pid)
-                return self._json(200, {"ok": True, "cleared": len(uses)})
+                return self._json(200, {"ok": True, "trash": note["id"], "days": self.app.trash.keep()})
         except pictures.Invalid as e:
             raise ApiError(400, str(e))
         raise ApiError(400, '"action" must be "upload", "edit" or "delete"')
@@ -3168,18 +3481,173 @@ class Handler(http.server.BaseHTTPRequestHandler):
             agent = (q.get("agent") or [None])[0]
             if agent not in AGENT_STATES:
                 agent = (self.app.health.info.get(pid) or {}).get("agent")
+            # (v3.0.5) agentv=<the agent's version> (its /status "agent"): the Manager says when it's older than Skypane's
+            agentv = (q.get("agentv") or [None])[0]
+            if not (isinstance(agentv, str) and AGENT_VERSION_RE.fullmatch(agentv)):
+                agentv = (self.app.health.info.get(pid) or {}).get("agentVersion")
+            # (v3.0.5) agentk=ok: the agent proved its key (/hello) — remembered, so from then on the page refuses what
+            # can't; agentk=bad: the page refused what answers on the agent's port (the Manager warns); else unchanged
+            agentk = (q.get("agentk") or [None])[0]
+            was_warn = (self.app.health.info.get(pid) or {}).get("agentWarn")
+            warn = "1" if agentk == "bad" else None if agentk == "ok" else was_warn
             self.app.health.checkin(pid, {**{k: v[0] for k, v in q.items() if k in ("version", "page") and v},
                                           **({"agent": agent} if agent in AGENT_STATES else {}),
+                                          **({"agentVersion": agentv} if agentv and agent in ("ok", "off") else {}),
+                                          **({"agentWarn": "1"} if warn == "1" else {}),
                                           "from": self.client_address[0]})
             if agent in ("ok", "off"):   # (rev. 2: the Manager says "Not found" later only for a tablet that had one)
                 self.app.paired.agent_seen(pid)
+            if agentk == "ok":
+                self.app.paired.agent_keyed(pid, proved=True)
+            elif agentk == "bad" and was_warn != "1":   # (logged once, when it starts)
+                log(f"panel agent: {pid}'s page refused what answers on the LED agent's port (it couldn't prove the agent's key)")
             self._dk_visit(pid, {"screen": (q.get("scr") or [None])[0], "tz": (q.get("tz") or [None])[0]})
             new = self._dk_rotate(pid, auth[2])
         # (v2.7.2: this panel's guest lockdown as now set — an open panel follows a change on Guest Wi-Fi within its next
         # poll, without a reload: layouts/v4/shared/guestlock.js; null = it doesn't lock down)
         lock = self.app.lockdown_for(pid)   # (v2.9.3: {switch, mode: "pin" | "dark" | "none", idle, blur})
+        # (v3.0.5) "sys": the System card's rows — which parts are set up and which have trouble, as row names only;
+        # null when they can't be worked out (the reply also carries the lockdown: it never fails over the System card)
+        try:
+            sysr = self.app.system_rows()
+        except Exception:   # noqa: BLE001  (not logged: every panel asks every poll)
+            sysr = None
         return self._json(200, {**self.app.health.panel_status(panel=pid), "mqtt": self.app.notifier.connected(), "lockdown": lock,
+                                "sys": sysr,
                                 **({"deviceKey": new.partition(".")[2]} if new else {})}, extra={"Cache-Control": "no-store"})
+
+    # ---- (v3.0.5) the Skypane Helper Hubitat app (service/hubitat_helper.py has the why of this auth path) ----------
+    def _helper_api(self, what):
+        """The Helper app's routes: POST link (the one-time code → its token; open, rate-limited per address),
+        GET poll, POST report, POST result (each with its token: Authorization: Bearer). The token and the code are
+        never logged."""
+        ip, H = self.client_address[0], self.app.helper
+        if what == "link":
+            if self.command != "POST":
+                raise ApiError(405, "Method not allowed")
+            if not self.app.rate("helper-link", ip, hubitat_helper.LINK_RATE):
+                return self._json(429, {"error": "too-many"}, {"Retry-After": "60"})
+            if (self.headers.get("Content-Type") or "").split(";")[0].strip().lower() != "application/json":
+                raise ApiError(415, "application/json only")
+            req = self._json_body()
+            # (v3.0.5) the link's HMAC key comes back with the token: every update offer is signed with it (never logged)
+            token, key, why = H.link(req.get("code"), ip, req.get("version"), req.get("hub"))
+            if not token:
+                log(f"helper: a link refused ({why}, from {ip})")
+                if why == "locked":   # (v3.0.5) this address had too many wrong tries: locked out for a while
+                    return self._json(429, {"error": why}, {"Retry-After": str(hubitat_helper.IP_WINDOW)})
+                return self._json(403 if why == "wrong" else 410 if why == "expired" else 409, {"error": why})
+            log(f"helper: the Skypane Helper app linked (from {ip})")
+            self._act("helper.link", what=str(req.get("hub") or "")[:60])
+            return self._json(200, {"token": token, "key": key}, {"Cache-Control": "no-store"})
+        routes = {"poll": ("GET", hubitat_helper.POLL_RATE), "report": ("POST", hubitat_helper.REPORT_RATE),
+                  "result": ("POST", hubitat_helper.RESULT_RATE)}
+        if what not in routes:
+            raise ApiError(404, "Not found")
+        method, limit = routes[what]
+        if self.command != method and not (method == "GET" and self.command == "HEAD"):
+            raise ApiError(405, "Method not allowed")
+        if not self.app.rate(f"helper-{what}", ip, limit):
+            return self._json(429, {"error": "too-many"}, {"Retry-After": "60"})
+        if not H.auth(self.headers.get("Authorization")):
+            return self._json(401, {"error": "not-linked"})
+        if what == "poll":
+            return self._json(200, H.poll())
+        req = self._json_body()
+        ok = H.report(req) if what == "report" else H.result(req)
+        if what == "result" and ok:
+            r = H.status().get("result") or {}
+            self._act("helper.update", what=f"{r.get('what')} {'ok' if r.get('ok') else r.get('error')}")
+        return self._json(200 if ok else 400, {"ok": ok})
+
+    def _helper_manifest(self):
+        """GET /hubitat/packageManifest.json (v3.0.5): Hubitat Package Manager's manifest, with this Skypane's own
+        address in the code's locations (the request's Host — the address the hub reaches Skypane by). (v3.0.5) The
+        scheme is the request's (http), or X-Forwarded-Proto from a trusted proxy (hubitat_helper.base_url)."""
+        base = hubitat_helper.base_url(self.headers.get("Host"), self.client_address[0], self.headers)
+        if not base:
+            raise ApiError(400, "bad-host")
+        app, drv = hubitat_helper.code_info("app"), hubitat_helper.code_info("driver")
+        if not app or not drv:
+            raise ApiError(404, "Not found")
+        man = hubitat_helper.manifest(base, app, drv)
+        return self._send(200, json.dumps(man, indent=2).encode("utf-8"), "application/json", {"Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*"})
+
+    def _manage_helper(self):
+        """/api/manage/helper (v3.0.5, the admin): GET the Helper's status (hubitat_helper.Helper.status);
+        PATCH {action: "link"} → {code} (shown once, 10 minutes) | {action: "update", what: "driver" | "app" | "notifier"}
+        → {id} (the app picks it up within a minute) | {action: "unlink"} | (v3.0.5) {action: "cancelcode"} → {cancelled}
+        (the link code stops at once)."""
+        self._manage_need("admin")
+        H = self.app.helper
+        if self.command in ("GET", "HEAD"):
+            return self._json(200, H.status())
+        if self.command != "PATCH":
+            raise ApiError(405, "Method not allowed")
+        req = self._json_body()
+        act = req.get("action")
+        if act == "link":
+            code = H.new_code()
+            self._act("helper.code")
+            return self._json(200, {"code": code, "seconds": hubitat_helper.CODE_SECONDS})
+        if act == "cancelcode":   # (v3.0.5, tester) the link code's Cancel: it stops working now
+            was = H.cancel_code()
+            if was:
+                self._act("helper.cancelCode")
+            return self._json(200, {"ok": True, "cancelled": was})
+        if act == "update":
+            if req.get("what") not in hubitat_helper.WHATS:
+                raise ApiError(400, "what: driver, app or notifier")
+            rid = H.request(req["what"])
+            if not rid:
+                return self._json(409, {"error": "not-linked"})
+            self._act("helper.ask", what=req["what"])
+            return self._json(200, {"ok": True, "id": rid})
+        if act == "unlink":
+            H.unlink()
+            self._act("helper.unlink")
+            return self._json(200, {"ok": True})
+        raise ApiError(400, "action: link, cancelcode, update or unlink")   # (v3.0.5: cancelcode)
+
+    # ---- (v3.0.5) the LED agent: the Manager's download, the agent's self-update (service/led_agent.py) ----------
+    def _manage_agent_zip(self):
+        """GET /api/manage/agent.zip: the agent, its scripts and the boot app — any signed-in Manager login (it is the
+        same program every PoE tablet runs; no house data in it)."""
+        if self.command not in ("GET", "HEAD"):
+            raise ApiError(405, "Method not allowed")
+        self._manage_ok()
+        data = led_agent.zip_bytes()
+        if data is None:
+            return self._json(404, {"error": "no-agent", "message": "This Skypane has no LED agent build"})
+        return self._send(200, data, "application/zip", {"Cache-Control": "no-store",
+                                                          "Content-Disposition": f'attachment; filename="{led_agent.ZIP_NAME}"'})
+
+    def _agent_update(self, what):
+        """GET /api/agent/update | /api/agent/binary — only with a panel's agent token (Authorization: Bearer); rate-
+        limited per address. Never logged with the token."""
+        if self.command not in ("GET", "HEAD"):
+            raise ApiError(405, "Method not allowed")
+        ip = self.client_address[0]
+        if not self.app.rate(f"agent-{what}", ip, 6 if what == "update" else 3):
+            return self._json(429, {"error": "too-many"}, {"Retry-After": "60"})
+        m = re.fullmatch(r"Bearer ([A-Za-z0-9_-]{43,128})", str(self.headers.get("Authorization") or "").strip())
+        pid = self.app.paired.agent_panel(m[1]) if m else None
+        if not pid:
+            return self._json(401, {"error": "token"})
+        if what == "update":
+            # (v3.0.5) signed with this panel's agent key (the agent checks it before it downloads anything)
+            try:
+                key = self.app.paired.agent_key(pid)
+            except OSError:
+                key = None
+            man = led_agent.manifest(key=key)
+            return self._json(200, man, {"Cache-Control": "no-store"}) if man else self._json(404, {"error": "no-agent"})
+        b = led_agent.binary()
+        if not b:
+            return self._json(404, {"error": "no-agent"})
+        have = str(self.headers.get("X-Agent-Version") or "")[:12]
+        log(f"panel agent: {pid}'s agent {have if AGENT_VERSION_RE.fullmatch(have) else '?'} downloads {led_agent.version()} (from {ip})")
+        return self._send(200, b[0].read_bytes(), "application/octet-stream", {"Cache-Control": "no-store"})
 
     def _panel_agent(self, panel):
         """GET /api/panel/<id>/agent (v3.0.2, mockups/AGENT-AUTOCONFIG.md): what the LED agent on this panel's tablet
@@ -3221,13 +3689,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._json(503, {"error": "no-login"})
         try:
             token, prev = self.app.paired.agent_tokens(pid)
+            key = self.app.paired.agent_key(pid) if token else None   # (v3.0.5)
         except OSError as e:
             log(f"panel agent: {pid}'s token not saved ({type(e).__name__})")
-            token = prev = None
-        if not token:
+            token = prev = key = None
+        if not token or not key:
             return self._json(503, {"error": "no-token"})
+        # (v3.0.5) the challenge for the agent's /hello: a fresh nonce and the answer only the real agent (holding this
+        # key) gives — the page compares the two before it hands over the login or the token (shared/agentlink.js).
+        # keyed: the agent proved it once, so an answer that doesn't match (or "pinned": false) is refused.
+        nonce = secrets.token_hex(16)
         return self._json(200, {"broker": f"tcp://{host}:{broker.LAN_PORT}", "user": user, "pass": pw, "name": self._kiosk_of(pid),
-                                "token": token, "tokenId": panel_devices.token_id(token), **({"prevToken": prev} if prev else {})},
+                                "token": token, "tokenId": panel_devices.token_id(token), **({"prevToken": prev} if prev else {}),
+                                "key": key, "keyed": self.app.paired.agent_keyed(pid),
+                                "hello": {"nonce": nonce, "expect": led_agent.mac(key, led_agent.hello_text(nonce))}},
                                extra={"Cache-Control": "no-store"})
 
     def _agent_forget(self, pid):
@@ -3656,10 +4131,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if action != "rename":   # (v3.0.2: they change panel-devices.json — not while it can't be read)
             self._paired_readable()
         if action == "remove":
+            # (v3.0.5) its settings go to the Trash first (Restore brings the panel back, without its tablet)
+            note = self._panel_to_trash(pid)
             self._panel_remove(pid)
             log(f"manager: panel {pid} removed from {self.client_address[0]} (its backups are kept)")
             self._act("panel.remove", target=pid)
-            return self._json(200, {"ok": True})
+            return self._json(200, {"ok": True, **({"trash": note["id"], "days": self.app.trash.keep()} if note else {})})
         if action == "unlink":
             had = dev.unlink(pid)
             self._agent_forget(pid)
@@ -3696,12 +4173,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._json(409, {"ok": False, "error": "unclaimed"})
         if dev.claimed(to) or to == pid:
             return self._json(409, {"ok": False, "error": "claimed", "words": self._claimed_words(to)})
+        note = self._panel_to_trash(pid)   # (v3.0.5: the panel left behind goes to the Trash first, as "remove" does)
         if not dev.move(pid, to):
+            if note:
+                self.app.trash.erase(note["id"])   # (nothing moved: the panel stays, so its Trash copy goes)
             return self._json(409, {"ok": False, "error": "claimed", "words": self._claimed_words(to)})
         self._panel_remove(pid)
         log(f"pairing: panel {pid}'s tablet moved to {to} by {self.manager.user}; {pid} removed (its backups are kept)")
         self._act("panel.move", target=to, old=pid, new=to)
-        return self._json(200, {"ok": True, "panel": to, "removed": pid, "address": panel_address(to, self.app.store.panel_ids())})
+        return self._json(200, {"ok": True, "panel": to, "removed": pid, "address": panel_address(to, self.app.store.panel_ids()),
+                                **({"trash": note["id"], "days": self.app.trash.keep()} if note else {})})
+
+    def _panel_to_trash(self, pid):
+        """(v3.0.5) A panel's settings and layouts into the Trash before it goes → the note (None: nothing stored). Every
+        URL in it without its "user:pass@" (cameras.go2rtc, music.url…): the Trash never holds a password."""
+        doc = self.app.store.get(pid)
+        if not doc["exists"]:
+            return None
+        data = trash.strip_userinfo(doc["data"])
+        return self._trash_put("panel", (data.get("settings") or {}).get("panelName") or pid, {"id": pid, "data": data})
 
     def _panel_remove(self, pid):
         """A panel gone: its settings (a last backup kept), its tablet, its place in every login's panels."""
@@ -3722,7 +4212,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return {"state": "claimed", "device": panel_devices.describe(p), "model": p.get("model"), "browser": p.get("browser"),
                 "platform": p.get("platform"), "screen": p.get("screen"), "lastIp": d.get("lastIp") if admin else None,
                 "lastSeen": d.get("lastSeen"), "pairedAt": d.get("pairedAt"), "locked": bool(d.get("locked")),
-                "copyAt": d.get("copyAt"), "adopted": bool(d.get("adopted")), "agentSeen": d.get("agentSeen") is True}
+                "copyAt": d.get("copyAt"), "adopted": bool(d.get("adopted")), "agentSeen": d.get("agentSeen") is True,
+                "agentKeyed": d.get("agentKeyed") is True}   # (v3.0.5: the agent proved its key — never the key)
 
     def _address_problem(self, pid):
         """Why `pid` can't be a new panel's address (in plain words), or None."""
@@ -4004,7 +4495,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return {"state": "never" if seen is None else "online" if h.get("state") == "connected" else "offline",
                 "lastSeen": seen, "version": info.get("version") or "",
                 "page": words.get(page) or ("a room page" if page.startswith("room:") else page),
-                "agent": agent, "led": agent in ("ok", "off")}
+                "agent": agent, "led": agent in ("ok", "off"),
+                # (v3.0.5) the agent's version, and Skypane's: the Manager says "Update available" for an older one (an
+                # agent from before 4 can't update itself — it needs the adb steps once)
+                "agentVersion": info.get("agentVersion") if agent in ("ok", "off") else None, "agentWant": led_agent.version(),
+                # (v3.0.5) the page refused what answers on the agent's port: it couldn't prove this tablet's agent key
+                "agentWarn": info.get("agentWarn") == "1"}
 
     def _page_words(self):
         """Which page a panel shows, in words: {"room:<id>": its name, "home": "Home", …} (the health monitor's page)."""
@@ -4355,7 +4851,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         for grid in [s.get("homeGrid"), *rooms_.values()]:
             for c in (grid.get("cards") if isinstance(grid, dict) and isinstance(grid.get("cards"), list) else []):
                 cam = (c.get("o") or {}).get("cam") if isinstance(c, dict) and isinstance(c.get("o"), dict) else None
-                if isinstance(cam, str) and cam.isdecimal():   # (a camera card: a camera's id, or a view's)
+                if isinstance(cam, int) and not isinstance(cam, bool):   # (v3.0.5) a camera's id saved as a number
+                    out.add(cam)
+                elif isinstance(cam, str) and cam.isdecimal():   # (a camera card: a camera's id, or a view's)
                     out.add(int(cam))
                 elif isinstance(cam, str):
                     out.update(views.get(cam, []))
@@ -4958,7 +5456,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                                   and isinstance(r.get("name"), str) and isinstance(r.get("icon"), str) and re.fullmatch(r"[a-z0-9-]{1,32}", r["icon"])},
                                     "noRoom": list(hm.NO_ROOM), "modelVersion": model.get("version"),
                                     "bridge": self.app.notifier.bridge(), "live": live, "heard": heard,
-                                    "firstSeen": {str(k): v for k, v in seen["seen"].items()}, "newIds": seen["new"]})
+                                    "firstSeen": {str(k): v for k, v in seen["seen"].items()}, "newIds": seen["new"],
+                                    "used": self._devices_used(who),
+                                    # (v3.0.5) each device's protocol, as the Skypane Helper app reports it (Detailed: a column, a filter)
+                                    "protocols": self.app.helper.protocols()})
         if self.command != "PATCH":
             raise ApiError(405, "Method not allowed")
         who = self._manage_need("devices")   # (a login without it can't change anything)
@@ -4982,6 +5483,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._act("device.change", target=(entry.get("label") or entry.get("name")) if isinstance(entry, dict) else None, device=did,   # (v2.8.0: the catalogue's name is "label")
                   keys=sorted(req.get("set") or {}) if isinstance(req.get("set"), dict) else None)
         return self._json(200, {"ok": True, "rev": rev, "overrides": self.app.devices.load()["overrides"].get(str(did), {})})
+
+    def _devices_used(self, who):
+        """(v3.0.5) The Devices list's In use badge: {device id: {"panels": n, "cards": n}} — the cards on the Home and
+        room layouts of the panels `who` sees that name the device (layouts.card_refs: the card types' own device fields)."""
+        out = {}
+        for p in self.app.store.panel_ids():
+            if not who.sees(p):
+                continue
+            s = self.app.store.get(p)["data"].get("settings") or {}
+            grids = [s.get("homeGrid"), *(s["roomGrids"].values() if isinstance(s.get("roomGrids"), dict) else [])]
+            here = {}
+            for g in grids:
+                for c in g.get("cards") if isinstance(g, dict) and isinstance(g.get("cards"), list) else []:
+                    if isinstance(c, dict):
+                        for did in layouts.card_refs(c):
+                            here[did] = here.get(did, 0) + 1
+            for did, n in here.items():
+                u = out.setdefault(str(did), {"panels": 0, "cards": 0})
+                u["panels"] += 1
+                u["cards"] += n
+        return out
 
     def _manage_devices_bulk(self, who, model, catalog, req):
         """PATCH /api/manage/devices {ids, set} (v2.4.0): one change to many devices — every device checked first, all
@@ -5047,7 +5569,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if not st:
             st = {"ok": False, "error": None, "starting": True}   # (the first read is on its way: a few seconds)
         st = unifi_net.mark_stale(st, time.time(), getattr(self.app, "unifi_since", None))
-        return {"enabled": True, **unifi_net.apply_settings(st, self.app.unifi_settings(), panel=panel)}
+        # (v3.0.5) the Activity feed's alerts only for a panel with a netfeed card that shows them
+        feed = panel is None or any(o.get("alerts") is not False for o in self._panel_cards_of(panel, "netfeed"))
+        return {"enabled": True, **unifi_net.apply_settings(st, self.app.unifi_settings(), panel=panel, alerts=feed)}
 
     def _panel_unifi(self, panel):
         """GET /api/panel/<id>/unifi — the UniFi cards: {enabled, ok, readAt, error, wans, gateway, devices, protect,
@@ -5061,6 +5585,243 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if pid not in self.app.store.panel_ids():
             raise ApiError(404, "no such panel")
         return self._json(200, self._unifi_model(panel=pid), extra={"Cache-Control": "no-store"})
+
+    # ---- (v3.0.5) the UPS / battery backup card: a UniFi UPS (the UniFi child's model) and a NUT server's UPSes -----
+    def _panel_cards_of(self, pid, t):
+        """(v3.0.5) The options ({} when none) of every card of type `t` on panel `pid`'s home and room grids."""
+        s = self.app.store.get(pid)["data"].get("settings") or {}
+        rooms_ = s.get("roomGrids") if isinstance(s.get("roomGrids"), dict) else {}
+        return [c["o"] if isinstance(c.get("o"), dict) else {} for grid in [s.get("homeGrid"), *rooms_.values()]
+                for c in (grid.get("cards") if isinstance(grid, dict) and isinstance(grid.get("cards"), list) else [])
+                if isinstance(c, dict) and c.get("t") == t]
+
+    def _ups_list(self, panel=None):
+        """{"enabled", "upses": [{id, name, model, src: "unifi" | "nut", online, state, charge, runtime, load, vin, vout,
+        watts, charging, last}]} — never an address, a login or a MAC (UniFi's go by the child's salted hash).
+        (v3.0.5) panel: the UniFi child is asked to keep reading only when that panel's UPS card needs a UniFi UPS (one
+        chosen, or "every UPS" while the last status had one / nothing is known yet); the builder (None) always asks."""
+        out, enabled = [], False
+        if self.app.cfg.unifi_net:
+            enabled = True
+            st = read_json_file(self.app.data_dir / "private" / unifi_net.STATUS) or {}
+            had = not st or any(isinstance(d, dict) and d.get("kind") == "ups" for d in st.get("devices") or [])
+            wants = [o.get("ups") for o in self._panel_cards_of(panel, "netups")] if panel is not None else None
+            if wants is None or any(isinstance(u, str) and not u.startswith("nut:") for u in wants) or (had and any(not u for u in wants)):
+                self.app.unifi_demand()
+            st = unifi_net.mark_stale(st, time.time(), getattr(self.app, "unifi_since", None))
+            for d in st.get("devices") or []:
+                if isinstance(d, dict) and d.get("kind") == "ups" and isinstance(d.get("ups"), dict):
+                    out.append({"id": d["id"], "name": d.get("name") or "UPS", "model": d.get("model"), "src": "unifi",
+                                "online": bool(d.get("online")) and st.get("ok") is True and not st.get("stale"), **d["ups"]})
+        if self.app.cfg.nut_ups:
+            enabled = True
+            self.app.nut_demand()
+            out += nut_ups.public(read_json_file(self.app.data_dir / "private" / nut_ups.STATUS), time.time(),
+                                  getattr(self.app, "nut_since", None))["upses"]   # (v3.0.5 a quiet spell isn't "offline")
+        # (v3.0.5, tester) "stale": a UPS that isn't answering ("Not answering" on the card) — its charge, runtime and
+        # load are the last ones read, not now's (the card grays them out)
+        return {"enabled": enabled, "upses": [dict(u, stale=not u.get("online")) for u in out[:16]]}
+
+    def _panel_ups(self, panel):
+        """GET /api/panel/<id>/ups — the UPS card (_ups_list)."""
+        if self.command not in ("GET", "HEAD"):
+            raise ApiError(405, "Method not allowed")
+        pid = panel.lower()
+        if not PANEL_RE.fullmatch(panel):
+            raise ApiError(400, "Invalid panel id")
+        self._device(pid)
+        if pid not in self.app.store.panel_ids():
+            raise ApiError(404, "no such panel")
+        return self._json(200, self._ups_list(pid), extra={"Cache-Control": "no-store"})
+
+    # ---- (v3.0.5) picture folders (service/picture_folders.py) --------------------------------------------------
+    def _folder_image(self, sid, key, size):
+        try:
+            body, mime = self.app.folders.image(sid, key, size)
+        except (picture_folders.Invalid, OSError):
+            raise ApiError(404, "Not found") from None
+        return self._send(200, body, mime, {"Cache-Control": "private, max-age=86400", "Content-Security-Policy": "default-src 'none'",
+                                            "X-Content-Type-Options": "nosniff"})
+
+    def _folder_list(self, sid, names=False):
+        try:
+            out = self.app.folders.items(sid, names=names)
+        except picture_folders.Invalid:
+            raise ApiError(404, "no such picture folder") from None
+        return self._json(200, {"ok": out["error"] is None, **out}, extra={"Cache-Control": "no-store"})
+
+    def _panel_folder(self, panel, sid, key, size):
+        """GET /api/panel/<id>/folder/<source> — a picture folder's pictures for a slide show: {ok, id, name, items: [key],
+        count, error ("not reachable": the last list stays)}; .../<source>/<key>/<s|m|l> — that picture resized (never
+        the full-size photo; picture_folders.SIZES). The panel's device key, or a Manager login that sees the panel."""
+        if self.command not in ("GET", "HEAD"):
+            raise ApiError(405, "Method not allowed")
+        pid = panel.lower()
+        if not PANEL_RE.fullmatch(panel):
+            raise ApiError(400, "Invalid panel id")
+        self._device(pid)
+        if pid not in self.app.store.panel_ids():
+            raise ApiError(404, "no such panel")
+        if not self.app.folders.enabled:
+            raise ApiError(404, "picture folders are off")
+        if not self._panel_uses_folder(pid, sid):   # (v3.0.5) only a folder this panel's own settings play
+            raise ApiError(404, "Not found")
+        return self._folder_image(sid, key, size) if key else self._folder_list(sid)
+
+    @staticmethod
+    def _folder_settings(settings):
+        """(v3.0.5) Where a panel's settings can name a picture folder: the Home grid and the rooms' grids (their
+        cards and a page's own "bg"), the rotating background (look.bgShow) and the screensaver (saver)."""
+        s = settings if isinstance(settings, dict) else {}
+        look = s.get("look") if isinstance(s.get("look"), dict) else {}
+        return {"homeGrid": s.get("homeGrid"), "roomGrids": s.get("roomGrids"), "bgShow": look.get("bgShow"), "saver": s.get("saver")}
+
+    def _panel_uses_folder(self, pid, sid):
+        """(v3.0.5) Does this panel's own saved settings name "fs:<sid>"? (the panel route reads no other folder)"""
+        try:
+            doc = self.app.store.get(pid)
+        except Exception:
+            return False
+        return f'"fs:{sid}"' in json.dumps(self._folder_settings((doc.get("data") or {}).get("settings")))
+
+    def _folder_uses(self, sid):
+        """The panels whose settings name a picture folder ("fs:<id>": a card, the background, the screensaver) —
+        (v3.0.5) and the saved cards (house/card-templates.json) and the Trash's items (a deleted panel or card that
+        would bring it back): {"panels": [{id, name}], "saved": [{id, name}], "trash": [{id, name}]}."""
+        needle = f'"fs:{sid}"'
+        out = {"panels": [], "saved": [], "trash": []}
+        for pid in self.app.store.panel_ids():
+            try:
+                doc = self.app.store.get(pid)
+            except Exception:
+                continue
+            if needle in json.dumps((doc.get("data") or {}).get("settings") or {}):
+                out["panels"].append({"id": pid, "name": self.app.panel_name(pid)})
+        try:
+            for tpl in self.app.templates.all():
+                if needle in json.dumps(tpl.get("card") or {}):
+                    out["saved"].append({"id": tpl.get("id"), "name": tpl.get("name") or ""})
+        except Exception:
+            pass
+        try:
+            for n, _ in self.app.trash._all():
+                if needle in json.dumps(n.get("payload") or {}):
+                    out["trash"].append({"id": n.get("id"), "name": n.get("name") or ""})
+        except Exception:
+            pass
+        return out
+
+    def _manage_folders(self):
+        """GET /api/manage/picture-folders — {enabled, root, sources: [{id, name, path, count, error}], max} (a login that
+        reads pictures: the builder's "Pictures from"). PATCH (the admin): {action: "browse", path} → the folders in it
+        (picture_folders.browse); {action: "add", path, name}; {action: "rename", id, name}; {action: "rescan", id};
+        {action: "remove", id} (409 "in-use" with the panels while one uses it); (v3.0.5) {action: "uses", id} → {inUse,
+        panels, saved, trash} (the check alone). Nothing under the root is ever written. (v3.0.5) "root": the admin's only."""
+        who = self._manage_read("backgrounds", "icons", "devices")
+        f = self.app.folders
+        if self.command in ("GET", "HEAD"):
+            info = f.info()
+            if not who.admin:   # (v3.0.5, tester) where the pictures live on the server: the admin's to know only
+                info = {k: v for k, v in info.items() if k != "root"}
+            return self._json(200, info, extra={"Cache-Control": "no-store"})
+        if self.command != "PATCH":
+            raise ApiError(405, "Method not allowed")
+        me = self._manage_need("admin")
+        if not f.enabled:
+            raise ApiError(409, "off")
+        req = self._json_body()
+        act, sid = req.get("action"), req.get("id")
+        # (v3.0.5) each walks a folder (a NAS share may be slow): at most so many a minute, as the Trash's changes
+        if act in ("browse", "rescan") and not self.app.rate("folders." + act, me.user.lower(), 60 if act == "browse" else 10):
+            return self._json(429, {"ok": False, "error": "busy"})
+        try:
+            if act == "browse":
+                return self._json(200, {"ok": True, **f.browse(req.get("path") or "")}, extra={"Cache-Control": "no-store"})
+            if act == "add":
+                item = f.add(req.get("path"), req.get("name") or "")
+                log(f"manager: picture folder {item['id']} added from {self.client_address[0]}")
+                self._act("folders.add", target=item["name"])
+                _, found, err = f.scan(item["id"], fresh=True)
+                return self._json(200, {"ok": True, "source": {**item, "count": len(found), "error": err}})
+            if act == "rename":
+                return self._json(200, {"ok": True, "source": f.rename(sid, req.get("name"))})
+            if act in ("rescan", "remove", "uses") and not f.source(sid):
+                raise ApiError(404, "not-found")
+            if act == "uses":   # (v3.0.5, tester) the in-use check alone — Remove asks it first, before any "Are you sure?"
+                uses = self._folder_uses(sid)
+                return self._json(200, {"ok": True, "inUse": any(uses.values()), **uses}, extra={"Cache-Control": "no-store"})
+            if act == "rescan":
+                _, found, err = f.scan(sid, fresh=True)
+                return self._json(200, {"ok": True, "count": len(found), "error": err})
+            if act == "remove":
+                with self.app.folders_lock:   # (v3.0.5) the check and the remove together: two removes never cross
+                    uses = self._folder_uses(sid)
+                    if any(uses.values()):
+                        return self._json(409, {"ok": False, "error": "in-use", **uses})
+                    f.remove(sid)
+                log(f"manager: picture folder {sid} removed from {self.client_address[0]}")
+                self._act("folders.remove", id=sid)
+                return self._json(200, {"ok": True})
+        except picture_folders.Invalid as e:
+            raise ApiError(400, picture_folders.code(e)) from None   # (v3.0.5: a short code — folders.js says it in words)
+        raise ApiError(400, '"action" must be "browse", "add", "rename", "rescan", "uses" or "remove"')   # (v3.0.5: uses)
+
+    def _manage_folder(self, sid, key, size):
+        """GET /api/manage/picture-folders/<id> — its pictures with their file names (the builder's preview);
+        .../<id>/<key>/<s|m|l> — one resized."""
+        self._manage_read("backgrounds", "icons", "devices")
+        if self.command not in ("GET", "HEAD"):
+            raise ApiError(405, "Method not allowed")
+        if not self.app.folders.enabled:
+            raise ApiError(404, "picture folders are off")
+        return self._folder_image(sid, key, size) if key else self._folder_list(sid, names=True)
+
+    def _manage_ups(self):
+        """GET /api/manage/ups — the builder's UPS picker (a login with a panel)."""
+        if self.command not in ("GET", "HEAD"):
+            raise ApiError(405, "Method not allowed")
+        self._manage_read()
+        return self._json(200, self._ups_list(), extra={"Cache-Control": "no-store"})
+
+    def _panel_doorbell(self, panel):
+        """GET /api/panel/<id>/doorbell — the Doorbell card: {"bells": [{id (the camera's), name, online, lastRing, today,
+        text}]} for the doorbells this panel shows. The rings are the Hubitat doorbell device's "pushed" events the server
+        heard (memory only: none until the first ring after a restart — lastRing None); "text": what its screen shows
+        (its notificationText). Protect's own ring list isn't open to the integration's key: nothing is asked of it."""
+        if self.command not in ("GET", "HEAD"):
+            raise ApiError(405, "Method not allowed")
+        pid = panel.lower()
+        if not PANEL_RE.fullmatch(panel):
+            raise ApiError(400, "Invalid panel id")
+        self._device(pid)
+        if pid not in self.app.store.panel_ids():
+            raise ApiError(404, "no such panel")
+        cams = self._camera_list()
+        mine = self._panel_cameras(pid, None, cams)
+        try:
+            text = (self.app.data_dir / "house" / "protect-cameras.js").read_text(encoding="utf-8")
+            m = re.search(r"HUBITAT\.cameras\s*=\s*(\[.*?\]);\s*\n", text, re.S)
+            raw = {c["id"]: c for c in json.loads(m.group(1)) if isinstance(c, dict) and isinstance(c.get("id"), int)} if m else {}
+        except (OSError, ValueError):
+            raw = {}
+        live, now = getattr(self.app, "live", None), time.time()
+        midnight = time.mktime(time.localtime(now)[:3] + (0, 0, 0, 0, 0, -1))
+        bells = []
+        for c in cams:
+            if not c["doorbell"] or c["id"] not in mine:
+                continue
+            dev = raw.get(c["id"], {}).get("doorbellDevice")
+            # (v3.0.5) only the doorbell's own Hubitat device rings: no device known → no rings (never the camera's own id)
+            dev = dev if isinstance(dev, int) and not isinstance(dev, bool) else None
+            rings = [e["t"] for e in (live.events(dev) if live is not None and dev is not None else []) if e.get("name") == "pushed"]
+            vals = ((live.device(dev) or {}).get("values") or {}) if live is not None and dev is not None else {}
+            msg = vals.get("notificationText")
+            bells.append({"id": c["id"], "name": c["name"], "online": c["online"], "lastRing": max(rings) if rings else None,
+                          "today": sum(1 for t in rings if t >= midnight), "text": msg[:60] if isinstance(msg, str) else None})
+        # (v3.0.5) "since": when the server started listening for rings — no ring since then reads "unknown (since restart)"
+        since = getattr(live, "started", None) if live is not None else None
+        return self._json(200, {"bells": bells, "since": since if isinstance(since, (int, float)) else None},
+                          extra={"Cache-Control": "no-store"})
 
     def _manage_unifi(self):
         """GET: the UniFi model (every client, the whole log) + the owner's settings — a login with a panel. PATCH
@@ -5088,8 +5849,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._act("settings.change", keys=sorted("unifi." + k for k in new))   # (which ones — never the labels)
         return self._json(200, {"ok": True, "settings": merged})
 
-    # ---- (v3.0.4) "What changed in 3.0.4": what the one-time moves did to the saved layouts, for the admins ----------
-    UPGRADE = ("3.0.4", devices_card.RECORD)    # (the release the notice is about; the moves' record in DATA_DIR/house)
+    # ---- (v3.0.4) "What changed in 3.0.5" (v3.0.5: was 3.0.4): what the one-time moves did to the saved layouts, for the admins ----------
+    # (v3.0.5) the notice is about 3.0.5 now: its record (blank_card.py, notices_card.py, picture_card.py) — and, for an
+    # upgrade straight from 3.0.3, 3.0.4's rows too, as one notice (_upgrade_record)
+    UPGRADE = ("3.0.5", blank_card.RECORD)    # (the release the notice is about; the moves' record in DATA_DIR/house)
+    UPGRADE_EARLIER = devices_card.RECORD     # (v3.0.5: 3.0.4's record — counted only when it was written on the same start)
+    UPGRADE_SAME_START = 3600                 # (v3.0.5: seconds between the two records' "at" that still mean one start)
     UPGRADE_SEEN = "upgrade-notice-seen.json"   # (private: {version: [admin login names, small letters]} — each one's "Got it")
 
     def _manage_upgrade(self):
@@ -5112,7 +5877,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._json(200, {"ok": True, "seen": act == "seen"})
         if self.command not in ("GET", "HEAD"):
             raise ApiError(405, "Method not allowed")
-        rec = read_json_file(self.app.data_dir / "house" / rec_name)
+        rec = self._upgrade_record(rec_name)   # (v3.0.5: 3.0.4's rows joined in when it came straight from 3.0.3)
 
         def word(v, n=80):   # (a name / a type from the record: short plain text, else None)
             return " ".join(v.split())[:n] if isinstance(v, str) and v.strip() else None
@@ -5131,6 +5896,61 @@ class Handler(http.server.BaseHTTPRequestHandler):
                    "saved": word(r.get("saved")), "where": word(r.get("where")), "error": word(r.get("error"), 200)} for r in rows(rec.get("failed"))]
         return self._json(200, {"version": ver, "at": word(rec.get("at"), 40), "seen": me in names, "cards": sum(len(p["rows"]) for p in panels),
                                 "panels": panels, "saved": saved, "failed": failed}, extra={"Cache-Control": "no-store"})
+
+    def _upgrade_record(self, rec_name):
+        """(v3.0.5) The notice's record. Upgraded straight from 3.0.3 (3.0.4's moves ran on the same start as 3.0.5's,
+        their "firstAt" — else "at" — within UPGRADE_SAME_START of each other; v3.0.5: no 3.0.5 record = nothing): one record — 3.0.4's
+        rows first, each rewritten to the card it is now (the 3.0.5 row for the same card — panel, where, card; a saved
+        card: its id — gives its "to" and is dropped), then 3.0.5's own. From 3.0.4: 3.0.5's record alone (3.0.4's was
+        shown on 3.0.4)."""
+        house = self.app.data_dir / "house"
+        rec = read_json_file(house / rec_name)
+        old = read_json_file(house / self.UPGRADE_EARLIER)
+        if not isinstance(rec, dict) or not rec:
+            return {}   # (v3.0.5: no 3.0.5 record — nothing for 3.0.5; 3.0.4's rows never go under its heading)
+        if not isinstance(old, dict) or not old:
+            return rec
+
+        def when(r):   # (v3.0.5: firstAt — the first run's time, which a retried start never moves — else "at")
+            try:
+                return datetime.datetime.fromisoformat(r.get("firstAt") or r["at"]).timestamp()
+            except (KeyError, TypeError, ValueError):
+                return None
+        a, b = when(old), when(rec)
+        if not (a is not None and b is not None and abs(a - b) <= self.UPGRADE_SAME_START):
+            return rec   # (3.0.4's notice was shown on 3.0.4)
+
+        def lst(r, k):
+            return [x for x in r.get(k) or [] if isinstance(x, dict)] if isinstance(r.get(k), list) else []
+        # (v3.0.4's own rows: no "to" for devices_card.py's — they became Devices cards)
+        first = lambda r: r.get("to") or ("devices" if r.get("from") in devices_card.OLD else None)   # noqa: E731
+        new_p = rec.get("panels") if isinstance(rec.get("panels"), dict) else {}
+        old_p = old.get("panels") if isinstance(old.get("panels"), dict) else {}
+        panels = {}
+        for pid in list(old_p) + [p for p in new_p if p not in old_p]:
+            later = lst(new_p, pid)
+            rows = []
+            for r in lst(old_p, pid):
+                r = dict(r)
+                nxt = next((n for n in later if n.get("where") == r.get("where") and n.get("card") == r.get("card")
+                            and n.get("from") == first(r)), None)
+                if nxt is not None:
+                    later.remove(nxt)
+                    r["to"] = nxt.get("to")
+                rows.append(r)
+            if rows + later:
+                panels[pid] = rows + later
+        later = lst(rec, "saved")
+        saved = []
+        for r in lst(old, "saved"):
+            r = dict(r)
+            nxt = next((n for n in later if n.get("id") == r.get("id") and n.get("from") == first(r)), None)
+            if nxt is not None:
+                later.remove(nxt)
+                r["to"] = nxt.get("to")
+            saved.append(r)
+        return {**rec, "at": rec.get("at") or old.get("at"), "panels": panels, "saved": saved + later,
+                "failed": lst(old, "failed") + lst(rec, "failed")}
 
     def _upgrade_whereabouts(self, pid, got):
         """(v3.0.4, tester 1 #7) A moved card with no title — "Home screen" alone said nothing: its first device's name
@@ -5152,7 +5972,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if r["title"] or not c:
                 continue
             o = c.get("o") if isinstance(c.get("o"), dict) else {}
-            first = next((it.get("id") for it in o.get("items") or [] if isinstance(it, dict) and isinstance(it.get("id"), int)), o.get("id"))
+            # (v3.0.5: a Devices card that became a blank card — its first device piece)
+            items = (o.get("items") if isinstance(o.get("items"), list) else None) or (o.get("parts") if isinstance(o.get("parts"), list) else [])
+            first = next((it.get("id") for it in items if isinstance(it, dict) and isinstance(it.get("id"), int)), o.get("id"))
             if isinstance(names.get(first), str):
                 r["dev"] = names[first][:80]
             try:
@@ -5171,17 +5993,33 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.command != "PATCH":
             raise ApiError(405, "Method not allowed")
         self._manage_need("cards")
+        req = self._json_body()
+        note = None
         try:
-            tpls = self.app.templates.change(self._json_body())
+            if isinstance(req, dict) and req.get("action") == "remove":   # (v3.0.5: a small thing — to the Trash, Undo in the message)
+                t = self.app.templates.get(req.get("id"))
+                if t is not None:
+                    note = self._trash_put("template", t.get("name") or t.get("id"), t, what=(t.get("card") or {}).get("t"))
+            try:
+                tpls = self.app.templates.change(req)
+            except templates.Invalid:
+                if note:
+                    self.app.trash.erase(note["id"])
+                raise
         except templates.Invalid as e:
             raise ApiError(400, str(e))
-        return self._json(200, {"ok": True, "templates": tpls})
+        return self._json(200, {"ok": True, "templates": tpls, **({"trash": note["id"], "days": self.app.trash.keep()} if note else {})})
 
-    def _lists(self):
-        """GET: the shared lists and notes. PATCH {action, …} (lists.Lists.change): one change; the panels hear
-        dashboard/lists/changed. At most 60 changes a minute from one address."""
+    def _lists(self, auth=("key",)):
+        """GET: the shared lists and notes, (v3.0.5) with "known": the list ids the List cards name. PATCH {action, …}
+        (lists.Lists.change): one change; the panels hear dashboard/lists/changed. At most 60 changes a minute from one
+        address. (v3.0.5) Who added it ("by"): "panel" for a panel's key, "manager" for a Manager login; a Manager login
+        may also send {action: "command", text} — the Lists & notes page's "Run": a Hubitat command, as the hub's."""
+        # (a browser with a panel's key and a Manager login — the Manager on a paired tablet: the login counts here)
+        me = auth[1] if auth[0] == "manager" else self.app.auth.who(self._manage_token())[0]
+        by = "manager" if me else "panel"
         if self.command in ("GET", "HEAD"):
-            return self._json(200, self.app.lists.get(), extra={"Cache-Control": "no-store"})
+            return self._json(200, {**self.app.lists.get(), "known": self.app.list_ids()}, extra={"Cache-Control": "no-store"})
         if self.command != "PATCH":
             raise ApiError(405, "Method not allowed")
         req = self._json_body()
@@ -5192,12 +6030,53 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.app.list_hits[who] = hits + [now]
         if len(self.app.list_hits) > 500:
             self.app.list_hits = {k: v for k, v in self.app.list_hits.items() if v and now - v[-1] < 60}
+        if isinstance(req, dict) and req.get("action") == "command":   # (v3.0.5: the Manager's "Run")
+            if by != "manager":
+                raise ApiError(403, "not-allowed")
+            # (v3.0.5) recorded as the Manager's (by), its own rate counter; a line in the activity log (never the words)
+            ok, what = self.app.list_command(req.get("text"), by="manager")
+            self.manager = me
+            self._act("lists.command", what=(lists.parse_command(req.get("text")) or {}).get("op") or "?", result="ok" if ok else str(what)[:40])
+            # (a refused command is an answer, not a failure: 200 with ok false and why)
+            return self._json(200, {"ok": ok, "done" if ok else "error": what, **self.app.lists.get(), "known": self.app.list_ids()})
+        known = self.app.list_ids()
+        # (v3.0.5) the Manager only — (v3.0.5, tester) also "restorelist" (a deleted list's Undo) and "listuses" (the
+        # in-use check alone: the Delete button asks it first, before any "Are you sure?")
+        if isinstance(req, dict) and req.get("action") in ("renamelist", "deletelist", "restorelist", "listuses"):
+            if by != "manager":
+                raise ApiError(403, "not-allowed")
+            if req["action"] == "listuses":
+                where = self._list_uses(req.get("list"), me)
+                return self._json(200, {"ok": True, "inUse": bool(where), "uses": where}, extra={"Cache-Control": "no-store"})
+            if req["action"] == "deletelist":   # (a List card names it: blocked, each place a link — as a card in use)
+                where = self._list_uses(req.get("list"), me)
+                if where:
+                    return self._json(409, {"ok": False, "error": "in-use", "uses": where})
         try:
-            doc = self.app.lists.change(req)
+            doc = self.app.lists.change(req, by=by, known=known)
         except lists.Invalid as e:
             raise ApiError(400, str(e))
         self.app.notifier.lists_changed()
-        return self._json(200, doc)
+        return self._json(200, {**doc, "known": self.app.list_ids()})
+
+    def _list_uses(self, lid, who):
+        """(v3.0.5) The List cards that name list `lid`: [{kind: "cards", n, panel, id, where, room?}] (as _card_uses; a
+        panel `who` doesn't see: only {kind: "otherPanel"})."""
+        if not isinstance(lid, str) or not lists.LIST_ID.fullmatch(lid):
+            return []
+        rooms = {r.get("id"): r.get("name") for r in (self.app.house_model() or {}).get("rooms") or [] if isinstance(r, dict)}
+        out = []
+        for p in self.app.store.panel_ids():
+            s = self.app.store.get(p)["data"].get("settings") or {}
+            grids = s.get("roomGrids") if isinstance(s.get("roomGrids"), dict) else {}
+            for where, g in [({"where": "home"}, s.get("homeGrid"))] + [({"where": "rooms"} if r == "*" else {"where": "room", "room": str(rooms.get(r) or r)}, g)
+                                                                         for r, g in grids.items()]:
+                cs = g.get("cards") if isinstance(g, dict) else None
+                n = sum(1 for c in cs if isinstance(c, dict) and c.get("t") == "todo"
+                        and (c.get("o") if isinstance(c.get("o"), dict) else {}).get("list", "shopping") == lid) if isinstance(cs, list) else 0
+                if n:
+                    out.append({"kind": "cards", "n": n, "panel": s.get("panelName") or p, "id": p, **where} if who and who.sees(p) else self.OTHER_PANEL)
+        return out
 
     def _bins_timers(self, what, auth):
         """(v3.0.4) GET: the Bins / Trash marks and holidays (bins.py), or the timers' presets and runs (timers.py) with
@@ -5361,6 +6240,9 @@ class App:
         self.notifier.after_live = self.watch_guest_switch   # (v2.9.3: reveal tickets end when the guest switch goes on)
         self.notifier.after_weather = self.log_weather_warnings   # (v3.0.0: the activity log — weather warnings up / ended)
         self.notifier.after_timer = self.timer_from_hub   # (v3.0.4: "Timer: Emma, Free time" from a Hubitat rule)
+        self.notifier.after_list = self.list_from_hub   # (v3.0.5: "add to list: Shopping, milk" / "pin note: …" from a Hubitat rule)
+        # (v3.0.5: list commands in the last minute — LIST_CMD_RATE each for the hub's and the Manager's "Run", under a lock)
+        self.list_cmd_hits, self.list_cmd_lock = {"hubitat": [], "manager": []}, threading.Lock()
         self._wx_logged = None   # (the weather warnings last seen: {id: title}; None until the first message after a start)
         # (v2.9.1: the bridge's answers to the Manager's device commands are signed with a key from the house ticket key)
         self.notifier.result_key = lambda: self.pin.purpose_key(device_rules.MGR_RESULT_LABEL, create=True)
@@ -5379,6 +6261,8 @@ class App:
         self.wx = weather_sources.Sources(cfg.data_dir / "house", lambda: self.settings.load().get("OWM_API_KEY", ""), log=lambda m: log(m))
         self.wx.on_alerts = self.notifier.owm_alerts   # (v3.0.4: its warnings join the panels' alerts, through the bridge)
         self.pictures = pictures.Library(cfg.data_dir)
+        self.folders = picture_folders.Folders(cfg.data_dir, getattr(cfg, "pictures_dir", ""))   # (v3.0.5) picture folders
+        self.folders_lock = threading.Lock()   # (v3.0.5) a folder's "in use" check and its remove, held together
         self.cards = cards.Library(cfg.data_dir)
         # (v2.6.0) the Manager's camera pictures: from the built-in go2rtc inside the container, or the separate one set
         self.frames = camera_frames.Frames(camera_frames.http_fetch(
@@ -5386,6 +6270,8 @@ class App:
         self.lists = lists.Lists(cfg.data_dir)
         self.bins, self.timers = bins.Bins(cfg.data_dir), timers.Timers(cfg.data_dir)   # (v3.0.4: Bins / Trash, Countdown & timers)
         self.templates = templates.Templates(cfg.data_dir)
+        self.trash = trash.Trash(cfg.data_dir)   # (v3.0.5) what the Manager deletes waits here (house/trash/)
+        self.purge_trash()   # (v3.0.5: what's past its time goes at the start too — and once an hour: start_timer_speakers)
         self.list_hits = {}                 # client address → recent changes (a rate limit for the shared lists)
         self.geocode_hits, self.lock_geocode = {}, threading.Lock()   # login → its recent place searches (20 a minute)
         self.weather_hits = {}   # (v3.0.4) a panel / login → its recent /api/weather/* asks (30 a minute; under lock_geocode)
@@ -5452,6 +6338,22 @@ class App:
             devices_card.migrate_v304(self.data_dir, self.store, log=lambda m: log(m))
         except (OSError, ValueError, StoreError) as e:
             log(f"layouts (3.0.4): the one-time move to Devices cards didn't run ({type(e).__name__}) - tried again at the next start")
+        # (v3.0.5) once: Devices and Text cards (the 3.0.4 moves' too, so after them) become blank cards that look the
+        # same; what moved: house/layout-upgrade-v305.json
+        try:
+            blank_card.migrate_v305(self.data_dir, self.store, log=lambda m: log(m))
+        except (OSError, ValueError, StoreError) as e:
+            log(f"layouts (3.0.5): the one-time move to blank cards didn't run ({type(e).__name__}) - tried again at the next start")
+        # (v3.0.5) once: Alert note cards become Notifications cards in the Compact style (the same record)
+        try:
+            notices_card.migrate(self.data_dir, self.store, log=lambda m: log(m))
+        except (OSError, ValueError, StoreError) as e:
+            log(f"layouts (3.0.5): the move to Notifications cards didn't run ({type(e).__name__}) - tried again at the next start")
+        # (v3.0.5) once: Picture cards become Slide show / Picture cards with that one picture (the same record)
+        try:
+            picture_card.migrate(self.data_dir, self.store, log=lambda m: log(m))
+        except (OSError, ValueError, StoreError) as e:
+            log(f"layouts (3.0.5): the move to Slide show / Picture cards didn't run ({type(e).__name__}) - tried again at the next start")
         # (v3.0.4) once: Bin day, Countdown and Timers cards become Bins / Trash and Countdown & timers (the same record)
         try:
             time_cards.migrate_v304(self.data_dir, self.store, log=lambda m: log(m))
@@ -5463,6 +6365,7 @@ class App:
         except (OSError, ValueError, StoreError) as e:
             log(f"weather (3.0.4): the weather cards' sources weren't written ({type(e).__name__}) - tried again at the next start")
         self.paired = panel_devices.PanelDevices(cfg.data_dir / "private")   # (v3.0.2: the tablets' device keys, hashed)
+        self.helper = hubitat_helper.Helper(cfg.data_dir / "private")   # (v3.0.5) the Skypane Helper app's link and reports
         if moved.get("ran") and not moved.get("mainRemoved") and had_login and self.paired.doc.get("legacyKiosk") is None:
             # (an install whose main panel never saved anything: its tablet still had the default FreeKiosk name)
             with self.paired.lock:
@@ -5579,11 +6482,22 @@ class App:
         log(f"timers: Timer up on {sent} of {len(jobs)} house speaker(s)")
         return sent
 
+    def purge_trash(self):
+        """(v3.0.5) The Trash's items past their time (or past its room) erased — at the start and once an hour; never
+        an error that stops anything."""
+        try:
+            n = self.trash.purge()
+            if n:
+                log(f"trash: {n} old item(s) erased for good")
+        except Exception as e:
+            log(f"trash: the hourly clean-up failed ({type(e).__name__})")
+
     def start_timer_speakers(self):
         """(v3.0.4) Every second: a running timer reaching its end → speak_timers_up (only the timers with speakers say
         anything). An end missed while the service was stopped stays missed — never spoken late."""
         def loop():
             last = int(time.time() * 1000)
+            purged = time.monotonic()
             while True:
                 time.sleep(1)
                 now = int(time.time() * 1000)
@@ -5594,6 +6508,9 @@ class App:
                 except Exception as e:   # (never let the watcher die)
                     log(f"timers: Timer up on the speakers failed ({type(e).__name__})")
                 last = now
+                if time.monotonic() - purged >= 3600:   # (v3.0.5) once an hour: the Trash's old items go
+                    purged = time.monotonic()
+                    self.purge_trash()
         threading.Thread(target=loop, name="timer-speakers", daemon=True).start()
 
     def timer_from_hub(self, payload):
@@ -5610,6 +6527,86 @@ class App:
         log(f"timers: Hubitat started {len(ids)} timer(s) named {cmd['name']!r}" if ids else f"timers: Hubitat asked for {cmd['name']!r} — no such timer (or preset)")
         if ids:
             self.notifier.shared_changed("timers")
+
+    LIST_CMD_RATE = 30   # (v3.0.5) Hubitat list commands a minute (the bridge allows 20: this is the server's own)
+
+    def list_ids(self):
+        """(v3.0.5) The list ids the panels' List cards name (layouts "todo" "list") — a Hubitat command may use those
+        before anything was added to them."""
+        out = set()
+        for _, settings in self.timer_panels().values():
+            s = settings if isinstance(settings, dict) else {}
+            grids = [s.get("homeGrid")] + list(s["roomGrids"].values() if isinstance(s.get("roomGrids"), dict) else [])
+            for g in grids:
+                for c in (g.get("cards") or []) if isinstance(g, dict) and isinstance(g.get("cards"), list) else []:
+                    if isinstance(c, dict) and c.get("t") == "todo" and isinstance(c.get("o"), dict):
+                        lid = c["o"].get("list", "shopping")
+                        if isinstance(lid, str) and lists.LIST_ID.fullmatch(lid):
+                            out.add(lid)
+        return sorted(out)[:lists.MAX_LISTS * 2]
+
+    def list_command(self, text, by="hubitat"):
+        """(v3.0.5) One Hubitat list command (lists.parse_command's text) → (ok, what was done | why not). The panels
+        hear dashboard/lists/changed. Also the Manager's "Run" (by "manager": the same words, the same checks, recorded
+        as the Manager's). (v3.0.5, review) Each its own LIST_CMD_RATE a minute — the Manager's tries never use up the
+        hub's — counted under a lock (the MQTT thread and the web threads both come here)."""
+        cmd = lists.parse_command(text)
+        if not cmd:
+            return False, "not-understood"
+        by = "manager" if by == "manager" else "hubitat"
+        now = time.monotonic()
+        with self.list_cmd_lock:
+            hits = [t for t in self.list_cmd_hits.get(by, []) if now - t < 60]
+            if len(hits) >= self.LIST_CMD_RATE:
+                self.list_cmd_hits[by] = hits
+                return False, "too-many"
+            self.list_cmd_hits[by] = hits + [now]
+        try:
+            _, done = self.lists.command(cmd, self.list_ids(), by=by)
+        except lists.Invalid as e:
+            return False, str(e)
+        self.notifier.lists_changed()
+        return True, done
+
+    def list_from_hub(self, payload):
+        """(Notifier.after_list, v3.0.5) A Hubitat rule's list command (the bridge took it from the Skypane Notifier,
+        lists.TOPIC {"v": 1, "op", "list"?, "text", "id"?}): parsed again here — the same strict words — and done.
+        (v3.0.5, review) With the alert's id, the answer goes back to the bridge (lists.RESULT_TOPIC {"v": 1, "id",
+        "ok"}): only a done command keeps its alert off the panels — a refused one (no such list…) shows as the alert it
+        was. Both go in the activity log: "lists.command", or "lists.command_failed" with why (never the words)."""
+        try:
+            m = json.loads(payload)
+        except (ValueError, UnicodeDecodeError):
+            m = None
+        aid = m.get("id") if isinstance(m, dict) and isinstance(m.get("id"), str) and live_state.ALERT_ID.fullmatch(m["id"]) else None
+        words = {"add": "add to list", "remove": "remove from list", "tick": "tick"}
+        text = None
+        if isinstance(m, dict) and m.get("v") == 1 and isinstance(m.get("text"), str):
+            if m.get("op") == "note":
+                text = f"pin note: {m['text']}"
+            elif m.get("op") in words and isinstance(m.get("list"), str):
+                text = f"{words[m['op']]}: {m['list']}, {m['text']}"
+        if text is None:
+            ok, what, op = False, "not-understood", "?"
+        else:
+            op = m["op"]
+            ok, what = self.list_command(text)
+        if aid:
+            self.notifier.list_result(aid, ok)
+        log(f"lists: Hubitat {op} — {what}" if ok else f"lists: a Hubitat {op} not done ({what})")   # (never the words)
+        try:
+            self.activity.add("lists.command" if ok else "lists.command_failed", what=op, result="ok" if ok else str(what)[:40], by="hubitat")
+        except Exception:   # (the log never stops a command)
+            pass
+
+    def notifier_status(self):
+        """(v3.0.5) The hub's Skypane Notifier driver against the one Skypane serves (notifier_driver.state): None when
+        it can't be told (no hub, no broker, the bridge hasn't said)."""
+        if not self.cfg.mqtt_host:
+            return None
+        st = notifier_driver.state(notifier_driver.bundled(), self.notifier.driver_report, self.health_parts()["hub"])
+        # (v3.0.5) when the health monitor last checked it (Integrations: "Last checked …")
+        return {**st, "checkedAt": getattr(getattr(self, "health", None), "checked_at", None)} if st else st
 
     def log_weather_warnings(self, st):
         """(Notifier.after_weather, v3.0.0) A weather warning the device starts reporting → "weather.alert" in the
@@ -5766,6 +6763,7 @@ class App:
                   health.service_check("music", "Music page (Sonos Panel) not reachable", health.url_probe(setting("SONOS_PANEL_URL")), 2)]
         if self.cfg.mqtt_host:   # (no broker = a test setup: no bridge to expect)
             checks.insert(0, health.bridge_check(self.notifier.bridge, enabled=lambda: self.health_parts()["hub"]))
+            checks.append(notifier_driver.check(self.notifier_status))   # (v3.0.5: the hub's Notifier driver out of date)
         if self.cfg.page_config.get("go2rtcPort"):   # the image's own go2rtc (once the camera sync wrote its config)
             cams = lambda probe: lambda: probe() if (priv / "go2rtc.yaml").exists() else None   # noqa: E731
             checks.append(health.service_check("go2rtc", "Camera video (go2rtc) is not running", cams(health.tcp_probe("127.0.0.1", 1985)), 3))
@@ -5788,6 +6786,36 @@ class App:
         # (v3.0.2: not "go2rtc.yaml exists" — the camera sync always writes one, empty on a fresh install: "Working" with nothing set)
         cams = has("PROTECT_HOST") or has("PROTECT_API_KEY") or bool(self.cfg.page_config.get("go2rtc"))             or bool(own_cameras.load(self.data_dir / "private")["cameras"])
         return {"hub": has("HUBITAT_HOST"), "broker": bool(self.cfg.mqtt_host), "cameras": cams}
+
+    # (v3.0.5) the System card's rows (layouts.SYS_ROWS) a health problem belongs to: its id's start
+    SYS_OF = (("hubitat.bridge", "bridge"), (notifier_driver.PROBLEM, "notifier"), ("hubitat", "hubitat"), ("mqtt", "mqtt"), ("protect", "protect"), ("go2rtc", "cameras"),
+              ("unifi", "unifi"), ("calendar", "calendars"), ("music", "music"))
+
+    def system_rows(self):
+        """(v3.0.5) For the panels' System card: {"set": [the rows this house has set up], "bad": [the rows with a problem
+        up now]} — row names only (layouts.SYS_ROWS), never an address or a problem's words. Weather, the LED agent and
+        the panel itself are the panel's own to judge (it knows them), so they're not here."""
+        parts, st = self.health_parts(), self.settings.load()
+        has = lambda key: bool((st.get(key) or "").strip())   # noqa: E731
+        try:
+            cals = self.calendars.configured()
+        except (OSError, ValueError, AttributeError):
+            cals = False
+        on = {"hubitat": parts["hub"], "bridge": parts["hub"] and parts["broker"], "mqtt": parts["broker"],
+              "protect": has("PROTECT_HOST") or has("PROTECT_API_KEY"), "cameras": parts["cameras"], "unifi": bool(self.cfg.guest_wifi),
+              "calendars": cals, "music": has("SONOS_PANEL_URL")}
+        # (v3.0.5) the Notifier driver: set up once the hub has one (and the bridge said so); its own words, not a problem's
+        ns = self.notifier_status()
+        on["notifier"] = bool(ns and ns["state"] in ("ok", "old", "unknown"))
+        bad = {"notifier"} if on["notifier"] and ns["state"] != "ok" else set()
+        for p in self.health.current():
+            if p.get("lvl", 3) < 3:   # (v3.0.5: as panel_status — a notice below a problem's level isn't trouble)
+                continue
+            pid = str(p.get("id") or "")
+            row = next((r for k, r in self.SYS_OF if pid == k or pid.startswith(k + ".") or pid.startswith(k + ":")), None)
+            if row and on.get(row):
+                bad.add(row)
+        return {"set": [r for r in layouts.SYS_ROWS if on.get(r)], "bad": [r for r in layouts.SYS_ROWS if r in bad]}
 
     def _moved_file(self):
         return self.data_dir / "house" / "moved-panels.json"
@@ -5910,6 +6938,19 @@ class App:
             guest_wifi.write_private(self.data_dir / "private" / unifi_net.DEMAND, json.dumps({"at": now}))
         except OSError as e:
             log(f"unifi: ask not saved ({type(e).__name__})")
+
+    def nut_demand(self):
+        """(v3.0.5) A panel's UPS card or the Manager asked: private/nut-ups-demand.json gets the time (at most every 15 s)."""
+        now = time.time()
+        if now - getattr(self, "_nut_asked", 0) > nut_ups.DEMAND_FRESH:   # (v3.0.5 nobody looked for a while: asked anew)
+            self.nut_since = now
+        if now - getattr(self, "_nut_asked", 0) < 15:
+            return
+        self._nut_asked = now
+        try:
+            guest_wifi.write_private(self.data_dir / "private" / nut_ups.DEMAND, json.dumps({"at": now}))
+        except OSError as e:
+            log(f"ups: ask not saved ({type(e).__name__})")
 
     def unifi_settings(self):
         return unifi_net.clean_settings(read_json_file(self.data_dir / "house" / unifi_net.SETTINGS))

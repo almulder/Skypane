@@ -153,6 +153,9 @@
     return true;
   }
   function show(r, push) {
+    // (v3.0.5) another page starts afresh: its Undo steps never act on a page that isn't on screen (the sidebar's
+    // links use pushState, so no hashchange tells reorder.js)
+    if ((!cur || cur.page !== r.page) && K.history && K.history.clear) K.history.clear();
     cur = { page: r.page, rest: r.rest.slice() }; crumbExtra = "";
     const h = `#${str(cur)}`;
     // (v2.8.0: never the phone's sheet guard copied into a page's own entry — phone.js)

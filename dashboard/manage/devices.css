@@ -246,6 +246,15 @@ table.dv-dt { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 @media (max-width: 1439px) { .dv-dt .c-mid { display: none; } }
 @media (max-width: 1279px) { .dv-dlay { grid-template-columns: 184px minmax(0, 1fr); } .dv-dt .bbar { display: none; } .dv-dt td, .dv-dt th { padding: 0 8px; } .dv-tbar .q { width: 190px; } .dv-dt td.nm2 { max-width: 220px; } }
 @media (max-width: 1151px) { .dv-dt .c-drv { display: none; } }
+/* (v3.0.5) the In use column: hidden first when the table runs out of room */
+.dv-dt td.c-use { white-space: nowrap; }
+@media (max-width: 1365px) { .dv-dt td.c-use .iu-n { display: none; } }
+@container dvtable (max-width: 980px) { .dv-dt .c-drv { display: none; } }   /* (the driver goes before In use) */
+@container dvtable (max-width: 860px) { .dv-dt .c-use { display: none; } }
+/* (v3.0.5) the Protocol column (the Skypane Helper's report): goes with the driver when room runs out */
+.dv-dt td.c-pro { white-space: nowrap; }
+@media (max-width: 1151px) { .dv-dt .c-pro { display: none; } }
+@container dvtable (max-width: 980px) { .dv-dt .c-pro { display: none; } }
 /* (the page narrower than ~900 px — a small window or the sidebar pinned: the facets go above the table, in columns) */
 .dv-dwrap { container-type: inline-size; container-name: dvpage; }   /* (not on .dv-page: the slide-over is fixed inside it) */
 @container dvpage (max-width: 880px) {

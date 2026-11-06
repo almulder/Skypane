@@ -48,6 +48,11 @@ COPY dashboard/ dashboard/
 COPY unraid/skypane.xml unraid/skypane.xml
 # (v3.0.0) the Hubitat driver: the hub imports it from http://<this server>/hubitat/SkypaneNotifier.groovy
 COPY hubitat/SkypaneNotifier.groovy hubitat/SkypaneNotifier.groovy
+# (v3.0.5) the Skypane Helper app (Apps Code → Import, Package Manager), the LED agent (Help & guides → Download, and
+# its self-update: service/led_agent.py) and the agent's public guide (/guides/led-agent.html)
+COPY hubitat/SkypaneHelper.groovy hubitat/packageManifest.json hubitat/
+COPY agent/ agent/
+COPY docs/guides/led-agent.html docs/guides/led-agent.html
 # empty house-data placeholders (the real ones are served from /data/house when present)
 COPY docker/placeholders/hubitat-data.js docker/placeholders/protect-cameras.js dashboard/layouts/v4/shared/
 

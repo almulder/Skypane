@@ -184,6 +184,11 @@
       if (b.warn) return el("p.hp-warn", {}, ...rich(b.warn, ws));
       if (b.h) return el("h4", {}, ...marked(b.h, ws));
       if (b.coffee) return el("p.hp-coffee", {}, ...rich(b.coffee, ws), " ", M.coffeeLink ? M.coffeeLink("a.coffee") : null);   // (v2.9.3)
+      // (v3.0.5) { download: "agent" }: the LED agent's zip (served by this Skypane, a signed-in login) and its guide
+      if (b.download === "agent") return el("p.hp-dl", {},
+        el("a.btn.sm.pri", { href: "/api/manage/agent.zip", download: "skypane-led-agent.zip", title: K.t("help.download.agentHint") }, K.icon("download", 14), K.t("help.download.agent")), " ",   // i18n-ok (an address, a file name)
+        el("a.btn.sm", { href: "/guides/led-agent.html", target: "_blank", rel: "noopener" }, K.t("help.download.guide")),   // i18n-ok (an address)
+        el("small.muted", {}, K.t("help.download.agentHint")));
       return null;
     });
     const signedIn = !!(M.me && M.me()) && !document.body.classList.contains("at-login");

@@ -47,6 +47,13 @@ own address, as if it were a separate device. The tablets and your phone will op
 3. Leave the rest as it is:
    - **Data** = `/mnt/user/appdata/skypane` — everything Skypane keeps lives here.
    - **Web port** = `80`, so Skypane is simply `http://192.168.1.50/`.
+   - **Pictures** (optional, 3.0.5) = a folder of your photos, e.g. `/mnt/user/Photos`, mapped **read only** to
+     `/pictures`. Slide shows, rotating backgrounds and the screensaver can then play the folders you pick in the
+     Manager (**Picture folders**). A NAS share: mount it on Unraid first (**Unassigned Devices** → mount the share;
+     it shows up under `/mnt/remotes/…`) and pick that folder here. Skypane only reads picture files and never mounts
+     anything itself. More folders later: first create an empty folder for it inside the Pictures folder (e.g.
+     `/mnt/user/Photos/Family` — `/pictures` is read only, so Docker can't make it, and the container wouldn't
+     start), then **Add another Path, Port, Variable…** → that path, `/pictures/Family`, read only.
    - **Extra Parameters** already holds what lets Skypane use port 80 without running as root (they also lock the
      container down: no extra rights). Don't remove it. If you do, set **Web port** to `8088`.
    - Changed **Web port**? Then also change the port in the **WebUI** field (switch to **Advanced View**, top right)

@@ -94,10 +94,26 @@
     "settings.event-icons": (e) => [K.t((e.data || {}).what === "reset" ? "timeline.say.eventIconsReset" : "timeline.say.eventIcons", { who: name(e.who) }),
       K.t("timeline.say.eventIconsCount", { n: (e.data || {}).count || 0 })],
     "settings.display": (e) => [K.t("timeline.say.settingsDisplay", { who: name(e.who) }), (e.data || {}).what || ""],   // (v3.0.4)
+    // (v3.0.5) the Skypane Helper app (Integrations → Hubitat)
+    "helper.code": (e) => [K.t("timeline.say.helperCode", { who: name(e.who) }), ""],
+    "helper.cancelCode": (e) => [K.t("timeline.say.helperCancelCode", { who: name(e.who) }), ""],   // (v3.0.5)
+    "helper.link": () => [K.t("timeline.say.helperLink"), ""],
+    "helper.unlink": (e) => [K.t("timeline.say.helperUnlink", { who: name(e.who) }), ""],
+    "helper.ask": (e) => [K.t("timeline.say.helperAsk", { who: name(e.who) }), (e.data || {}).what || ""],
+    "helper.update": (e) => [K.t("timeline.say.helperUpdate"), (e.data || {}).what || ""],
     "library.upload": (e) => [K.t("timeline.say.libraryUpload", { who: name(e.who), name: e.target }), ""],
     "library.remove": (e) => [K.t("timeline.say.libraryRemove", { who: name(e.who) }), ""],
+    // (v3.0.5) a picture folder added / removed
+    "folders.add": (e) => [K.t("timeline.say.foldersAdd", { who: name(e.who), name: e.target }), ""],
+    "folders.remove": (e) => [K.t("timeline.say.foldersRemove", { who: name(e.who) }), ""],
     "library.card": (e) => [K.t("timeline.say.libraryCard", { who: name(e.who), name: e.target }), ""],
     "library.card-remove": (e) => [K.t("timeline.say.libraryCardRemove", { who: name(e.who) }), (e.data || {}).id || ""],
+    // (v3.0.5) the Trash: in, back out, deleted for good, emptied, how long
+    "trash.put": (e) => [K.t("timeline.say.trashPut", { who: name(e.who), name: e.target || "" }), ""],
+    "trash.restore": (e) => [K.t("timeline.say.trashRestore", { who: name(e.who), name: e.target || "" }), ""],
+    "trash.erase": (e) => [K.t("timeline.say.trashErase", { who: name(e.who), name: e.target || "" }), ""],
+    "trash.empty": (e) => [K.t("timeline.say.trashEmpty", { who: name(e.who), n: (e.data || {}).count || 0 }), ""],
+    "trash.keep": (e) => [K.t("timeline.say.trashKeep", { who: name(e.who), n: (e.data || {}).value || 7 }), ""],
     // (v2.9.1) the Manager switched a device — the device's name, the command, the bridge's answer; never the PIN
     "device.command": (e) => { const d = e.data || {}, who = name(e.who), device = devName(e) || K.t("timeline.aDevice");
       return d.result === "wrong-pin" ? [K.t("timeline.wrongPin", { who, device }), ""]

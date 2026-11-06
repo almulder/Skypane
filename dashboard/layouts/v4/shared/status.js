@@ -76,6 +76,12 @@
       // (v3.0.2: the LED agent on this tablet — agentlink.js; not known yet = left out, the server keeps its last word)
       const ag = window.AgentLink && AgentLink.state;
       if (ag === "ok" || ag === "off" || ag === "none") q += `&agent=${ag}`;
+      // (v3.0.5) the agent's own version (its /status "agent"): the Manager says when Skypane has a newer one
+      const av = window.AgentLink && AgentLink.version;
+      if ((ag === "ok" || ag === "off") && typeof av === "string" && /^\d{1,4}(\.\d{1,4}){0,3}$/.test(av)) q += `&agentv=${av}`;
+      // (v3.0.5) agentk: the agent proved its key ("ok"), or the page refused what answers on its port ("bad")
+      const ak = window.AgentLink && AgentLink.proof;
+      if (ak === "ok" || ak === "bad") q += `&agentk=${ak}`;
     }
     const ctl = window.AbortController ? new AbortController() : null, cut = ctl && setTimeout(() => ctl.abort(), 8000);
     try {
@@ -92,6 +98,10 @@
         if ("mqtt" in j) st.mqtt = j.mqtt !== null;   // (the server has a broker → this page should reach it too)
         // (v2.7.2: guest lockdown as set now on the Manager's Guest Wi-Fi page — guestlock.js follows it without a reload)
         if ("lockdown" in j && window.GuestLock && GuestLock.config) GuestLock.config(j.lockdown);
+        // (v3.0.5) the System card's rows: which parts are set up, which have trouble (row names only — grid.js status);
+        // a change redraws the page
+        const sys = j.sys && Array.isArray(j.sys.set) && Array.isArray(j.sys.bad) ? { set: j.sys.set.filter((x) => typeof x === "string"), bad: j.sys.bad.filter((x) => typeof x === "string") } : null;
+        if (JSON.stringify(sys) !== JSON.stringify(window.PanelSys || null)) { window.PanelSys = sys; if (window.App && App.render) App.render(); }
       } else { st.issues = 0; st.lvl = 0; st.titles = []; }          // (an older server, or a refusal: no issues bar)
     } catch {
       st.fails++;

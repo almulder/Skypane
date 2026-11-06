@@ -53,7 +53,7 @@
   // name than the device's place shows the device's weather only when it is this one
   Weather.homeOf = () => { const p = homePlace(); return p ? p.id : null; };
   App.skyPlace = () => {
-    const g = App.view === "home" ? customGrid() : App.view !== "cameras" && H.rooms().some((r) => r.id === App.view) ? roomGrid(App.view) : null;
+    const g = App.view === "home" ? customGrid() : App.view !== "cameras" && H.allRooms().some((r) => r.id === App.view) ? roomGrid(App.view) : null;   // (v3.0.5: a room hidden from the bar too)
     const c = firstWx(g);
     const p = c ? Weather.placesOf(c.o.locs)[0] : homePlace() || Weather.tabs()[0];
     if (p) Weather.need([p]);
@@ -328,12 +328,28 @@
       App.sky.skyFps = look.sky === "still" ? 1 / 60 : 12;
     }
     document.documentElement.classList.toggle("no-sky", look.sky === "off");
-    const land = document.getElementById("land");
-    if (land && App.bg !== look.background) {
-      App.bg = look.background;
-      land.innerHTML = window.renderBackground ? renderBackground(look.background) : `<img src="shared/mountains.svg" alt="">`;
-    }
+    App.applyBg();
     App.render();
+  };
+  // (v3.0.5) the background: this page's own pictures (a custom grid's "bg"), else the panel's rotating pictures
+  // (look.bgShow, Manager → Panels → Look), else the one background as before — rotating ones on the slide-show engine
+  // (slideshow.js mounts data-ss), drawn again only when what's wanted changes
+  const showOk = (o) => !!o && typeof o === "object" && ((typeof o.src === "string" && /^fs:[0-9a-f]{12}$/.test(o.src)) || (Array.isArray(o.pics) && o.pics.length > 0));
+  App.applyBg = () => {
+    const land = document.getElementById("land");
+    if (!land) return;
+    const look = Settings.v.look || {};
+    const g = App.view === "home" ? customGrid() : App.view && App.view !== "cameras" && App.view !== "music" ? roomGrid(App.view) : null;
+    const page = g && showOk(g.bg) ? g.bg : null, panel = showOk(look.bgShow) && (look.bgShow.src || look.bgShow.pics.length > 1) ? look.bgShow : null;
+    const show = page || panel;
+    const want = show ? `show:${page ? App.view : "panel"}:${JSON.stringify(show)}` : `bg:${look.background}`;
+    if (App.bg === want) return;
+    App.bg = want;
+    if (!show) { land.innerHTML = window.renderBackground ? renderBackground(look.background) : `<img src="shared/mountains.svg" alt="">`; return; }
+    // (v3.0.5) 35 % when not set, 0–70 — the same as the Manager's slider (panels.js, builder.js) and the service
+    const dim = Number.isInteger(show.dim) ? Math.max(0, Math.min(70, show.dim)) : 35;
+    land.innerHTML = `<div class="bg-show" data-ss="bg:${UI.esc(page ? App.view : "panel")}" data-o="${UI.esc(window.Slides ? Slides.opts(show) : "{}")}">`
+      + `${dim ? `<div class="bg-dim" style="background:rgba(10,5,30,${dim / 100})"></div>` : ""}</div>`;
   };
   // path "all" = the whole settings object was replaced (the dashboard service's copy, or another screen saved)
   App.settingsChanged = (path) => {
@@ -519,7 +535,7 @@
     return { clock: clockBlock, alerts: () => banner || (H.design ? `<div class="gc-empty">${UI.esc(T("g.alertsHint"))}</div>` : ""), people: pills, weather: (o, c) => weather(true, o, `${Grid.room ? Grid.room.id : "home"}:${c ? c.i : ""}`),
       // (hidden on this panel: on the wall nothing, in the builder's canvas a note — not an empty box)
       guest: () => (!window.GuestWifi ? "" : GuestWifi.visible() || !H.design ? GuestWifi.card()
-        : `<section class="card glass gw-card"><div class="gc-empty">${UI.esc(T(GuestWifi.cfg && !GuestWifi.cfg().ssid ? "guestwifi.hiddenNoNet" : "guestwifi.hiddenOff"))}</div></section>`), calendar: (o) => `<section class="card glass cal">${UI.calendar(o.days || 3)}</section>`,
+        : `<section class="card glass gw-card"><div class="gc-empty">${UI.esc(T(GuestWifi.cfg && !GuestWifi.cfg().ssid ? "guestwifi.hiddenNoNet" : "guestwifi.hiddenOff"))}</div></section>`), calendar: (o) => `<section class="card glass cal">${UI.calendar(o.days || 3, o.cal === "pick" ? o.cals || [] : null)}</section>`,   // (v3.0.5: "Choose": its own calendars)
       thermostat, temps, locks, openings };
   };
   // a room's own grid of cards (the layout builder, Manager → Your own layout for rooms): this room's, else the one for
@@ -550,15 +566,43 @@
     return nextParts.map(([col, parts]) => `<div class="col ${col} fade-in">${parts.map((p) => `<div class="part">${p}</div>`).join("")}</div>`).join("");
   };
 
+  // (v3.0.5) scroll places kept over a redraw in place: the page's (a phone: the stacked cards scroll main, or the page),
+  // and inside each redrawn card every element that was scrolled, found again by its path of child numbers in the card
+  const keepScroll = {
+    list: [],
+    page(main) {
+      const se = document.scrollingElement;
+      keepScroll.list = [[main, () => main, main.scrollTop], [se, () => se, se ? se.scrollTop : 0]].filter((x) => x[0] && x[2] > 0);
+    },
+    card(cell, inn) {
+      const gi = cell.dataset.gi, walk = (n, path) => {
+        if (n.scrollTop > 0) keepScroll.list.push([n, () => { let x = cell.isConnected ? cell : document.querySelector(`[data-gi="${CSS.escape(gi || "")}"]`); x = x && x.firstElementChild; for (const k of path) x = x && x.children[k]; return x; }, n.scrollTop]);
+        for (let k = 0; k < n.children.length; k++) walk(n.children[k], [...path, k]);
+      };
+      if (inn) walk(inn, []);
+    },
+    back() {
+      const l = keepScroll.list; keepScroll.list = [];
+      for (const [, find, top] of l) { const x = find(); if (x && x.scrollTop !== top) x.scrollTop = top; }
+    },
+  };
+
   function patchHome(main) {
     if (nextGrid) {   // a custom grid: the same cards in the same places → only the insides that changed
       if (!shownGrid || shownLayout !== "custom" || main.children.length !== nextGrid.length || nextGrid.some((c, i) => c.key !== shownGrid[i].key)) return false;
+      // (v3.0.5) every changed card's scroll places read first, before any card is redrawn (no layout forced in between)
+      nextGrid.forEach((c, i) => { if (c.html !== shownGrid[i].html) keepScroll.card(main.children[i], main.children[i].firstElementChild); });
       nextGrid.forEach((c, i) => {
         const el = main.children[i], was = shownGrid[i];
         if (c.area !== was.area) el.style.gridArea = c.area;   // (moved: the builder's canvas while dragging)
         if (c.cls !== was.cls) el.className = c.cls;
         if (c.ghi !== was.ghi) { if (c.ghi) el.style.setProperty("--ghi", c.ghi); else el.style.removeProperty("--ghi"); }
-        if (c.html !== was.html) el.firstElementChild.innerHTML = c.html;
+        if (c.html !== was.html) {
+          // (v3.0.5) a scrolled list (the Notifications card's, a Rooms card's tiles) keeps its place when redrawn — and so
+          // does the card's own inner box (.gc-in: fit "scroll", a long list's data-lscroll) or whatever inside it scrolls.
+          // Put back after Grid.fit (keepScroll.back, render): fitting may shrink it for a moment and clamp the scroll.
+          el.firstElementChild.innerHTML = c.html;
+        }
       });
       return true;
     }
@@ -703,7 +747,7 @@
     const rs = App.rooms(), i = rs.findIndex((r) => r.id === App.view);
     if (i < 0 || rs.length < 2) return;
     eatClickUntil = Date.now() + 400;
-    App.go(rs[(i + (dx < 0 ? 1 : -1) + rs.length) % rs.length].id);   // swipe left = next room (like turning a page)
+    App.go(rs[(i + (dx < 0 ? 1 : -1) + rs.length) % rs.length].id, "bar");   // swipe left = next room (like turning a page; v3.0.5: a fresh history, as the bar)
   }, true);
 
   // ---------- dock: Alarm · Home · Cameras fixed, rooms scroll ----------
@@ -727,17 +771,19 @@
     const alert = armed && !!a.alert, away = a.status === "armedAway";
     const aIc = alert ? "siren" : armed ? (/^armed(Home|Night)/.test(a.status) ? "shieldHome" : "lock") : Alarm.live ? "shield" : "shieldOff";
     const aName = alert ? T("dock.alarm") : armed ? (/^arming/.test(a.status) ? T("dock.arming") : T("dock.armed", { mode: info.short })) : Alarm.live ? T("dock.disarmed") : T("dock.alarm");
-    const nav = (id, ic, name) => `<button class="${App.view === id ? "cur" : ""}"${Acts.on("app.go", id)}${tip(name)}>${icon(ic, 28)}<span class="dl">${UI.esc(name)}</span></button>`;
+    // (v3.0.5) the bar's buttons start a fresh room history (App.go "bar"): Back on a room opened here goes Home
+    const nav = (id, ic, name) => `<button class="${App.view === id ? "cur" : ""}"${Acts.on("app.goBar", id)}${tip(name)}>${icon(ic, 28)}<span class="dl">${UI.esc(name)}</span></button>`;
     const html = `<div class="dock-fixed">
         <button class="alarm-btn ${armed ? `armed${away ? " away" : ""}${alert ? " alert" : ""}` : Alarm.live ? "disarmed" : "unknown"}"${Acts.on("alarm.open")}${tip(aName)}>${icon(aIc, 28)}<span class="dl">${UI.esc(aName)}</span></button>
         ${nav("home", "home", T("dock.home"))}${nav("cameras", "film", T("dock.cameras"))}
         ${testViews().filter(([, t]) => t.fixed).map(([id, t]) => nav(id, t.icon, t.name)).join("")}</div>
       <span class="sep"></span>
       <div class="dock-end">
-      <div class="dock-rail">${dockMore("prev", vert)}<div class="dock-rooms">${testViews().filter(([, t]) => !t.fixed).map(([id, t]) => `<button class="test ${App.view === id ? "cur" : ""}"${Acts.on("app.go", id)}${tip(t.name)}>${icon(t.icon || "sun", 28)}<span class="dl">${t.name}</span></button>`).join("")}
-        ${App.rooms().map((r) => `<button data-room="${r.id}" class="${App.view === r.id ? "cur" : ""}" ${Acts.on("app.go", r.id)}${tip(r.name)}>${icon(r.icon, 28)}<span class="dl">${UI.esc(r.name)}</span>
+      <div class="dock-rail">${dockMore("prev", vert)}<div class="dock-rooms">${testViews().filter(([, t]) => !t.fixed).map(([id, t]) => `<button class="test ${App.view === id ? "cur" : ""}"${Acts.on("app.goBar", id)}${tip(t.name)}>${icon(t.icon || "sun", 28)}<span class="dl">${t.name}</span></button>`).join("")}
+        ${App.rooms().map((r) => `<button data-room="${r.id}" class="${App.view === r.id ? "cur" : ""}" ${Acts.on("app.goBar", r.id)}${tip(r.name)}>${icon(r.icon, 28)}<span class="dl">${UI.esc(r.name)}</span>
         ${H.lightsOn(r) ? `<span class="n">${H.lightsOn(r)}</span>` : ""}</button>`).join("")}</div>${dockMore("next", vert)}</div>
       ${dockBell()}<button class="dock-gear"${Acts.on("app.settings")} title="${UI.esc(T("dock.settings"))}" aria-label="${UI.esc(T("dock.settings"))}">${icon("settings", 22)}</button></div>
+      ${auto ? `<button class="dock-hhome${App.view === "home" ? " cur" : ""}"${Acts.on("app.goBar", "home")} title="${UI.esc(T("dock.home"))}" aria-label="${UI.esc(T("dock.home"))}">${icon("home", 22)}</button>` : ""}
       ${auto ? dockHandle(alert ? "alarm" : away ? "bad2" : armed ? "bad" : Alarm.live ? "ok" : "unk", aIc, aName) : ""}`;
     if (!auto) dockOpen = false;
     el.classList.toggle("collapsed", auto && !dockOpen);
@@ -775,7 +821,7 @@
   }
   // auto-hide: the handle — the alarm's state, the page on screen, how many alerts wait; a tap opens the bar
   function dockHandle(tone, aIc, aName) {
-    const r = H.rooms().find((x) => x.id === App.view), t = window.TestViews && Object.hasOwn(TestViews, App.view) ? TestViews[App.view] : null;
+    const r = H.allRooms().find((x) => x.id === App.view), t = window.TestViews && Object.hasOwn(TestViews, App.view) ? TestViews[App.view] : null;
     const [ic, name] = r ? [r.icon, r.name] : t ? [t.icon || "sun", t.name] : App.view === "cameras" ? ["film", T("dock.cameras")] : ["home", T("dock.home")];
     const w = window.HubAlerts ? HubAlerts.waiting() : [], hi = w.length ? Math.max(...w.map((x) => x.lvl)) : 0;
     const chev = { top: "chevronDown", left: "chevron", right: "chevronLeft" }[dockAtNow()] || "chevronUp";
@@ -1026,7 +1072,40 @@
   }
 
   // ---------- render ----------
-  App.go = (v) => { if (v !== App.view) App.viewAt = Date.now(); App.view = v; App.thermoEdit = false; App.render(); };
+  // (v3.0.5) the room history (mockups/prototypes/settings-and-pages.html, the Rooms tab): a page opened from a card, a
+  // button or a Hubitat rule remembers the one it was opened from — Back (top right on a room page) returns there, one
+  // step at a time (Media room → Office from a Rooms card → Back → Media room). The room bar (and a swipe, its order) and
+  // Home start fresh: Back from a room the bar opened goes Home. The idle "back to Home" timer still applies.
+  App.hist = [];
+  const show = (v) => { if (v !== App.view) App.viewAt = Date.now(); App.view = v; App.thermoEdit = false; App.render(); };
+  App.go = (v, via) => {
+    if (v !== App.view) {
+      if (v === "home") App.hist = [];
+      else if (via === "bar") App.hist = ["home"];
+      else { App.hist.push(App.view); if (App.hist.length > 20) App.hist.shift(); }
+    }
+    show(v);
+  };
+  App.back = () => {
+    let v = App.hist.pop();
+    while (v && v !== "home" && v !== "cameras" && !H.allRooms().some((r) => r.id === v) && !(window.TestViews && Object.hasOwn(TestViews, v))) v = App.hist.pop();   // (a room gone meanwhile: the one before)
+    show(v || "home");
+  };
+  // the Back button: on a room page, where it goes in small letters ("Back · Media room"); not in the builder's canvas
+  function backBtn(on) {
+    let el = document.getElementById("room-back");
+    on = on && !(window.PANEL_DESIGN === true && !(window.Grid && Grid.trying));
+    document.documentElement.classList.toggle("has-back", on);
+    if (!on) { if (el) el.hidden = true; return; }
+    if (!el) { el = document.createElement("button"); el.type = "button"; el.id = "room-back"; el.dataset.click = "app.back"; document.body.appendChild(el); }
+    const prev = App.hist.length ? App.hist[App.hist.length - 1] : "home", r = H.room(prev);
+    const to = prev === "home" ? T("dock.home") : prev === "cameras" ? T("dock.cameras") : r ? r.name : T("dock.home");
+    const html = `${icon("chevronLeft", 20)}<span>${UI.esc(T("room.back"))}</span><small>${UI.esc(to)}</small>`;
+    if (el.innerHTML !== html) el.innerHTML = html;
+    el.setAttribute("aria-label", T("room.backTo", { page: to }));
+    el.title = T("room.backTo", { page: to });   // (v3.0.5: a long room name is cut short on the button — the tooltip has it all)
+    el.hidden = false;
+  }
   // Weather effects: in front of the cards on Home, behind them on every other page; always under overlays
   // (alarm, keypad, settings, popups, camera full screen). The sky stops on Cameras and while a camera is full screen
   // (cameras.js calls this too) — the video needs the panel's GPU; Music holds it itself (music.js).
@@ -1052,6 +1131,7 @@
     root.classList.toggle("dock-autohide", Settings.v.dockAutoHide === true);
     // (v3.0.3) the version tag in the corner, unless this panel hides it (Manager → Panels → Setup; theme.css)
     root.classList.toggle("no-ver-tag", Settings.v.showVersion === false);
+    App.applyBg();   // (v3.0.5: a page with its own background pictures)
 
     const test = window.TestViews && Object.hasOwn(TestViews, App.view) ? TestViews[App.view] : null;
     // alerts first (Hubitat's level 4–5, alarm.js): a view that fails below must never keep one off the screen
@@ -1059,13 +1139,15 @@
     if (al && alerts !== App.alertsHtml) { al.innerHTML = App.alertsHtml = alerts; if (Alarm.afterOverlay) Alarm.afterOverlay(al); }   // (#alerts comes with App.start)
     // (v3.0.2: the builder's canvas keeps a room hidden on this panel / with nothing placed yet — it's the one being edited;
     // it dropped to Home)
-    if (!test && App.view !== "home" && App.view !== "cameras" && !H.rooms().some((r) => r.id === App.view) && !(H.design && H.room(App.view))) App.view = "home"; // room was hidden
+    // (v3.0.5: a room hidden from the room bar is still a page — only one gone from the house drops to Home)
+    if (!test && App.view !== "home" && App.view !== "cameras" && !H.allRooms().some((r) => r.id === App.view) && !(H.design && H.room(App.view))) { App.view = "home"; App.hist = []; } // room was hidden
     App.syncSky();
     if (App.sky) { const sp = App.skyPlace(); if ((sp && sp.id) !== App.skyAt) App.applyEffects(false); }   // (another page: maybe another place)
     dock();
     // Only replace what changed: keeps taps/swipes working and camera streams connected between data refreshes.
     const main = document.getElementById("main"), sameView = App.view === App.lastView;
     const isRoom = !test && App.view !== "home" && App.view !== "cameras";
+    backBtn(isRoom);   // (v3.0.5)
     const rg = isRoom ? roomGrid(App.view) : null;   // (this room has its own grid of cards)
     layoutSwitch(isRoom && !rg);
     const lk = isRoom && !rg ? layoutKey() : "classic";
@@ -1108,6 +1190,8 @@
       if (html !== App.mainHtml || !sameView) {
         // mainHtml "" = forced full redraw; null = re-check the parts (a part marked null is redrawn — the dial
         // after a drag changed it in place)
+        // (v3.0.5) the page's and the cards' scroll places, put back after Grid.fit below (keepScroll)
+        if ((isHome || rg) && sameView) keepScroll.page(main);
         if ((isHome || rg) && sameView && App.mainHtml !== "" && patchHome(main)) App.mainHtml = html;
         else { main.innerHTML = App.mainHtml = html; if (sameView) main.querySelectorAll(".fade-in").forEach((e) => e.classList.remove("fade-in")); }
       }
@@ -1117,6 +1201,7 @@
         : App.view === "cameras" ? "camview"
         : rg ? "roomview lay-custom" : `roomview${roomStyle() === "list" ? " room-list" : ""}`) + (g && g.v === 2 ? " fine" : "") + (g && g.sp ? " sp" : "");
       if (window.Grid) { Grid.frame(main, g); if (g) Grid.fit(main); }
+      keepScroll.back();   // (v3.0.5)
       if (isHome && !g) UI.fitCal(main);
     }
     App.camsDirty = false;
@@ -1157,7 +1242,7 @@
     "app.lock": (id) => H.lock(id), "app.unlock": (id) => H.unlock(id), "app.toggle": (id) => H.toggle(id),
     "app.windowsPopup": () => UI.windowsPopup(), "app.doorsPopup": () => UI.doorsPopup(),
     "app.setFan": (id, s) => H.setFan(id, s), "app.setShade": (id, l) => H.setShade(id, l), "app.roomOptions": (rid) => Settings.roomOptions(rid),
-    "app.go": (id) => App.go(id), "app.settings": () => Settings.show(),
+    "app.go": (id) => App.go(id), "app.goBar": (id) => App.go(id, "bar"), "app.back": () => App.back(), "app.settings": () => Settings.show(),
     "app.dockOpen": () => App.dockOpen(), "app.setRoomLayout": (k) => App.setRoomLayout(k),
     "app.wxDay": (key, y) => { if (!y) return; if (wxDays.get(key) === y) wxDays.delete(key); else wxDays.set(key, y); App.render(); },
   });
@@ -1236,11 +1321,13 @@
     const testing = () => App.perfTesting || (window.Bench && Bench.running);
     // (v3.0.3) two reasons can hold it: "saver" (the screensaver / screen off, below — a touch ends it) and "pin" (a
     // PIN pad is open, pinpad.js — only its closing ends it); paused while either holds
-    const gate = { saver: false, pin: false };
+    // (v3.0.5) and "show": Skypane's own screensaver (slideshow.js) — FreeKiosk's state every ~20–30 s ("saver" off)
+    // never starts the sky under it; only its wake ends it
+    const gate = { saver: false, pin: false, show: false };
     const animPause = (paused, why = "saver") => {
       if (paused && why === "saver" && testing()) { App.wakeKiosk(); paused = false; }
-      gate[why === "pin" ? "pin" : "saver"] = !!paused;
-      const any = gate.saver || gate.pin;
+      gate[why === "pin" || why === "show" ? why : "saver"] = !!paused;
+      const any = gate.saver || gate.pin || gate.show;
       document.documentElement.classList.toggle("anim-paused", any); if (App.sky) App.sky.paused = any || !!App.notSetUp;
     };
     App.animPause = animPause;
@@ -1248,10 +1335,12 @@
       if (!H.isPanel) return; // it's the panel's screensaver: a laptop/phone viewing the page keeps animating
       let s; try { s = JSON.parse(msg); } catch { return; }
       const scr = s && s.screen; if (!scr) return;
-      animPause(!!scr.screensaverActive || scr.on === false);
+      // (v3.0.5) kept on its own too: Skypane's screensaver show pauses while FreeKiosk's is up or the screen is off
+      App.kioskIdle = !!scr.screensaverActive || scr.on === false;
+      animPause(App.kioskIdle);
     });
     // a touch on the page means someone is looking: resume at once instead of waiting for the next state message
-    document.addEventListener("pointerdown", () => animPause(false), true);
+    document.addEventListener("pointerdown", () => { App.kioskIdle = false; animPause(false); }, true);
     // Reload by itself when (a) the dashboard service was updated (new version, an Unraid update) or (b) the house
     // model changed (devices added / renamed / moved in Hubitat: the bridge announces "hubitat/model") — (b) only once
     // nobody has touched the screen for 2 minutes ((a) sooner: below) (unsaved settings survive a reload — store.js keeps them). Checked

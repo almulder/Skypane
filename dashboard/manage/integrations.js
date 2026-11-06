@@ -16,14 +16,15 @@
     ["cameras", "camera", ["UniFi Protect", "Cameras"], ["UniFi Protect", "Cameras"]],   // i18n-ok (the server's group names; v3.0.2: Protect's own status too)
     ["guest", "wifi", ["Guest Wi-Fi"], "Guest Wi-Fi"],   // i18n-ok (the server's group and status names)
     ["music", "zap", ["Music"], "Music"],   // i18n-ok (the server's names)
+    ["ups", "battery", ["UPS"], "UPS"],   // i18n-ok (the server's names; v3.0.5: the UPS card's NUT server)
     ["general", "settings", ["General"], "General"],   // i18n-ok (the server's names)
   ];
   const CONNECTS = { "Hubitat": 1, "UniFi Protect": 1, "Guest Wi-Fi": 1, "Music": 1, "MQTT broker": 1 };   // i18n-ok (the server's group names: the ones with a Connect)
   // each group's title and what it's for
   const TITLE = { hub: K.t("integrations.group.hub"), broker: K.t("integrations.shared.aboutbroker"), cameras: K.t("integrations.shared.aboutcameras"),
-    guest: K.t("integrations.group.guest"), music: K.t("integrations.group.music"), general: K.t("integrations.group.general"), calendars: K.t("integrations.group.calendars") };
+    guest: K.t("integrations.group.guest"), music: K.t("integrations.group.music"), ups: K.t("integrations.group.ups"), general: K.t("integrations.group.general"), calendars: K.t("integrations.group.calendars") };
   const WHAT = { hub: K.t("integrations.group.hubWhat"), broker: K.t("integrations.group.brokerWhat"), cameras: K.t("integrations.group.camerasWhat"),
-    guest: K.t("integrations.group.guestWhat"), music: K.t("integrations.group.musicWhat"), general: K.t("integrations.group.generalWhat") };
+    guest: K.t("integrations.group.guestWhat"), music: K.t("integrations.group.musicWhat"), ups: K.t("integrations.group.upsWhat"), general: K.t("integrations.group.generalWhat") };
   const LINKS = { cameras: [K.t("integrations.shared.aboutcameras"), K.t("integrations.link.cameras"), "cameras"],
     guest: [K.t("integrations.link.guestLabel"), K.t("integrations.link.guest"), "guest"] };
 
@@ -204,6 +205,123 @@
     return K.row(K.t("integrations.hub.lastAlert"), K.t("integrations.hub.lastAlertHint"),
       la ? el("span", {}, el("b", {}, la.title || la.text || "—"), " ", el("small.muted", {}, ago(la.at))) : el("span.muted", {}, K.t("integrations.hub.noAlert")), { "data-la": "" });
   }
+  // (v3.0.5) the Skypane Notifier driver (mockups/prototypes/upgrade-and-notices.html, "Notifier driver out of date"):
+  // "Up to date", or "Out of date: install vX from <import address>" with the steps, Copy and "Check again" — the
+  // server's word (status.Hubitat.notifier: notifier_driver.state), nothing while it can't tell. data-nt: refresh()
+  // draws it again in place
+  let ntOpen = null;
+  const WORD = { ok: "ok", old: "old", unknown: "unknown", none: "none" };   // (v3.0.5) a state → its word's key
+  const ntAddr = () => `${location.origin}/hubitat/SkypaneNotifier.groovy`;   // i18n-ok (an address)
+  function notifierRows() {
+    const st = stateOf("Hubitat"), n = st && st.state !== "off" && st.notifier;
+    if (!n || !["ok", "old", "unknown", "none"].includes(n.state)) return el("div.in-nt", { "data-nt": "" });
+    const warn = n.state === "old" || n.state === "unknown", open = n.state !== "ok" && (ntOpen ?? true);
+    const P = { ok: ["", "ok"], old: [".warn", "old"], unknown: [".warn", "unknown"], none: [".idle", "none"] }[n.state];
+    const line = K.t(`integrations.notifier.${n.state}Line`, { have: n.have || "", want: n.want || "" });
+    const hint = warn ? `${line}. ${K.t("integrations.notifier.outOfDate", { want: n.want || "", address: ntAddr() })}` : line;
+    const toggle = n.state === "ok" ? null : el("button.btn.sm" + (warn ? ".pri" : ""), { type: "button", "aria-expanded": open ? "true" : "false",
+      onclick: () => { ntOpen = !open; const x = M.$main.querySelector(".in-main [data-nt]"); if (x) x.replaceWith(notifierRows()); } },
+    K.t(n.state === "none" ? "integrations.notifier.install" : "integrations.notifier.update"));
+    const addr = () => el("div.in-nt-addr", {}, el("code", {}, ntAddr()), el("button.btn.sm", { type: "button", onclick: async () => {
+      toast(await M.copyText(ntAddr()) ? K.t("integrations.notifier.copied") : K.t("integrations.notifier.copyFailed"), false); } }, ic("copy", 14), K.t("integrations.notifier.copy")));
+    const steps = n.state === "none"
+      ? [K.t("integrations.notifier.installTitle"), [el("li", {}, K.t("integrations.notifier.instDriver"), addr()), el("li", {}, K.t("integrations.notifier.instDevice")), el("li", {}, K.t("integrations.notifier.instMaker")), el("li", {}, K.t("integrations.notifier.instTest"))]]
+      : [K.t("integrations.notifier.updateTitle"), [el("li", {}, K.t("integrations.notifier.updOpen")), el("li", {}, K.t("integrations.notifier.updImport"), addr(), el("small.muted", {}, K.t("integrations.notifier.updImportHint"))),
+          el("li", {}, K.t("integrations.notifier.updSave")), el("li", {}, K.t("integrations.notifier.updBack"))]];
+    // (v3.0.5) "Check again" always there; after it, a toast with the state in words (and the hub's version when it
+    // says one) — every time, so the press is never met with silence
+    const check = el("button.btn.sm", { type: "button", onclick: async () => {
+      check.disabled = true;
+      await api("/api/manage/health", { action: "check" }).catch(() => ({}));
+      await refresh();
+      const now = ((stateOf("Hubitat") || {}).notifier) || null;
+      const word = now && WORD[now.state] ? K.t(`integrations.notifier.${WORD[now.state]}`) : K.t("integrations.notifier.unknownState");
+      toast(now && now.have ? K.t("integrations.notifier.checkedHave", { state: word, have: now.have }) : K.t("integrations.notifier.checkedState", { state: word }),
+        !!now && (now.state === "old" || now.state === "unknown"));
+      if (check.isConnected) check.disabled = false;
+    } }, ic("refresh", 14), K.t("integrations.notifier.check"));
+    const when = n.checkedAt ? el("small.muted", {}, K.t("integrations.notifier.lastChecked", { when: ago(n.checkedAt) })) : null;
+    return el("div.in-nt", { "data-nt": "" },
+      K.row(K.t("integrations.notifier.label"), hint, el("span.in-nt-c", {}, el("span.pill" + P[0], {}, el("span.dot" + P[0], { "aria-hidden": "true" }), K.t(`integrations.notifier.${P[1]}`)), toggle),
+        warn ? { class: "grp-row in-nt-hot" } : null),   // i18n-ok (class names)
+      open ? el("div.grp-row.in-det.in-nt-steps", {}, el("b", {}, steps[0]), el("ol", {}, steps[1]), el("p.gf", {}, ic("info", 14), " ", K.t("integrations.notifier.failed"))) : null,
+      el("div.grp-row.in-nt-bar", {}, check, when));
+  }
+  // (v3.0.5) the Skypane Helper Hubitat app (service/hubitat_helper.py): linked or not, "Link the Helper" (a one-time
+  // code, shown once), "Update the driver" / "Update the app" (the app picks it up within a minute and says how it
+  // went), "Update required" + the import address when the hub refused the code, the protocols it reported. data-hp:
+  // refresh() draws it again in place; the code stays shown until it runs out
+  let hpCode = null;   // {code, until}
+  const hpAddr = (p) => `${location.origin}${p || "/hubitat/SkypaneHelper.groovy"}`;   // i18n-ok (an address)
+  const hpSend = async (body) => {
+    const r = await api("/api/manage/helper", body).catch(() => null);
+    if (!r || r.status !== 200) { toast(r && r.error === "not-linked" ? K.t("integrations.helper.err.notLinked") : K.t("integrations.helper.failed"), true); return null; }
+    return r;
+  };
+  const hpRedraw = () => { const x = M.$main.querySelector(".in-main [data-hp]"); if (x) x.replaceWith(helperRows()); };
+  function helperRows() {
+    const st = stateOf("Hubitat"), h = st && st.state !== "off" && st.helper;
+    if (!h) return el("div.in-hp", { "data-hp": "" });
+    const P = !h.linked ? [".idle", "notLinked"] : h.updateRequired ? [".warn", "required"] : !h.online ? [".warn", "offline"] : h.appState === "old" ? [".warn", "appOld"] : ["", "linked"];
+    const pill = el("span.pill" + P[0], {}, el("span.dot" + P[0], { "aria-hidden": "true" }), K.t(`integrations.helper.${P[1]}`));
+    const copyBtn = (text) => el("button.btn.sm", { type: "button", onclick: async () => {
+      toast(await M.copyText(text) ? K.t("integrations.notifier.copied") : K.t("integrations.notifier.copyFailed"), false); } }, ic("copy", 14), K.t("integrations.notifier.copy"));
+    const addr = (p) => el("div.in-nt-addr", {}, el("code", {}, hpAddr(p)), copyBtn(hpAddr(p)));
+    const rows = [];
+    if (!h.linked) {
+      rows.push(K.row(K.t("integrations.helper.label"), K.t("integrations.helper.notLinkedLine"), el("span.in-nt-c", {}, pill,
+        el("button.btn.sm.pri", { type: "button", onclick: async () => {
+          const r = await hpSend({ action: "link" });
+          if (r && r.code) { hpCode = { code: r.code, until: Date.now() + (r.seconds || 600) * 1000 }; hpRedraw(); }
+        } }, K.t("integrations.helper.link")))));
+      const code = hpCode && Date.now() < hpCode.until ? hpCode.code : null;
+      rows.push(el("div.grp-row.in-det.in-nt-steps", {}, el("b", {}, K.t("integrations.helper.installTitle")), el("ol", {},
+        el("li", {}, K.t("integrations.helper.instImport"), addr()),
+        el("li", {}, K.t("integrations.helper.instAdd")),
+        el("li", {}, K.t("integrations.helper.instAddress", { address: location.origin })),
+        el("li", {}, code ? [K.t("integrations.helper.instCode"), " ", el("code.in-hp-code", {}, `${code.slice(0, 4)} ${code.slice(4)}`), " ",
+          // (v3.0.5, tester) Cancel: the code stops working now (the server's "cancelcode")
+          el("button.btn.sm", { type: "button", "aria-label": K.t("integrations.helper.cancelCodeLabel"), onclick: async () => {
+            const r = await hpSend({ action: "cancelcode" });
+            if (r && r.ok) { hpCode = null; hpRedraw(); toast(K.t("integrations.helper.codeCancelled"), false); }
+          } }, K.t("integrations.helper.cancelCode"))] : K.t("integrations.helper.instCodeFirst")),
+        el("li", {}, K.t("integrations.helper.instDone"))),
+        el("p.gf", {}, ic("info", 14), " ", K.t("integrations.helper.hpm", { address: hpAddr("/hubitat/packageManifest.json") }))));   // i18n-ok (an address)
+      return el("div.in-hp", { "data-hp": "" }, ...rows);
+    }
+    const line = [h.online ? K.t("integrations.helper.heard", { when: ago(h.lastPoll) }) : h.lastPoll ? K.t("integrations.helper.notHeard", { when: ago(h.lastPoll) }) : K.t("integrations.helper.neverHeard"),
+      h.have ? K.t("integrations.helper.version", { have: h.have }) : ""].filter(Boolean).join(" · ");   // i18n-ok (a separator)
+    rows.push(K.row(K.t("integrations.helper.label"), line, el("span.in-nt-c", {}, pill)));
+    const req = h.request, res = h.result;
+    const ask = (what) => async (e) => {
+      e.currentTarget.disabled = true;
+      const r = await hpSend({ action: "update", what });
+      if (r && r.ok) toast(K.t("integrations.helper.asked"), false);
+      await refresh();
+    };
+    const bar = el("div.grp-row.in-nt-bar", {},
+      el("button.btn.sm.pri", { type: "button", disabled: !!req, onclick: ask("driver") }, ic("download", 14), K.t("integrations.notifier.update")),
+      h.appState === "old" ? el("button.btn.sm", { type: "button", disabled: !!req, onclick: ask("app") }, K.t("integrations.helper.updateApp", { want: h.want || "" })) : null,
+      el("button.btn.sm", { type: "button", disabled: !!req, onclick: ask("notifier") }, K.t("integrations.helper.makeNotifier")),
+      req ? el("small.muted", {}, K.t("integrations.helper.waiting")) : res ? el("small" + (res.ok ? ".muted" : ".bad"), {},
+        res.ok ? K.t(`integrations.helper.done.${res.what}`, { version: res.version || "" }) : K.t(`integrations.helper.err.${res.error || "endpoint"}`)) : null);
+    rows.push(bar);
+    if (h.updateRequired) {
+      rows.push(el("div.grp-row.in-det.in-nt-steps", {}, el("b", {}, K.t("integrations.helper.requiredTitle")),
+        el("p", {}, K.t("integrations.helper.requiredLine")), addr(h.driverPath), h.appState === "old" ? addr(h.importPath) : null));
+    }
+    const pc = h.protocols || {}, ORDER = ["zigbee", "zwave", "matter", "lan", "app", "virtual", "unknown"];
+    const counts = ORDER.filter((p) => pc[p]).map((p) => `${K.t(`devices.proto.${p}`)} ${pc[p]}`).join(" · ");   // i18n-ok (a separator)
+    rows.push(K.row(K.t("integrations.helper.devices"), h.devices ? K.t("integrations.helper.devicesLine", { n: h.devices, when: h.lastReport ? ago(h.lastReport) : "—" }) : K.t("integrations.helper.noDevices"),
+      el("span.muted", {}, counts || "—")));
+    rows.push(el("div.grp-row.in-nt-bar", {}, el("small.muted", {}, h.login ? K.t("integrations.helper.loginOn") : K.t("integrations.helper.loginOff")), el("span.sp"),
+      el("button.btn.sm", { type: "button", onclick: async () => {
+        if (!(await K.ask({ title: K.t("integrations.helper.unlink"), text: K.t("integrations.helper.unlinkQ"), yes: K.t("integrations.helper.unlink"), danger: true }))) return;
+        const r = await hpSend({ action: "unlink" });
+        if (r && r.ok) { hpCode = null; await refresh(); }
+      } }, K.t("integrations.helper.unlink"))));
+    return el("div.in-hp", { "data-hp": "" }, ...rows);
+  }
   function group([id, icon, groups, statusName]) {
     const rows = [];
     for (const n of [].concat(statusName)) {   // (cameras: Protect's and the camera video's, each with its name)
@@ -218,6 +336,8 @@
       rows.push(el("div.grp-row.in-det", {}, det));
     } else for (const g of groups) rows.push(...fieldsOf(g).map(settingRow));
     if (id === "hub") rows.push(lastAlertRow() || el("div.grp-row", { "data-la": "", hidden: true }));   // (v3.0.2: the Notifier's "Test" shows up here — no panel needed)
+    if (id === "hub") rows.push(notifierRows());   // (v3.0.5: the Notifier driver — up to date, or how to update it)
+    if (id === "hub") rows.push(helperRows());   // (v3.0.5: the Skypane Helper app)
     if (!phone() && groups.some((g) => g in CONNECTS)) {
       const s = { groups, statusName, kind: null, node: null };
       s.node = connectRow(s); slots.push(s); rows.push(s.node);
@@ -246,7 +366,7 @@
   }
   function side() {
     const lines = [["server", TITLE.hub, "Hubitat"], ["broker", TITLE.broker, "MQTT broker"], ["camera", K.t("integrations.status.protect"), "UniFi Protect"], ["camera", TITLE.cameras, "Cameras"], ["wifi", TITLE.guest, "Guest Wi-Fi"], ["activity", K.t("integrations.status.unifiNet"), "UniFi Network"],   // i18n-ok (status names; v3.0.4: the UniFi cards' reads)
-      ["calendar", TITLE.calendars, "Calendars"], ["sun", K.t("weather.title"), "Weather"], ["zap", TITLE.music, "Music"]].map(([i, n, k]) => {   // i18n-ok (status names)
+      ["calendar", TITLE.calendars, "Calendars"], ["sun", K.t("weather.title"), "Weather"], ["zap", TITLE.music, "Music"], ["battery", TITLE.ups, "UPS"]].map(([i, n, k]) => {   // i18n-ok (status names; v3.0.5: UPS)
       const st = stateOf(k);
       // (v3.0.0: the weather device — its name and last change, or why the panels use Open-Meteo)
       const wx = k === "Weather" && st && st.state !== "off" ? (String(st.reason || "").startsWith("owm") ? K.t(st.reason === "owm" ? "weather.side.owm" : "weather.side.owmProblem") : st.reason === "stale" ? K.t("weather.side.stale", { ago: st.updatedAt ? ago(st.updatedAt) : "—" })
@@ -326,6 +446,8 @@
     const root = M.$main;
     for (const n of root.querySelectorAll(".in-main [data-st]")) { const x = statusRow(n.dataset.st, n.dataset.stl || null); if (x) n.replaceWith(x); }
     for (const n of root.querySelectorAll(".in-main [data-la]")) n.replaceWith(lastAlertRow() || el("div.grp-row", { "data-la": "", hidden: true }));
+    for (const n of root.querySelectorAll(".in-main [data-nt]")) n.replaceWith(notifierRows());   // (v3.0.5)
+    for (const n of root.querySelectorAll(".in-main [data-hp]")) n.replaceWith(helperRows());   // (v3.0.5)
     for (const n of root.querySelectorAll(".in-main [data-lk]")) { const g = GROUPS.find((x) => x[0] === n.dataset.lk); if (g) n.replaceWith(linkRow(g[0], g[3])); }
     drawConnects();
     const sd = root.querySelector(".in-side");

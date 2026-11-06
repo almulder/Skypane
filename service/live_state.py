@@ -34,7 +34,7 @@ MAX_EVENT_BYTES = 4096
 MAX_ALERT_BYTES = 256 * 1024
 MAX_DEVICES = 2000
 MAX_ATTRS = 80
-MAX_ALERTS = 100
+MAX_ALERTS = 120   # (v3.0.5: as the bridge sends — scripts/hubitat_bridge.py ALERTS_SENT; was 100)
 TEXT_MAX = 200
 EVENTS_KEPT = 50    # v2.4.0: the last events kept per device (the Devices page's Events tab)
 HIDE_SECONDS = 10   # an alert the Manager acknowledged stays hidden this long, or until the bridge's list leaves it out
@@ -139,6 +139,7 @@ class LiveState:
         self.gone = {}        # alert id → when the Manager acknowledged it (hidden until the bridge's next list)
         self.newest = None    # (v3.0.2) the newest alert heard since the server started — Integrations → Hubitat shows it
         self.heard = {"state": None, "event": None, "alerts": None}   # when each topic was last heard (epoch s)
+        self.started = clock()   # (v3.0.5) when the server started listening: the Doorbell card's "since restart"
 
     # --- what arrives ---
     def on_message(self, topic, payload):

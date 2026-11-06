@@ -462,3 +462,20 @@ class Library:
             if not self.get(cid):
                 raise Invalid("no such card")
             (self.dir / f"{cid}.json").unlink()
+
+    def put_back(self, card):
+        """(v3.0.5) A card back from the Trash, as it was (its check, its code's fingerprint). Its id is how the panels
+        name it: one installed again since then under that id stays, and the restore is refused ("taken")."""
+        if not isinstance(card, dict) or not isinstance(card.get("id"), str) or not ID.fullmatch(card["id"]):
+            raise Invalid("not a card")
+        validate(card)   # (still a card this version accepts)
+        with self.lock:
+            if self.get(card["id"]) is not None:
+                raise Invalid("taken")
+            if len(self.all()) >= MAX_CARDS:
+                raise Invalid(f"at most {MAX_CARDS} cards")
+            self.dir.mkdir(parents=True, exist_ok=True)
+            tmp = self.dir / f".{card['id']}.{secrets.token_hex(4)}.tmp"
+            tmp.write_text(json.dumps(card, indent=1), encoding="utf-8")
+            os.replace(tmp, self.dir / f"{card['id']}.json")
+        return card

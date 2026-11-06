@@ -679,6 +679,9 @@ main.lay-custom.fine > .gc { margin: calc(var(--g-gap, 14px) / 2); }
 /* (sp: cards at their true size — the gap is the spacing the builder keeps between them, not an inset) */
 main.lay-custom.fine.sp > .gc { margin: 0; }
 main.lay-custom.fine.sp, main.roomview.lay-custom.fine.sp { padding: 24px 28px 12px; }
+/* (v3.0.5) the Edge margin (the builder's "Edge margin", next to Spacing): the same space on every side, 0 = cards right
+   up to the screen's edges; none set: as above. The builder shows the same (its handles are measured on this box). */
+main.lay-custom.fine.edge, main.roomview.lay-custom.fine.edge, main.lay-custom.fine.sp.edge, main.roomview.lay-custom.fine.sp.edge { padding: var(--g-edge, 16px); }
 /* "Join touching cards" (overlapping cards): the seam has no border, no gap and square corners, and the card behind ends
    where the one in front begins (--jb / --jt / --jr / --jl: cells trimmed, grid.js joins) — the two read as one card */
 main.lay-custom.fine > .gc.j-b { margin-bottom: calc(var(--g-rh, 0px) * var(--jb, 0)); border-bottom-color: transparent; border-bottom-left-radius: 0; border-bottom-right-radius: 0; box-shadow: none; }
@@ -805,7 +808,8 @@ main.lay-custom.fine > .gc.j-l { margin-left: calc(var(--g-cw, 0px) * var(--jl, 
 .dv-it.tp-bottom, .dv-it.tp-top { flex-direction: column; justify-content: center; text-align: center; gap: 6px; }
 .dv-it.tp-top { flex-direction: column-reverse; }
 .dv-ic { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,.08); color: var(--muted); transition: background .2s, color .2s; }
-.gc .dv-it .dv-ic { zoom: calc(var(--gpic) * var(--iz, 1)); }
+/* (v3.0.5: × --fk — grid.js fitLabels makes a device piece's disc smaller when it and its name don't fit the piece) */
+.gc .dv-it .dv-ic { zoom: calc(var(--gpic) * var(--iz, 1) * var(--fk, 1)); }
 .gc .dv-it .dv-ic :is(.ic, .gc-up, .gc-art, .mo) { zoom: 1; }
 .dv-ic .ic { color: inherit; }
 .dv-it.on { background: rgba(var(--glass-rgb), .5); box-shadow: inset 0 0 0 1px var(--dc, var(--gcc, var(--accent))); }
@@ -1028,8 +1032,10 @@ main.roomview.lay-custom { display: grid; gap: var(--g-gap, 14px); padding-top: 
 .sp-pop { position: absolute; z-index: 3; left: 50%; top: 50%; transform: translate(-50%, -50%); min-width: 200px; max-width: 92%; padding: 12px 14px;
   border-radius: 16px; background: var(--card-solid, #2a2150); box-shadow: 0 12px 30px rgba(0, 0, 0, .5); display: flex; flex-direction: column; gap: 4px; text-align: left; }
 .spc [data-gdoor] { cursor: pointer; }
-/* a blank card (grid.js blank): the owner's pieces, each in its own box (shares of the card: they move and grow with
-   it); each piece is a size container, so a picture, a toggle or a garage fills the box it was given */
+/* a blank card (grid.js blank): the owner's pieces, each in its own box (shares of the card: the box moves with it).
+   (v3.0.5) What's in a piece keeps its own size — the pictures, toggles and words never grow or shrink with the card
+   (a picture is only kept inside its box); "Grow and shrink with the card" on a piece (bk-g) makes it follow the card
+   from the size it had then (bk-z: --pg). No borders and no boxes around pieces. */
 .bk { position: relative; width: 100%; height: 100%; }
 .bk-none { display: grid; place-items: center; }
 .bk-none .gc-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 10px; font-size: 14px; }
@@ -1037,27 +1043,25 @@ main.roomview.lay-custom { display: grid; gap: var(--g-gap, 14px); padding-top: 
   align-items: center; justify-content: center; min-width: 0; min-height: 0; }
 .bk-p.pressed { opacity: .7; }
 .bk-pic { flex: 1; min-height: 0; width: 100%; container-type: size; display: grid; place-items: center; }
-.bk-pic > :is(svg.ic, .gc-up) { width: auto !important; height: min(100cqh, 100cqw) !important; aspect-ratio: 1; }
-.bk-pic > .gc-art { width: auto !important; height: min(100cqh, 100cqw * 1.85 / 1.6) !important; aspect-ratio: 1.6 / 1.85; }
-.bk-icon > small, .bk-gar > small { flex: none; color: var(--muted); font-size: clamp(11px, 14cqh, 18px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.bk-pic > :is(svg.ic, .gc-up, .gc-art) { max-width: 100%; max-height: 100%; }
+.bk-pic > :is(svg.ic, .gc-up) { aspect-ratio: 1; }
+.bk-icon > small, .bk-gar > small { flex: none; color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .bk-icon.on .ic, .bk-light.on .ic { color: var(--gcc, var(--accent-2)); }
-/* a light: its picture over its name (a wide, low box: side by side) */
+/* a light: its picture over its name (a wide, low box: side by side) — no box around it, on or off */
 .bk-light { cursor: pointer; border-radius: 14px; }
-.bk-light.on { background: rgba(var(--glass-rgb), .45); box-shadow: inset 0 0 0 1px var(--gcc, var(--accent)); }
 .bk-lt { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-align: center; min-width: 0; }
-.bk-lt > :is(svg.ic, .gc-up) { flex: none; width: auto !important; height: min(52cqh, 60cqw) !important; aspect-ratio: 1; }
-.bk-lt > .gc-art { flex: none; width: auto !important; height: min(56cqh, 52cqw) !important; aspect-ratio: 1.6 / 1.85; }
+.bk-lt > :is(svg.ic, .gc-up, .gc-art) { flex: none; max-width: 100%; max-height: 70%; }
 .bk-lt > div { min-width: 0; max-width: 100%; }
-/* (names get smaller with a narrow box before they're cut, and break between words — inside a word only when one word alone is too wide) */
-.bk-lt b { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: clamp(10px, min(14cqh, 11cqw), 22px); line-height: 1.15; overflow: hidden; overflow-wrap: break-word; hyphens: auto; }
-.bk-lt small { color: var(--muted); font-size: clamp(9px, min(12cqh, 10cqw), 17px); }
+/* (names break between words — inside a word only when one word alone is too wide) */
+.bk-lt b { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 16px; line-height: 1.15; overflow: hidden; overflow-wrap: break-word; hyphens: auto; }
+.bk-lt small { color: var(--muted); font-size: 13px; }
 @container (min-aspect-ratio: 2 / 1) {
   .bk-lt { flex-direction: row; justify-content: flex-start; text-align: left; gap: 8px; }
-  .bk-lt > :is(svg.ic, .gc-up) { height: min(80cqh, 34cqw) !important; } .bk-lt > .gc-art { height: min(86cqh, 30cqw) !important; }
-  .bk-lt b { font-size: clamp(11px, 28cqh, 22px); -webkit-line-clamp: 1; } .bk-lt small { font-size: clamp(10px, 24cqh, 16px); }
+  .bk-lt > :is(svg.ic, .gc-up, .gc-art) { max-height: 100%; }
+  .bk-lt b { -webkit-line-clamp: 1; }
 }
-/* a switch / a lock: the Picture & values rows, as big as the box lets them (the toggle and the track in em) */
-.bk-p > .sp-r { width: 100%; height: 100%; font-size: clamp(11px, 34cqh, 26px); }
+/* a switch / a lock: the Picture & values rows (the toggle and the track in em) */
+.bk-p > .sp-r { width: 100%; height: 100%; font-size: 16px; }
 .bk-p > .sp-r .sp-tg { width: 2.4em; height: 1.35em; border-radius: .7em; }
 .bk-p > .sp-r .sp-tg::after { width: 1em; height: 1em; left: .18em; top: .18em; }
 .bk-p > .sp-sw.on .sp-tg::after { transform: translateX(1.05em); }
@@ -1066,35 +1070,153 @@ main.roomview.lay-custom { display: grid; gap: var(--g-gap, 14px); padding-top: 
 .bk-p > .sp-r .sp-trk .lk-thumb .ic { width: 60%; height: 60%; }
 /* a value / a door: its name over the reading (a wide, low box: side by side, like a row) */
 .bk-v { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; text-align: center; min-width: 0; }
-.bk-v > span { color: var(--muted); font-size: clamp(9px, min(16cqh, 8cqw), 18px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.bk-v > b { font-size: clamp(11px, min(40cqh, 20cqw), 64px); font-weight: 600; white-space: nowrap; line-height: 1.1; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-.bk-dr > .ic { flex: none; width: auto; height: min(34cqh, 40cqw); color: var(--muted); }
+.bk-v > span { color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.bk-v > b { font-size: 28px; font-weight: 600; white-space: nowrap; line-height: 1.1; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.bk-dr > .ic { flex: none; color: var(--muted); }
 .bk-v.warn > b, .bk-v.warn > .ic { color: var(--warn); }
 @container (min-aspect-ratio: 3 / 1) {
   .bk-v { flex-direction: row; justify-content: space-between; gap: 8px; text-align: left; }
-  .bk-v > span { flex: 1; font-size: clamp(10px, 34cqh, 18px); } .bk-v > b { font-size: clamp(12px, 46cqh, 40px); }
-  .bk-dr > .ic { height: min(60cqh, 24px); }
+  .bk-v > span { flex: 1; } .bk-v > b { font-size: 24px; }
 }
-/* a garage: its doors as big as the box allows; a tap on a door opens / closes it */
+/* a garage: its doors at their own size (kept inside the box); a tap on a door opens / closes it */
 .bk-gar { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0; }
-.bk-gar > svg.ic { flex: none; height: 76cqh !important; width: auto !important; max-width: 100%; }
+.bk-gar > svg.ic { flex: none; max-height: 100%; max-width: 100%; }
 .bk-gar [data-gdoor] { cursor: pointer; }
 .bk-garage.on small { color: var(--warn); }
+/* (v3.0.5) a piece from before 3.0.5 ("fit": "box", service/blank_card.py marks them): what's in it still fills its box
+   as it did then — the 3.0.4 sizes, by the box (cqh / cqw), and a light's box when on — so an older card looks the same */
+.bk-p.fit-box .bk-pic > :is(svg.ic, .gc-up) { width: auto !important; height: min(100cqh, 100cqw) !important; max-width: none; max-height: none; aspect-ratio: 1; }
+.bk-p.fit-box .bk-pic > .gc-art { width: auto !important; height: min(100cqh, 100cqw * 1.85 / 1.6) !important; max-width: none; max-height: none; aspect-ratio: 1.6 / 1.85; }
+.bk-p.fit-box.bk-icon > small, .bk-p.fit-box .bk-gar > small { font-size: clamp(11px, 14cqh, 18px); }
+.bk-p.fit-box.bk-light.on { background: rgba(var(--glass-rgb), .45); box-shadow: inset 0 0 0 1px var(--gcc, var(--accent)); }
+.bk-p.fit-box .bk-lt > :is(svg.ic, .gc-up) { width: auto !important; height: min(52cqh, 60cqw) !important; max-width: none; max-height: none; aspect-ratio: 1; }
+.bk-p.fit-box .bk-lt > .gc-art { width: auto !important; height: min(56cqh, 52cqw) !important; max-width: none; max-height: none; aspect-ratio: 1.6 / 1.85; }
+.bk-p.fit-box .bk-lt b { font-size: clamp(10px, min(14cqh, 11cqw), 22px); }
+.bk-p.fit-box .bk-lt small { font-size: clamp(9px, min(12cqh, 10cqw), 17px); }
+.bk-p.fit-box > .sp-r { font-size: clamp(11px, 34cqh, 26px); }
+.bk-p.fit-box .bk-v > span { font-size: clamp(9px, min(16cqh, 8cqw), 18px); }
+.bk-p.fit-box .bk-v > b { font-size: clamp(11px, min(40cqh, 20cqw), 64px); }
+.bk-p.fit-box .bk-dr > .ic { width: auto; height: min(34cqh, 40cqw); }
+.bk-p.fit-box .bk-gar > svg.ic { height: 76cqh !important; width: auto !important; max-height: none; }
+@container (min-aspect-ratio: 2 / 1) {
+  .bk-p.fit-box .bk-lt > :is(svg.ic, .gc-up) { height: min(80cqh, 34cqw) !important; } .bk-p.fit-box .bk-lt > .gc-art { height: min(86cqh, 30cqw) !important; }
+  .bk-p.fit-box .bk-lt b { font-size: clamp(11px, 28cqh, 22px); } .bk-p.fit-box .bk-lt small { font-size: clamp(10px, 24cqh, 16px); }
+}
+@container (min-aspect-ratio: 3 / 1) {
+  .bk-p.fit-box .bk-v > span { font-size: clamp(10px, 34cqh, 18px); } .bk-p.fit-box .bk-v > b { font-size: clamp(12px, 46cqh, 40px); }
+  .bk-p.fit-box .bk-dr > .ic { height: min(60cqh, 24px); }
+}
 /* text: as typed (live values filled in), its size from the piece's settings */
-.bk-tx { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; line-height: 1.25; overflow: hidden; }
+.bk-tx { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 6px; line-height: 1.25; overflow: hidden; }
 .bk-tx > div { overflow-wrap: break-word; hyphens: auto; }
+/* (v3.0.5) a Text card moved over: its heading (as a card's title) and icon; over the whole card it keeps the card's
+   padding and starts at the top, as the Text card did */
+.bk-th { font-size: 15px; font-weight: 400; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.bk-tx > .ic { flex: none; color: var(--gcc, var(--accent-2)); }
+.bk-p.bk-full { padding: 14px 18px; }
+.bk-full > .bk-tx { justify-content: flex-start; }
+/* (v3.0.5) "Grow and shrink with the card" on a piece: what's in it drawn at --pg of its own size, filling the piece */
+.bk-p.bk-g { padding: 0; }
+.bk-z { position: absolute; left: 0; top: 0; box-sizing: border-box; width: calc(100% / var(--pg, 1)); height: calc(100% / var(--pg, 1)); padding: 3px 6px;
+  transform: scale(var(--pg, 1)); transform-origin: 0 0; container-type: size; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 0; }
+/* (v3.0.5) a device piece (grid.js dvItem bk): a Devices item with no box and no border, on or off. Its icon background —
+   Circle, Rounded square or None — is sized to the larger side of the drawing (--disc) and centered; its color (--dvb,
+   else white when off / the on color when on) at its transparency (--dva). The icon is white unless the owner picks
+   (--dvi; "Automatic": gray off, white on as before); the name's color --dvn, readable on and off. */
+.bk-dev { padding: 2px; }
+.dv-it.dv-pc { width: 100%; height: 100%; padding: 4px 6px; border-radius: 0; background: none; box-shadow: none; }
+.dv-it.dv-pc.on { background: none; box-shadow: none; }
+.dv-pc .dv-ic { position: relative; isolation: isolate; width: var(--disc, 52px); height: var(--disc, 52px); background: none; color: var(--muted); }
+.dv-pc .dv-ic::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--dvb, rgba(255, 255, 255, .1)); opacity: var(--dva, 1); transition: background .2s; }
+.dv-pc.on .dv-ic { background: none; color: #fff; }
+.dv-pc.on .dv-ic::before { background: var(--dvb, var(--dc, var(--gcc, var(--accent)))); }
+.dv-pc.icc .dv-ic, .dv-pc.icc.on .dv-ic { color: var(--dvi); }
+.dv-pc.sh-circle .dv-ic { border-radius: 50%; }
+.dv-pc.sh-rounded .dv-ic { border-radius: 26%; }
+.dv-pc.sh-none .dv-ic::before { display: none; }
+.dv-pc.sh-none.on .dv-ic { filter: drop-shadow(0 0 6px var(--dc, var(--gcc, var(--accent-2)))); }
+/* (no square or chip behind a drawing or a moving icon: the background above is the only one) */
+.dv-pc .dv-ic .gc-art > *, .dv-pc .dv-ic .rlG-solo { background: none !important; box-shadow: none !important; border: 0 !important; }
+.dv-pc .mo, .dv-pc .mo.run { background: none; } .dv-pc .mo::before { display: none; }
+.dv-pc.icc .mo { color: var(--dvi); }
+.dv-pc .dv-n { color: var(--dvn, var(--text)); text-shadow: 0 1px 3px rgba(0, 0, 0, .45); }
+.dv-pc .dv-s { color: var(--dvn, var(--muted)); }
+.dv-pc[style*="--dvn"] .dv-s { opacity: .8; }
+/* (v3.0.5) a piece's name is never cut off: two lines first (more in a tall, narrow piece), then grid.js fitLabels makes
+   its letters smaller until it fits — only past its smallest size does the last line end in "…" */
+.dv-pc .dv-n, .bk-p .bk-lt b, .bk-p .bk-v > span { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  overflow-wrap: break-word; line-height: 1.15; }
+.bk-p > .sp-r > span { flex: 1 1 0; min-width: 2.5em; white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow-wrap: break-word; line-height: 1.15; }
+.bk-p > .sp-lk > span { max-width: none; }
+/* (v3.0.5) a switch / lock piece taller than wide (a 3.0.4 one on a portrait screen): its name above the toggle or the
+   lock's words — side by side the toggle took the whole width and left the name 2 px; its size by the narrower side too */
+.bk-p.fit-box > .sp-r { font-size: clamp(11px, min(34cqh, 13cqw), 26px); }
+@container (max-aspect-ratio: 1 / 1) {
+  .bk-p > .sp-r { flex-direction: column; justify-content: center; text-align: center; gap: 6px; }
+  .bk-p > .sp-r > span { flex: none; max-width: 100%; min-width: 0; }
+  .bk-p > .sp-r > .sp-trk { flex: none; width: 100%; min-width: 0; }
+}
+/* (v3.0.5) a Devices list too long for its card, moved over (service/blank_card.py marks its rows "fit": "box"): the icon
+   disc and the words sized to the row, as the old card squeezed them — never cut off (one line and no state in a short row) */
+.bk-p.fit-box > .dv-pc { padding: 1px 4px; gap: 8px; }
+.bk-p.fit-box .dv-pc .dv-ic { zoom: 1; width: calc(min(var(--disc, 52px), 100cqh - 2px) * var(--fk, 1)); height: calc(min(var(--disc, 52px), 100cqh - 2px) * var(--fk, 1)); }
+.bk-p.fit-box .dv-pc .dv-ic > :is(svg.ic, .mo) { zoom: 1; width: 60%; height: 60%; }
+.bk-p.fit-box .dv-pc .dv-ic > :is(.gc-art, .gc-up) { zoom: 1; max-width: 92%; max-height: 92%; }
+.bk-p.fit-box .dv-pc .dv-tx { zoom: 1; }
+.bk-p.fit-box .dv-pc .dv-n { font-size: clamp(9px, 34cqh, 17px); }
+.bk-p.fit-box .dv-pc .dv-s { font-size: clamp(8px, 26cqh, 14px); }
+@container (max-height: 40px) {
+  .bk-p.fit-box .dv-pc .dv-s { display: none; }
+  .bk-p.fit-box .dv-pc .dv-n { font-size: clamp(9px, 62cqh, 17px); -webkit-line-clamp: 1; }
+}
+/* an old card's look kept (3.0.4 moved it over): drawn by that card's code, filling the piece */
+.bk-old { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .gr.gr-col { flex-direction: column; justify-content: center; text-align: center; gap: 4px; padding: 8px; }
 /* room tile chips, system status, photos, batteries, power, the light bar */
 .gc-rchips { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
 .gc-rchips i { display: inline-flex; align-items: center; gap: 3px; font-style: normal; font-size: 13px; color: var(--muted); padding: 2px 8px; border-radius: 999px; background: rgba(255, 255, 255, .07); }
 .gc-rchips i.w { color: var(--warn); }
-.gc-st { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 8px 16px; }
-.st-row { display: flex; align-items: center; gap: 10px; } .st-row b { font-size: 16px; } .st-row small { margin-left: auto; color: var(--muted); }
-.st-row > i { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); } .st-row > i.bad { background: var(--bad); }
-.gc-ph { position: absolute; inset: 0; background: #000; }
-.gc-ph img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: var(--fit, cover); opacity: 0; transition: opacity 1.2s; }
-.gc-ph img.on { opacity: 1; }
+/* (v3.0.5) the System card's rows (mockups/prototypes/cards-editor.html, System): the name over its words, an OK / Trouble pill */
+.gc-st { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 6px 16px; overflow-y: auto; }
+.st-row { flex: none; display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, .05); }
+.st-row:first-child { margin-top: auto; } .st-row:last-child { border-bottom: 0; margin-bottom: auto; }   /* (centered while they fit; a long list scrolls from its top) */
+.st-tx { flex: 1; min-width: 0; } .st-tx b { display: block; font-size: 16px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-tx small { display: block; font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-row.bad .st-tx small { color: #fda4af; }
+.st-pill { flex: none; padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.st-pill.ok { color: var(--ok); background: rgba(52, 211, 153, .12); } .st-pill.bad { color: #fda4af; background: rgba(251, 113, 133, .14); }
+/* (v3.0.5) the slide-show engine (slideshow.js): the Slide show / Picture card, the rotating background, the
+   screensaver. Two layers at most (the picture and the next); transitions move only transform / opacity */
+.gc-ph { position: absolute; inset: 0; background: #000; overflow: hidden; }
+.ss-box { overflow: hidden; contain: strict; }
+.ss-ly { position: absolute; inset: 0; overflow: hidden; backface-visibility: hidden; }
+.ss-ly > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: var(--ss-fit, cover); object-position: center; display: block; user-select: none; -webkit-user-drag: none; }
+.ss-ly.ss-mask > img { right: auto; bottom: auto; }
+/* Whole picture: the same picture blurred behind it (drawn once, not per frame; none on an old & slow tablet) */
+.ss-bb { position: absolute; inset: -6%; background-size: cover; background-position: center; filter: blur(22px) brightness(.7); }
+.ss-circle { border-radius: 50%; }
+.ss-star { clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }
+.ss-fx { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.ss-ly > .ss-fx { z-index: 1; }
+.ss-shade, .ss-black { background: #000; }
+.ss-white { background: #fff; }
+.ss-leak { left: -40%; right: -40%; background: radial-gradient(42% 85% at 50% 50%, rgba(255, 246, 214, .95), rgba(255, 170, 70, .8) 32%, rgba(255, 70, 120, .4) 58%, rgba(255, 70, 120, 0) 76%); }
+.ss-note { position: absolute; left: 8px; bottom: 8px; z-index: 4; padding: 3px 8px; border-radius: 99px; font-size: 12px; background: rgba(0, 0, 0, .55); color: #fff; }
+.ss-note[hidden] { display: none; }
+/* the screensaver: over everything; a tap wakes the panel (and is not passed on) */
+.ss-saver { position: fixed; inset: 0; z-index: 9000; background: #000; cursor: none; touch-action: none; }
+.ss-full { position: absolute; inset: 0; }
+.ss-clock { position: absolute; z-index: 5; color: #fff; text-shadow: 0 2px 12px rgba(0, 0, 0, .6); pointer-events: none; font-weight: 300; }
+.ss-clock small { font-size: .45em; margin-left: .2em; opacity: .85; }
+.ss-clock.corner { right: 28px; bottom: 22px; font-size: 44px; }
+.ss-clock.big { left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center; font-size: min(18vw, 200px); }
+/* a page's or the panel's rotating background pictures: over the landscape, under the cards */
+.bg-show { position: absolute; inset: 0; background: #000; }
+.bg-show .bg-dim { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
 .gc-bat.warn .ic { color: var(--warn); } .gc-bat.bad .ic { color: var(--bad); }
+/* (v3.0.5) a Batteries card's list: a scroll bar when it's longer than the card (never shrinks); a fine one is calm */
+.gc-devs.gc-bats { overflow-y: auto; } .gc-bat.ok .ic { color: var(--ok, #4ade80); opacity: .8; }
 .gc-pw { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 6px 16px 12px; }
 .gc-pwt { font-size: 34px; font-weight: 300; } .gc-pwt small { font-size: 14px; color: var(--muted); margin-left: 8px; }
 .gc-pwr { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 15px; }
@@ -1218,6 +1340,11 @@ body.benching #main, body.benching .dock { display: none; }
 .ls-add select { padding: 8px; border-radius: 10px; background: rgba(255, 255, 255, .07); color: var(--text); border: 1px solid var(--glass-line); }
 .ls-add > button { width: 42px; height: 40px; border-radius: 12px; background: var(--accent-grad); color: #fff; font-size: 22px; padding: 0; }
 .ls-add > button.ls-clr { width: auto; padding: 0 12px; font-size: 13px; background: rgba(255, 255, 255, .1); color: var(--muted); }
+/* (v3.0.5) a list's quick-add chips: a tap adds the item */
+/* (v3.0.5) a 44 px touch target that stays one when the card is scaled down to fit (--gfit, as the weather buttons) */
+.ls-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 12px 0; }
+.ls-chip { min-height: max(44px, calc(44px / var(--gfit, 1))); padding: 0 calc(12px / var(--gfit, 1)); border-radius: 999px; background: rgba(255, 255, 255, .1); border: 1px solid var(--glass-line); color: var(--text); font-size: 14px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls-chip:disabled { opacity: .55; }   /* (v3.0.5: just tapped — locked a moment) */
 .nt-board { flex-direction: row; flex-wrap: wrap; align-content: flex-start; gap: 8px; }
 .nt { position: relative; flex: 1 1 140px; max-width: 240px; min-height: 80px; padding: 12px 26px 12px 12px; border-radius: 6px; font-size: 16px; line-height: 1.3;
   color: #2a2116; box-shadow: 3px 4px 0 rgba(0, 0, 0, .25); overflow-wrap: anywhere; }
@@ -1407,6 +1534,8 @@ html.dock-off #dock { display: none !important; }
 html.dock-off { --dock-b: 0px; --dock-t: 0px; --dock-l: 0px; --dock-r: 0px; }
 /* (no room bar: the settings gear sits in the bottom-right corner — the page keeps its 44 px + margins clear there) */
 html.dock-off main.home, html.dock-off main.roomview { padding-bottom: 68px; }
+/* (v3.0.5: and with the Edge margin set — the gear's corner stays clear whatever the margin) */
+html.dock-off main.home.lay-custom.fine.edge, html.dock-off main.roomview.lay-custom.fine.edge { padding-bottom: max(var(--g-edge, 16px), 68px); }
 /* calendars: one that never worked, or more events than one answer carries (data.js Home.calNote) */
 .cal-note { font-size: 12px; color: var(--muted); padding: 4px 2px 0; }
 .cal-more.in { flex: none; margin-left: auto; padding: 0; }   /* ("+2 more today" at the end of the last row shown: UI.fitCal) */
@@ -1747,7 +1876,7 @@ html.dock-autohide.dock-bottom #dock.dock.collapsed { left: 50%; right: auto; to
 html.dock-autohide.dock-top #dock.dock.collapsed { left: 50%; right: auto; top: calc(12px + var(--st-h, 0px)); bottom: auto; transform: translateX(-50%); }
 html.dock-autohide.dock-left #dock.dock.collapsed { top: calc(50% + var(--st-h, 0px) / 2); bottom: auto; left: 12px; right: auto; transform: translateY(-50%); }
 html.dock-autohide.dock-right #dock.dock.collapsed { top: calc(50% + var(--st-h, 0px) / 2); bottom: auto; left: auto; right: 12px; transform: translateY(-50%); }
-html.dock-autohide #dock.dock.collapsed > :not(.dock-handle) { display: none; }
+html.dock-autohide #dock.dock.collapsed > :not(.dock-handle):not(.dock-hhome) { display: none; }   /* (v3.0.5: and its Home button) */
 html.dock-autohide #dock.dock.collapsed > .dock-handle { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: 10px; width: auto; height: 56px;
   padding: 6px 16px 6px 6px; border-radius: 28px; color: var(--text); background: none; font-size: 16px; }
 html.dock-autohide:is(.dock-left, .dock-right) #dock.dock.collapsed > .dock-handle { flex-direction: column; width: 60px; height: auto; padding: 6px 6px 14px; gap: 8px; }
@@ -1842,6 +1971,8 @@ main * { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .22) transp
      scrolled — the page scrolls under it on a phone (app.js html.page-scrolled) */
   #ver-tag { top: calc(var(--dock-t, 0px) + var(--st-h, 0px) + 4px) !important; bottom: auto !important; left: auto !important; right: 10px !important; transition: opacity .2s; }
   html.page-scrolled #ver-tag { opacity: 0 !important; }
+  /* (v3.0.5) with Back on a room page: left of it, above the badge and the pill */
+  html.has-back #ver-tag { top: calc(var(--dock-t, 0px) + var(--st-h, 0px) + 2px) !important; right: var(--bk-r) !important; }   /* (v3.0.5: over the row left of Back) */
   main.home.lay-custom, main.roomview.lay-custom { padding-top: 26px !important; }   /* (room for the version tag over the first card) */
 
   /* the Guest Wi-Fi card: a smaller code, the network's name wrapping (two lines, then …) instead of cut to "Mulde…" */
@@ -1864,6 +1995,10 @@ main * { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .22) transp
   html:not(.design) main.lay-custom > .gc:is(.gc-thermostat) { height: 360px; }
   html:not(.design) main.lay-custom > .gc:is(.gc-calendar) { height: 480px; }
   html:not(.design) main.lay-custom > .gc:is(.gc-roomhead) { height: auto; min-height: 90px; }
+  /* (v3.0.5) a blank card holding a long list moved over (grid.js blank: its rows marked "fit": "box"): room for its rows */
+  html:not(.design) main.lay-custom > .gc.bkh-m { height: 380px; }
+  html:not(.design) main.lay-custom > .gc.bkh-l { height: 560px; }
+  html:not(.design) main.lay-custom > .gc.bkh-xl { height: 780px; }
 }
 
 /* ---------- guest lockdown (v2.7.2, guestlock.js): over the page, the dock, a full-screen camera and Settings (95);
@@ -2046,14 +2181,16 @@ html.sky-light .clockbox::before { content: ""; position: absolute; inset: -18px
 .um-core { fill: rgba(22,14,54,.92); stroke: var(--c-node); stroke-width: 1.6; stroke-opacity: .6; }
 .um-nd .ic { color: #ece6ff; }
 .um-st { stroke: rgba(22,14,54,.9); stroke-width: 2; fill: var(--c-ok); } .um-st.warn { fill: var(--c-warn); } .um-st.bad { fill: var(--c-bad); }
-.um-n { font-size: 14px; font-weight: 600; fill: var(--text); } .um-s { font-size: 12px; fill: var(--muted); }
+.um-n { font-size: 13.5px; font-weight: 600; fill: var(--text); } .um-s { font-size: 11.5px; fill: var(--muted); }
 /* (v3.0.4) the orbs: HTML dots moved by composited transforms (unifi.js fitOrbs) — paused off screen / page hidden */
 .um-orbs { position: absolute; left: 0; top: 0; transform-origin: 0 0; pointer-events: none; }
 .um-o { position: absolute; left: -3.6px; top: -3.6px; width: 7.2px; height: 7.2px; border-radius: 50%; background: var(--c-orb); will-change: transform;
   box-shadow: 0 0 calc(4px + var(--glow, .6) * 10px) calc(1px + var(--glow, .6) * 3px) var(--c-orb);
   box-shadow: 0 0 calc(4px + var(--glow, .6) * 10px) calc(1px + var(--glow, .6) * 3px) color-mix(in srgb, var(--c-orb) 55%, transparent); }
 .um-o.w { left: -3px; top: -3px; width: 6px; height: 6px; }
-.un-mapbox.still .um-o, .un-hidden .um-o { animation-play-state: paused !important; }
+/* (v3.0.5) um-still: its own name (never the global .still); the port tags hidden while a part is dragged */
+.un-mapbox.um-still .um-o, .un-hidden .um-o { animation-play-state: paused !important; }
+.un-mapbox.um-drag .um-plab { display: none; }
 @media (prefers-reduced-motion: reduce) { .um-orbs { display: none; } }
 .um-plab rect { fill: rgba(22,14,54,.88); stroke: rgba(255,255,255,.12); } .um-plab text { font-size: 11px; fill: var(--muted); }
 .un-mleg { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; color: var(--muted); flex: none; } .un-mleg span { display: inline-flex; align-items: center; gap: 5px; }
@@ -2061,6 +2198,71 @@ html.sky-light .clockbox::before { content: ""; position: absolute; inset: -18px
 .un-mleg i.dw { background: repeating-linear-gradient(90deg, var(--c-wifi) 0 3px, transparent 3px 7px); }
 .un-mleg i.di { background: repeating-linear-gradient(90deg, var(--c-idle) 0 4px, transparent 4px 8px); }
 .un-mleg i.db { background: repeating-linear-gradient(90deg, var(--c-bad) 0 4px, transparent 4px 8px); }
+/* (v3.0.5) the map uses the whole card (network-map-305.html): drawn in the card's own pixels, its title and legend over
+   it; the parts follow the card's Style Icon / Text size (unifi.js mapSizes), the title its own sizes — not the card zoom */
+.gc-netmap .gc-in { zoom: 1; }
+.un-t-map { padding: 0; }
+.un-t-map .un-mapbox { position: absolute; inset: 0; flex: none; border-radius: inherit; }
+.un-t-map .un-mhd { position: relative; z-index: 2; padding: 10px 14px 0; pointer-events: none; }
+.un-t-map .un-mleg { position: absolute; left: 14px; right: 14px; bottom: 8px; z-index: 2; pointer-events: none; }
+.un-t-map .un-mapbox.arr { outline-offset: -4px; border-radius: 14px; }
+.un-t-map .un-mpop { top: 44px; max-height: calc(100% - 52px); }
+.um-orbs .um-o { width: calc(7.2px * var(--oz, 1)); height: calc(7.2px * var(--oz, 1)); left: calc(-3.6px * var(--oz, 1)); top: calc(-3.6px * var(--oz, 1)); }
+.um-orbs .um-o.w { width: calc(6px * var(--oz, 1)); height: calc(6px * var(--oz, 1)); left: calc(-3px * var(--oz, 1)); top: calc(-3px * var(--oz, 1)); }
+/* (v3.0.5) UPS / battery backup (unifi.js R.netups; unifi-v2.html "UPS") */
+.un-ups-st { display: inline-flex; align-items: center; gap: .45em; font-weight: 600; white-space: nowrap; }
+.un-ups-st .un-dot { width: .65em; height: .65em; }
+.un-ups-st.mains { color: var(--c-mains); } .un-ups-st.mains .un-dot { background: var(--c-mains); }
+.un-ups-st.batt { color: var(--c-batt); } .un-ups-st.batt .un-dot { background: var(--c-batt); animation: un-blink 1s infinite; }
+.un-ups-st.low { color: var(--c-low); } .un-ups-st.low .un-dot { background: var(--c-low); animation: un-blink .5s infinite; }
+@keyframes un-blink { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .un-ups-st .un-dot { animation: none !important; } }
+.un-upsa { display: flex; align-items: center; gap: 18px; min-width: 0; flex: none; }
+.un-upsn { display: grid; gap: 2px; min-width: 0; font-size: 1.1em; } .un-upsn small, .un-upsbr small { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.un-batt { position: relative; flex: none; width: 112px; height: 54px; border: 3px solid rgba(255,255,255,.5); border-radius: 10px; padding: 4px; }
+.un-batt::after { content: ""; position: absolute; right: -9px; top: 15px; width: 6px; height: 18px; border-radius: 0 4px 4px 0; background: rgba(255,255,255,.5); }
+.un-batt i { display: block; height: 100%; border-radius: 5px; background: var(--c-fill); }
+.un-batt.low i { background: var(--c-low); }
+.un-batt span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 19px; font-weight: 700; text-shadow: 0 1px 4px rgba(0,0,0,.55); }
+.un-upst { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; flex: none; }
+.un-upst .un-tv { font-size: 1.35em; }
+.un-upsb { display: flex; align-items: flex-end; gap: 12px; flex: none; min-width: 0; }
+.un-upsbig { font-size: 3em; font-weight: 700; line-height: 1; } .un-upsbig u { text-decoration: none; font-size: .45em; color: var(--muted); margin-left: 2px; }
+.un-upsbr { margin-left: auto; display: grid; justify-items: end; gap: 2px; min-width: 0; }
+.un-upsrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
+.un-upsrow .un-rn { display: flex; align-items: center; gap: 8px; min-width: 0; } .un-upsrow .un-rn b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.un-upsrow .un-bar { grid-column: 1 / -1; height: 6px; }
+/* (v3.0.5) a UPS that isn't answering: its last charge, runtime and load grayed (unifi.js upsOld) */
+.un-old { color: var(--muted) !important; opacity: .55; filter: grayscale(1); }
+.un-batt.un-old > i, .un-stale .un-bar > i { background: var(--muted) !important; opacity: .5; }
+.un-num { font-variant-numeric: tabular-nums; text-align: right; }
+/* (v3.0.5) Doorbell (R.netbell: A picture and buttons, B compact, C picture only) */
+.un-bpic { position: relative; display: block; padding: 0; border: 0; border-radius: 14px; overflow: hidden; background: rgba(0,0,0,.35); cursor: pointer; color: inherit; min-height: 0; }
+.un-bpic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.un-bpic.big { flex: 1 1 auto; min-height: 60px; } .un-bpic.sm { flex: none; width: 9.5em; height: 6.2em; }
+.un-bpic.full { position: absolute; inset: 0; border-radius: inherit; }
+.un-bnone { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 4px; color: var(--muted); font-size: 12px; }
+.un-blive { position: absolute; left: 8px; top: 8px; }
+.un-bmsgs { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; flex: none; }
+.un-bmsgs button { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 8px 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.06); color: inherit; font: inherit; font-size: 13px; cursor: pointer; text-align: left; }
+.un-bmsgs button.on { border-color: var(--c-acc); background: color-mix(in srgb, var(--c-acc) 22%, transparent); }
+.un-bmsgs.chips { display: flex; flex-wrap: wrap; } .un-bmsgs.chips button { border-radius: 999px; padding: 4px 12px; }
+.un-blcd { font-size: 12px; flex: none; }
+.un-bb { display: flex; gap: 12px; align-items: center; flex: none; min-width: 0; } .un-bb > div { display: grid; gap: 2px; min-width: 0; } .un-bb b { font-size: 1.1em; }
+.un-bfull { position: absolute; inset: 0; }
+.un-t-bell.un-c { padding: 0; }
+.un-bcap { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 16px; display: grid; gap: 2px; pointer-events: none; background: linear-gradient(transparent, rgba(8,4,24,.7)); }
+.un-bcap b { font-size: 1.2em; } .un-bcap small { font-size: 13px; color: #e8e2ff; }
+/* (v3.0.5) the Doorbell's own error pill; the big view (look C's tap) */
+.un-bcap .un-berr { justify-self: start; margin-bottom: 4px; } .un-hr .un-berr { margin-right: 6px; }
+.un-bpop { display: grid; gap: 12px; font-size: 15px; } .un-bpop .un-berr { margin-right: 6px; }
+.un-bpic.pop { width: 100%; aspect-ratio: 16 / 9; max-height: 56vh; }
+.un-bpill { position: absolute; right: 12px; top: 12px; background: rgba(10,6,30,.6); display: inline-flex; align-items: center; gap: 5px; pointer-events: none; }
+.un-pill.un-ringing, .un-t-bell .un-pill { display: inline-flex; align-items: center; gap: 4px; }
+.un-pill.un-ringing { background: color-mix(in srgb, var(--c-ring) 25%, transparent); color: var(--c-ring); }
+/* (v3.0.5) Activity feed (R.netfeed) */
+.un-fcnt { display: flex; flex-wrap: wrap; gap: 6px; flex: none; }
+.un-fi.join { color: var(--c-join); } .un-fi.leave { color: var(--c-leave); } .un-fi.alert { color: var(--c-alert); } .un-fi.ok { color: var(--c-ok); }
 .un-arr { color: #fcd34d; }
 .un-mpop { position: absolute; right: 8px; top: 8px; z-index: 4; width: min(300px, 80%); max-height: calc(100% - 16px); overflow-y: auto; display: flex; flex-direction: column; gap: 4px;
   padding: 12px 14px; border-radius: 16px; background: var(--glass-strong); box-shadow: 0 10px 34px rgba(0,0,0,.45); backdrop-filter: blur(10px); }
@@ -2129,3 +2331,64 @@ html.sky-light .clockbox::before { content: ""; position: absolute; inset: -18px
   box-shadow: 0 10px 34px rgba(0,0,0,.45); backdrop-filter: blur(10px); text-align: left; border: 1px solid var(--glass-line); }
 .net-note b { display: block; font-size: 15px; } .net-note small { display: block; font-size: 12px; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .net-note { transition: none; } }
+
+/* (v3.0.5) the room history's Back button (app.js backBtn): top right on a room page, where it goes in small letters;
+   the classic room page's clock moves left of it */
+#room-back { position: fixed; z-index: 30; top: calc(14px + var(--st-h, 0px) + var(--dock-t, 0px)); right: calc(18px + var(--dock-r, 0px));
+  display: flex; align-items: center; gap: 6px; height: 48px; padding: 0 16px 0 10px; border-radius: 24px; border: 1px solid var(--glass-line);
+  background: var(--glass-strong); color: var(--text); font: inherit; font-size: 16px; font-weight: 600; box-shadow: 0 8px 26px rgba(5, 2, 20, .35);
+  backdrop-filter: blur(10px); max-width: min(190px, 46vw); }   /* (v3.0.5: 190 px at most — a long name ellipsizes, its title shows it all) */
+#room-back span { flex: none; }
+#room-back small { font-size: 13px; font-weight: 400; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+#room-back[hidden] { display: none; }
+html.has-back main.roomview:not(.lay-custom) .room-head { padding-right: 220px; }
+/* (v3.0.5) the page starts under Back: room layouts A–G (their headers hold the clock) and a room's own grid of cards */
+html.has-back main.roomlayout { padding-top: 72px; }
+html.has-back main.roomview.lay-custom { padding-top: 72px !important; }
+/* (v3.0.5) the other top-right things go in one row left of Back, in the strip the page leaves free above itself (72 px):
+   the child lock's badge, then "New version · Refresh", then the version tag over them — under Back they covered the
+   room's clock and "All off" (layouts A–G), and each other on a phone. --bk-w: Back's widest (its max-width above) */
+html.has-back { --bk-w: min(190px, 46vw); --bk-r: calc(18px + var(--dock-r, 0px) + var(--bk-w) + 8px); }
+html.has-back .lock-badge { top: calc(20px + var(--st-h, 0px) + var(--dock-t, 0px)); right: var(--bk-r); bottom: auto; }
+html.has-back .refresh-pill { top: calc(18px + var(--st-h, 0px) + var(--dock-t, 0px)); right: var(--bk-r); padding: 4px 4px 4px 12px; font-size: 14px; }
+html.has-back body.child-locked .refresh-pill { right: calc(var(--bk-r) + 125px); }
+/* (v3.0.5) the version tag, when it sits top right (some room bars, phones): over that row, above Back's top */
+html.has-back.dock-bottom:not(.dock-style-pill) #ver-tag { top: calc(2px + var(--st-h, 0px) + var(--dock-t, 0px)); right: var(--bk-r); }
+/* (v3.0.5) a narrow screen: the badge only its lock, the pill only "Refresh" — the row still fits left of Back */
+@media (max-width: 700px) {
+  html.has-back .lock-badge { font-size: 0; gap: 0; padding: 9px; }
+  html.has-back .refresh-pill > span { display: none; }
+  html.has-back .refresh-pill { padding: 4px; }
+  html.has-back body.child-locked .refresh-pill { right: calc(var(--bk-r) + 44px); }
+}
+/* (v3.0.5) the room layouts' switcher: between the Rounds bar and Back (it scrolls sideways when the layouts don't fit);
+   on a narrow screen it starts at the left edge instead */
+html.has-back #layout-switch { max-width: calc(50% - 130px - 222px - var(--dock-r, 0px)); overflow-x: auto; scrollbar-width: none; }
+html.has-back #layout-switch > * { flex: none; white-space: nowrap; }
+@media (max-width: 900px) {
+  html.has-back #layout-switch { left: 16px; max-width: calc(100% - 16px - 222px - var(--dock-r, 0px)); }
+}
+body.child-locked #room-back { pointer-events: none; opacity: .5; }
+/* (v3.0.5) auto-hide: the Home button next to the security status (the folded bar's left end); only while folded */
+#dock .dock-hhome { display: none; }
+html.dock-autohide #dock.dock.collapsed > .dock-hhome { display: grid; place-items: center; flex: none; width: 44px; height: 44px; margin: 6px 0 6px 6px; border-radius: 50%;
+  border: 0; background: rgba(255, 255, 255, .1); color: var(--text); }
+html.dock-autohide #dock.dock.collapsed > .dock-hhome.cur { background: var(--accent-grad); color: #fff; }
+html.dock-autohide #dock.dock.collapsed { display: flex; align-items: center; }
+html.dock-autohide:is(.dock-left, .dock-right) #dock.dock.collapsed { flex-direction: column; }
+html.dock-autohide:is(.dock-left, .dock-right) #dock.dock.collapsed > .dock-hhome { margin: 6px 6px 0; }
+/* (v3.0.5) a Rooms card of several rooms: a tile each (icon, name, lights on, its chips); a tap opens that room */
+.gc-rooms { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; padding: 10px 12px 12px; overflow: auto; align-content: start; }
+.gc-rooms > button { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-width: 0; padding: 10px 6px;
+  border: 0; border-radius: 14px; background: rgba(255, 255, 255, .07); color: var(--text); font: inherit; text-align: center; }
+.gc-rooms > button.on .ic { color: var(--gcc, var(--accent-2)); }
+.gc-rooms > button span { font-size: 15px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gc-rooms > button small { font-size: 12px; color: var(--muted); }
+.gc-rooms > button .gc-rchips i { font-size: 12px; padding: 1px 6px; }
+.gc-rooms > button .gc-rhid { position: absolute; top: 6px; right: 6px; color: var(--muted); display: grid; }
+.gc-room .gc-in > .gc-t { padding: 12px 16px 0; margin-bottom: 0; }
+/* (v3.0.5) the Notifications list: every open alert (up to 100), scrolling; "+ N more" under it */
+.gc-devs.gc-notes { overflow-y: auto; } .gc-notes > .gc-nt { flex: none; }
+.gc-notes > .gc-more { flex: none; text-align: center; font-size: 13px; color: var(--muted); padding: 4px 0 2px; }
+/* (v3.0.5) the System card: a row that isn't set up (the builder's canvas only) — grayed */
+.st-row.na { opacity: .45; }

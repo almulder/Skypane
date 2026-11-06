@@ -71,6 +71,14 @@ KINDS = {
     "panel.blocked": "panels", "panel.profile": "panels", "panel.accept": "panels", "panel.lock-on-copy": "panels",
     "panel.lock-now": "panels",
     "library.upload": "library", "library.remove": "library", "library.card": "library", "library.card-remove": "library",
+    "folders.add": "library", "folders.remove": "library",   # (v3.0.5) a picture folder added / removed (its name, never its path)
+    # (v3.0.5) the Trash: an item in, back out, deleted for good, emptied, how long it keeps things
+    "trash.put": "library", "trash.restore": "library", "trash.erase": "library", "trash.empty": "library", "trash.keep": "library",
+    # (v3.0.5) a list command — a Hubitat rule's, or the Manager's "Run" — done or refused (its kind and why, never the words)
+    "lists.command": "devices", "lists.command_failed": "devices",
+    # (v3.0.5) the Skypane Helper app: a link code made, the app linked / unlinked, an update asked for and its result
+    "helper.code": "settings", "helper.link": "settings", "helper.unlink": "settings", "helper.ask": "settings", "helper.update": "settings",
+    "helper.cancelCode": "settings",   # (v3.0.5, tester: the link code canceled)
     "device.change": "devices", "device.command": "devices", "device.refused": "devices", "house.mode": "devices", "house.hsm": "devices", "feedback.send": "settings", "camera.add": "cameras", "camera.remove": "cameras", "camera.change": "cameras",
 }
 DATA_KEYS = {"perm", "old", "new", "keys", "panel", "tab", "count", "added", "moved", "removed", "level", "device",

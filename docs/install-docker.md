@@ -182,6 +182,28 @@ tablets).
   variable or port.
 - **Your own OpenWeatherMap key** (3.0.4, optional): **Integrations → Weather → OpenWeatherMap key**. Skypane fetches
   it once for the house every 15 minutes (at most 800 calls a day); the key stays in `private/`.
+- **Picture folders** (3.0.5, optional): slide shows, rotating backgrounds and the screensaver can play photos from a
+  folder on the computer or a NAS share. Mount the share on the host first (Skypane never mounts anything itself —
+  that would need extra rights inside the container), then map it in **read only** under `/pictures` and set
+  `PICTURES_DIR` ([below](#setting-a-container-variable)):
+
+  ```yaml
+      environment:
+        - PICTURES_DIR=/pictures
+      volumes:
+        - /srv/skypane:/data
+        - /mnt/photos:/pictures:ro            # a folder, or a share the host mounted
+        - /mnt/nas/Family:/pictures/Family:ro # more folders: under /pictures
+  ```
+
+  More folders go **under** `/pictures` (Skypane reads only that one root). Because `/pictures` is read only, Docker
+  can't make the folder a second mapping lands in: **create that empty folder first** in the first folder on the host
+  (here `mkdir /mnt/photos/Family`), or the container won't start. With no first folder, map a plain empty folder
+  (e.g. `/srv/skypane-pictures`) to `/pictures` and every share under it.
+  (`docker run`: `-e PICTURES_DIR=/pictures -v /mnt/photos:/pictures:ro`.) Then pick the folders in the Manager:
+  **Picture folders → Add a folder**. Skypane reads only JPEG, PNG, WebP and GIF files there, never follows links
+  out of `/pictures`, never changes a file, and sends the tablets smaller copies (cached in the data folder's
+  `cache/`), never the full-size photos. Without `PICTURES_DIR` the feature is off.
 - **Keep it on your home network.** Don't port-forward Skypane to the internet.
 - **Secrets** (the Hubitat token, camera keys) are kept in the data folder's `private/`, never shown again and never
   logged. Back up the whole data folder.

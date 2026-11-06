@@ -25,6 +25,9 @@
   const withEls = (key, nodes) => K.t(key).split(/(\{\w+\})/).filter(Boolean).map((x) => { const m = /^\{(\w+)\}$/.exec(x); return m && nodes[m[1]] ? nodes[m[1]] : x; });
   const ago = (t) => K.ago(t, "short");   // (kit.js: one "time ago" for every page)
   const phone = () => S.isPhone();
+  // (v3.0.5, tester) desktop-first: the layout builder never opens in a window as narrow as a phone's (under 700 px —
+  // shell.js's phone width), a mouse or not — a direct #panels/<id>/layout link too: the Look tab's "on a computer" note
+  const narrow = () => phone() || (window.innerWidth || 1280) < 700;
   const day = (t) => K.when(t / 1000, "date");   // (milliseconds here; kit.js: one date formatter)
   const TABS = [["general", K.t("panels.tab.general"), "settings"], ["look", K.t("panels.tab.look"), "layout"], ["dock", K.t("panels.tab.dock"), "rows"], ["rooms", K.t("panels.tab.rooms"), "home"], ["cameras", K.t("panels.shared.aboutcameras"), "camera"],
     ["people", K.t("panels.tab.people"), "users"], ["alerts", K.t("panels.tab.alerts"), "bell"], ["safety", K.t("panels.tab.safety"), "shield"], ["guest", K.t("panels.tab.guest"), "wifi"],
@@ -59,8 +62,8 @@
   const gone = (v) => v === false || v === "" || (Array.isArray(v) && !v.length) || v == null;
   // (v3.0.2) what a setting that isn't saved means — what the tabs show for it (and the panel does): put back to it, a
   // change leaves the list ("Celsius" and back to "Fahrenheit" on a panel that never had one is no change)
-  const DEF = { "units.temp": "", "units.wind": "", ledStrip: false, pinSound: true, showVersion: true, homeAfter: 0, insideSensor: "panel", notifyLight: 0,
-    alertBeeps: true, alertSilence: false, alertMinLevel: 1, quietLevel4: true, quietFrom: -1, quietTo: -1 };
+  const DEF = { "units.temp": "", "units.wind": "", ledStrip: false, agentNoRoot: false, pinSound: true, showVersion: true, homeAfter: 0, insideSensor: "panel", notifyLight: 0,
+    alertBeeps: true, alertSilence: false, alertMinLevel: 1, quietLevel4: true, quietFrom: -1, quietTo: -1, "look.gentle": "auto" };   // (v3.0.5: "auto" — measured)
   const isSaved = (k, v, saved) => (saved[k] == null ? (k in DEF ? same(v, DEF[k]) : v == null || v === "" || (Array.isArray(v) && !v.length)) : same(v, saved[k]));
   function dropPending() { pend = {}; pendPid = null; }
   // ("This tablet's own light" is two settings — ledStrip on, notifyLight 0 —, one change: counted once)
@@ -819,6 +822,9 @@
       ...G(K.t("panels.gen.thisTablet"), [
         R(K.t("panels.gen.led"), K.t("panels.gen.ledHint"),
           swi("ledStrip", g.ledStrip === true, (on) => keep({ ledStrip: on }), K.t("panels.gen.led"))),   // (v3.0.2: unset = off, as the panel reads it — settings.js; was shown on)
+        // (v3.0.5) the LED agent without root (port 8852): only for a tablet set up that way
+        R(K.t("panels.gen.agentNoRoot"), K.t("panels.gen.agentNoRootHint"),
+          swi("agentNoRoot", g.agentNoRoot === true, (on) => keep({ agentNoRoot: on }), K.t("panels.gen.agentNoRoot"))),
         R(K.t("panels.gen.inside"), K.t("panels.gen.insideHint"), insideSel(g)),
         R(K.t("panels.gen.homeAfter"), K.t("panels.gen.homeAfterHint"),
           select("homeAfter", HOME_AFTER.concat(HOME_AFTER.some(([v]) => v === ha) ? [] : [[ha, secs(ha)]]), ha, (v) => keep({ homeAfter: +v }), K.t("panels.gen.homeAfter"))),
@@ -837,10 +843,14 @@
  el("div.pn-later", {}, ...G(K.t("panels.remove"), [R(K.t("panels.gen.removeRow"), K.t("panels.gen.removeHint"),
         el("button.btn.pn-danger", { type: "button", onclick: async () => {
           if (!(await ask({ title: K.t("panels.gen.removeAsk", { name: p.name }), text: K.t("panels.gen.removeText", { address: address(p) }), yes: K.t("panels.gen.removeYes"), danger: true }))) return;
-          const r = await api("/api/manage/panels", { action: "remove", id: p.id }).catch(() => ({}));
+          const once = () => api("/api/manage/panels", { action: "remove", id: p.id }).catch(() => ({}));
+          const r = await once();
           if (!r.ok) return toast(r.error || K.t("panels.gen.notRemoved"), true);
-          toast(K.t("panels.gen.removed", { name: p.name }));
           dropPending(); cur = null; data = null; await loadList(true); showStatus();
+          // (v3.0.5) its settings wait in the Trash: Undo puts the panel back (without its tablet)
+          if (K.trash && r.trash) K.trash.deleted({ name: p.name, trash: r.trash, days: r.days, after: async () => { await loadList(true); showStatus(); },
+            redo: async () => { const x = await once(); return x.ok ? x.trash : false; } });
+          else toast(K.t("panels.gen.removed", { name: p.name }));
         } }, ic("x", 15), K.t("panels.gen.removeBtn")))])));
   }
   // where the Home page's "Inside" temperature comes from: this tablet's sensors, a Hubitat sensor, or the thermostat
@@ -916,7 +926,7 @@
     const pick = (set) => saveDraw(set);
     const themes = Object.entries(window.THEMES || {});
     const ownN = (m.homeGrid && (m.homeGrid.cards || []).length) || 0, roomsN = Object.keys(m.roomGrids || {}).length;
-    const noBuild = phone() ? K.t("panels.look.noBuild") : null;
+    const noBuild = narrow() ? K.t("panels.look.noBuild") : null;   // (v3.0.5: narrow)
     return el("div", {},
       noBuild ? el("div.phone-note", {}, ic("layout", 20), el("span", {}, noBuild)) : null,
       ...G(K.t("panels.look.theme"), [R(K.t("panels.shared.abouttheme"), theme === "custom" ? K.t("panels.look.custom") : ((window.THEMES || {})[theme] || {}).name || theme,
@@ -942,7 +952,7 @@
           ownRoom(m, r.id) ? el("button.btn.sm", { type: "button", disabled: phone(), "aria-label": K.t("panels.roomBuild.editOwn", { room: r.name }),
             onclick: () => openBuilder({ room: true, key: r.id }) }, ic("layout", 14), K.t("panels.edit")) : null))),
       ], ROOM_LAYOUTS.map(([, n, d]) => K.t("panels.look.roomLayoutLine", { name: n, desc: d })).join(" · ")),
-      ...skyGroup(m, pick));
+      ...skyGroup(m, pick), ...pictureGroups(m, pick));
   }
   // (v3.0.4) everything about the room bar on one tab: shown or not, its edge (also dragged in the layout builder — never
   // on the wall), its look, and its rooms (which, in what order)
@@ -994,6 +1004,62 @@
     ]);
   }
 
+  // (v3.0.5) rotating background pictures (look.bgShow) and the screensaver (saver) — the slide-show engine's options
+  // (folders.js Kit.showEditor; the design: mockups/prototypes/settings-and-pages.html → Pictures). A choice that can't
+  // be saved yet (a background with fewer than two pictures, a screensaver with none) waits here as a draft — never a
+  // refused Save
+  let BGUPS = null, showDraft = null;
+  const showOk = (o, min) => !!o && typeof o === "object" && (/^fs:[0-9a-f]{12}$/.test(o.src || "") || (Array.isArray(o.pics) && o.pics.length >= min));
+  function pictureGroups(m, pick) {
+    const secs = (n) => K.t("panels.time.seconds", { n }), mins = (n) => K.t("panels.time.minutes", { n });
+    const draft = (key) => (showDraft && showDraft.pid === cur && showDraft.key === key ? showDraft.o : null);
+    const put = (key, o, min, valid) => {
+      if (o && !valid(o)) { showDraft = { pid: cur, key, o }; drawSetup(); return; }   // (not saved yet: picked too few)
+      showDraft = null; pick({ [key]: o || "" });
+    };
+    const holder = (key, o, which) => {
+      const box = el("div.pn-block.pn-show");
+      const fill = (ups) => box.replaceChildren(K.showEditor({ o, which, uploads: ups, set: (n) => put(key, which === "ss" ? { ...n, on: true } : n, 0, which === "ss" ? (x) => showOk(x, 1) : (x) => showOk(x, 2)) }));
+      if (!K.showEditor) return box;
+      fill(BGUPS || []);
+      if (!BGUPS) api("/api/manage/pictures").then((r) => { BGUPS = (r.uploads || []).filter((u) => u.style === "background"); if (box.isConnected) fill(BGUPS); }).catch(() => {});
+      return box;
+    };
+    const can = M.can("panels", cur);
+    // the background: one picture (Background above), or several that rotate behind the glass
+    const bg = draft("look.bgShow") || (m["look.bgShow"] && typeof m["look.bgShow"] === "object" ? m["look.bgShow"] : null);
+    const bgOn = !!bg;
+    const bgRows = [R(K.t("panels.pics.rotate"), K.t("panels.pics.rotateHint"),
+      swi("look.bgShow", bgOn, (on) => put("look.bgShow", on ? { pics: [], every: 300, order: "random" } : null, 2, (x) => showOk(x, 2)), K.t("panels.pics.rotate")))];
+    if (bgOn) {
+      bgRows.push(block(holder("look.bgShow", bg, "bg")));
+      if (!showOk(bg, 2)) bgRows.push(el("p.pn-warn", {}, ic("alert", 15), K.t("panels.pics.needTwo")));
+      // (v3.0.5) 35 % when not set, 0–70 — the same as the panel (app.js applyBg) and the service
+      const dim = Number.isInteger(bg.dim) ? Math.max(0, Math.min(70, bg.dim)) : 35, out = el("span.muted", {}, `${dim} %`);   // i18n-ok (a unit)
+      bgRows.push(R(K.t("panels.pics.dim"), K.t("panels.pics.dimHint"), el("span.pn-range", {}, keyed(el("input", { type: "range", min: "0", max: "70", step: "5", value: String(dim), "aria-label": K.t("panels.pics.dim"),
+        oninput: (e) => { out.textContent = `${e.target.value} %`; }, onchange: (e) => put("look.bgShow", { ...bg, dim: Math.max(0, Math.min(70, +e.target.value || 0)) }, 2, (x) => showOk(x, 2)) }), "look.bgShow"), out)));   // i18n-ok (a unit)
+    }
+    // the screensaver: the same engine, full screen, after N minutes untouched; a tap wakes the panel
+    const ss = draft("saver") || (m.saver && typeof m.saver === "object" ? m.saver : null), ssOn = !!(ss && ss.on);
+    const ssRows = [R(K.t("panels.ss.on"), K.t("panels.ss.onHint"),
+      swi("saver", ssOn, (on) => (on ? put("saver", { ...(ss || { pics: [], order: "random", trans: "mix", every: 60, after: 300, clock: "corner" }), on: true }, 1, (x) => showOk(x, 1))
+        : (ss && showOk(ss, 1) ? put("saver", { ...ss, on: false }, 1, () => true) : put("saver", null, 1, () => true))), K.t("panels.ss.on")))];
+    if (ssOn) {
+      const after = Number.isInteger(ss.after) ? ss.after : 300, AFTER = [[60, mins(1)], [300, mins(5)], [600, mins(10)], [1800, mins(30)]];
+      const keepSs = (k, v) => put("saver", { ...ss, [k]: v }, 1, (x) => showOk(x, 1));
+      ssRows.push(R(K.t("panels.ss.after"), K.t("panels.ss.afterHint"), seg("saver", AFTER.some(([v]) => v === after) ? AFTER : [...AFTER, [after, secs(after)]], after, (v) => keepSs("after", +v), K.t("panels.ss.after"))),
+        R(K.t("panels.ss.clock"), null, seg("saver", [["corner", K.t("panels.ss.corner")], ["big", K.t("panels.ss.big")], ["none", K.t("control.off")]], ss.clock || "none", (v) => keepSs("clock", v), K.t("panels.ss.clock"))),
+        block(holder("saver", ss, "ss")));
+      if (!showOk(ss, 1)) ssRows.push(el("p.pn-warn", {}, ic("alert", 15), K.t("panels.ss.needOne")));
+    }
+    const gentle = m["look.gentle"] || "auto";
+    ssRows.push(R(K.t("panels.ss.tablet"), gentle === "yes" ? K.t("panels.ss.slowHint") : K.t("panels.ss.tabletHint"),
+      seg("look.gentle", [["auto", K.t("panels.ss.auto")], ["no", K.t("panels.ss.normal")], ["yes", K.t("panels.ss.slow")]], gentle, (v) => pick({ "look.gentle": v }), K.t("panels.ss.tablet"))));
+    const groups = [...G(K.t("panels.pics.group"), bgRows, K.t("panels.pics.foot")), ...G(K.t("panels.ss.group"), ssRows, K.t("panels.ss.foot"))];
+    if (!can) for (const n of groups) for (const x of n && n.querySelectorAll ? n.querySelectorAll("button, input, select") : []) x.disabled = true;
+    return groups;
+  }
+
   // (v3.0.2) Room pages' Build one / Edit: it used to open every room's page with the first room on it — it looked like
   // that room was picked. Now first: which page (every room's, or one room's own) and from what (empty, or as it is now)
   const ownRoom = (m, k) => !!((m.roomGrids || {})[k] && Array.isArray(m.roomGrids[k].cards));
@@ -1022,7 +1088,7 @@
   // (v3.0.2) key: the room page to open ("*" every room's, else a room's id), start: "empty" = no cards
   async function openBuilder(opts = {}) {
     // (a phone: no red error — the Look & layout tab with its "open this on a computer" note)
-    if (phone()) { tab = "look"; drawSetup(); return toast(K.t("panels.builder.needsBig")); }
+    if (narrow()) { tab = "look"; drawSetup(); return toast(K.t("panels.builder.needsBig")); }   // (v3.0.5: narrow — a phone's width too)
     if (!data) return;
     // (v3.0.2) changes waiting: the builder works on what's saved — Save them first, or stay
     if (pendN() && pendPid === cur) {
@@ -1036,7 +1102,8 @@
     const p = shown(cur) || { id: cur, name: cur };
     const name = data.managed.panelName || p.name;
     if (!M.openBuilder) { toast(K.t("panels.builder.notLoaded"), true); return; }   // (a lazily loaded script that failed)
-    M.openBuilder({ panel: { id: p.id, name, address: p.address }, managed: data.managed, rooms: data.rooms, views: data.views, perf: data.perf, room: !!opts.room,
+    // (v3.0.5: houseCalendars — a Calendar card's "Choose" lists them, the ones off on this panel greyed)
+    M.openBuilder({ panel: { id: p.id, name, address: p.address }, managed: data.managed, rooms: data.rooms, views: data.views, perf: data.perf, room: !!opts.room, houseCalendars: data.houseCalendars || [],
       key: opts.key || "*", start: opts.start || "", panels: list.map((x) => ({ id: x.id, name: x.name })), save, latest: () => data.managed, back: () => { tab = "look"; listAt = 0; drawSetup(); } });
     if (M.routeSync) M.routeSync([p.id, "layout"], K.t(opts.room ? "panels.builder.titleRooms" : "panels.builder.titleHome", { name }));
   }

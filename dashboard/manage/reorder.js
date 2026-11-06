@@ -10,8 +10,13 @@
   const { el } = M;
   let DR = null;     // the drag in progress
   let KP = null;     // a row picked up with the keyboard (Space)
-  let last = null;   // the last move (its Undo)
-  let live = null, chip = null, toastT = null;
+  // (v3.0.5) undo / redo on the Manager's lists: every move is a step (up to 30), undone and redone with the ↶ ↷ buttons
+  // that show while there is one, the toast's Undo, or Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z (⌘ on a Mac) — never while typing
+  // in a box (its own undo), nor in the layout builder (its own steps). Kit.history.push({what, undo, redo}) takes
+  // other steps too; a new step clears what could be redone; another page starts afresh.
+  const HIST = { undo: [], redo: [] }, HMAX = 30;
+  let bar = null;
+  let live = null, chip = null, toastT = null, toastUndo = null, pending = false;   // (v3.0.5: pending — a step waiting for the server)
   const GRIP = "[data-grip]";   // i18n-ok (a selector)
 
   const say = (text) => {   // (for a screen reader)
@@ -22,7 +27,8 @@
   function toast(text, undo) {
     const t = document.getElementById("toast");
     if (!t) return;
-    t.replaceChildren(el("span", {}, text), ...(undo ? [el("button.rr-undo", { type: "button", onclick: undoLast }, K.icon("undo", 14), K.t("reorder.undo"))] : []));
+    toastUndo = undo ? el("button.rr-undo", { type: "button", onclick: undoLast, disabled: pending }, K.icon("undo", 14), K.t("reorder.undo")) : null;   // (v3.0.5: kept, so a step waiting disables it)
+    t.replaceChildren(el("span", {}, text), ...(toastUndo ? [toastUndo] : []));
     t.className = "show";
     t.classList.add("rr");
     clearTimeout(toastT);
@@ -47,22 +53,90 @@
     if (!box._rr || to < 0 || to >= n || to === from) return;
     const key = box.getAttribute("data-rlist"), id = rows[from].querySelector(GRIP).getAttribute("data-rid"), name = nameAt(box, from);
     box._rr.move(from, to);   // (the list redraws and saves, as after ▲ ▼)
-    last = { key, id, from, to, name };
+    // (v3.0.5) a list with its own undo (the layout builder's: opts.ownUndo) — that one step only, never Kit.history's
+    if (box._rr.ownUndo) { refocus(key, id); say(K.t("reorder.sayMoved", { name, n: to + 1, total: n })); return; }
+    push({ what: K.t("reorder.moved", { name, n: to + 1 }), undo: () => moveTo(key, id, from), redo: () => moveTo(key, id, to),
+      undoText: K.t("reorder.undone", { name, n: from + 1 }), redoText: K.t("reorder.moved", { name, n: to + 1 }) });
     refocus(key, id);
     toast(K.t("reorder.moved", { name, n: to + 1 }), true);
     say(K.t("reorder.sayMoved", { name, n: to + 1, total: n }));
   }
-  function undoLast() {
-    const u = last;
-    last = null;
-    const g = u && gripOf(u.key, u.id), at = g && listOf(g);
-    if (!at) return;
+  // a row (by its list and id) to place k, wherever it is now → false when it isn't on the page any more
+  function moveTo(key, id, k) {
+    const g = gripOf(key, id), at = g && listOf(g);
+    if (!at) return false;
     const now = rowsOf(at.box).indexOf(at.row);
-    if (now >= 0 && now !== u.from) at.box._rr.move(now, Math.min(u.from, rowsOf(at.box).length - 1));
-    refocus(u.key, u.id);
-    toast(K.t("reorder.undone", { name: u.name, n: u.from + 1 }));
-    say(K.t("reorder.undone", { name: u.name, n: u.from + 1 }));
+    if (now >= 0 && now !== k) at.box._rr.move(now, Math.min(k, rowsOf(at.box).length - 1));
+    refocus(key, id);
+    return true;
   }
+  function push(step) {
+    HIST.undo.push(step); if (HIST.undo.length > HMAX) HIST.undo.shift();
+    HIST.redo.length = 0; bars();
+  }
+  function undoLast() { step(true); }
+  // (v3.0.5) while a step waits for the server, Undo / Redo wait too (never two at once)
+  function step(back) {
+    if (pending) return;
+    const from = back ? HIST.undo : HIST.redo, to = back ? HIST.redo : HIST.undo, s = from.pop();
+    if (!s) { toast(K.t(back ? "history.nothingUndo" : "history.nothingRedo")); return bars(); }
+    let r;
+    try { r = back ? s.undo() : s.redo(); } catch { r = false; }
+    // a step's answer: true (done), false (can't), or (v3.0.5) its own words for why not — said instead of "Can't undo"
+    const finish = (v) => {
+      pending = false;
+      const ok = v !== false && typeof v !== "string";
+      if (ok) to.push(s);
+      // (v3.0.5: a step that can't be applied — the row isn't on the page any more — says so, and is dropped)
+      const words = typeof v === "string" && v ? v : !ok ? K.t(back ? "history.cantUndo" : "history.cantRedo", { what: s.what })
+        : (back ? s.undoText : s.redoText) || K.t(back ? "history.undone" : "history.redone", { what: s.what });
+      toast(words); say(words); bars();
+    };
+    // (v3.0.5: a step that asks the server — a delete undone from the Trash — finishes when it answers)
+    if (r && typeof r.then === "function") { pending = true; bars(); r.then(finish, () => finish(false)); }
+    else finish(r);
+  }
+  // (v3.0.5) another page: its steps go (shell.js show() — the sidebar's links don't fire hashchange)
+  function clearHist() {
+    HIST.undo.length = 0; HIST.redo.length = 0;
+    // (v3.0.5, tester) the toast's Undo goes with the steps: a toast still showing one is hidden (its step is gone)
+    if (toastUndo) {
+      const t = document.getElementById("toast");
+      toastUndo.remove(); toastUndo = null; clearTimeout(toastT);
+      if (t && t.classList.contains("rr")) t.className = "";
+    }
+    bars();
+  }
+  // (v3.0.5) the shortcut's keys as this computer has them: ⌘Z / ⇧⌘Z on a Mac, Ctrl+Z / Ctrl+Y elsewhere
+  const NAV = typeof navigator === "undefined" ? {} : navigator, MAC = /Mac|iPhone|iPad/.test((NAV.userAgentData && NAV.userAgentData.platform) || NAV.platform || NAV.userAgent || "");
+  const KEY = { key: MAC ? "⌘Z" : "Ctrl+Z" }, RKEY = { key: MAC ? "⇧⌘Z" : "Ctrl+Y" };   // i18n-ok (key names)
+  // the ↶ ↷ buttons: in the page's corner while there is a step to undo or redo
+  function bars() {
+    const any = HIST.undo.length || HIST.redo.length;
+    if (!any) { if (bar) bar.hidden = true; return; }
+    if (!bar) {
+      bar = el("div.mh-bar", { role: "toolbar", "aria-label": K.t("history.undo", KEY) },
+        el("button.btn.ghost.sm.mh-u", { type: "button", title: K.t("history.undo", KEY), "aria-label": K.t("history.undo", KEY), onclick: () => step(true) }, K.icon("undo", 16)),
+        el("button.btn.ghost.sm.mh-r", { type: "button", title: K.t("history.redo", RKEY), "aria-label": K.t("history.redo", RKEY), onclick: () => step(false) }, K.icon("redo", 16)));
+      document.body.append(bar);
+    }
+    bar.hidden = false;
+    bar.querySelector(".mh-u").disabled = pending || !HIST.undo.length;   // (v3.0.5: not while a step waits)
+    bar.querySelector(".mh-r").disabled = pending || !HIST.redo.length;
+    if (toastUndo) toastUndo.disabled = pending;
+  }
+  // (the shortcuts: not while typing in a box, not with a dialog or the builder open — they have their own)
+  document.addEventListener("keydown", (e) => {
+    const k = (e.key || "").toLowerCase();
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || (k !== "z" && k !== "y")) return;
+    const t = e.target || {}, tag = t.tagName || "", typ = (t.getAttribute && t.getAttribute("type")) || "";
+    const typing = tag === "TEXTAREA" || tag === "SELECT" || (tag === "INPUT" && !/^(checkbox|radio|range|color|button)$/.test(typ)) || !!t.isContentEditable;   // i18n-ok
+    const busy = [".bld-screen", ".modal-bg", ".dve-shade"].some((q) => document.querySelector(q));   // i18n-ok (selectors)
+    if (typing || busy || (!HIST.undo.length && !HIST.redo.length)) return;
+    e.preventDefault();
+    step(k === "z" && !e.shiftKey);
+  });
+  window.addEventListener("hashchange", clearHist);
   const refocus = (key, id) => { const g = gripOf(key, id); if (g && document.activeElement !== g) g.focus({ preventScroll: true }); };
 
   // ---------- the drag (by the grip only: the row's own fields and buttons work as usual) ----------
@@ -177,11 +251,14 @@
       return;
     }
     if (KP && e.key === "Escape") { e.preventDefault(); e.stopPropagation(); keyDrop(false); return; }
-    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && /^z$/i.test(e.key) && last) { e.preventDefault(); undoLast(); }
   }
   // (the focus leaving a picked-up row puts it back where it was)
   function onOut() { setTimeout(() => { const a = document.activeElement; if (KP && !(a && a.closest && a.closest(GRIP) && listOf(a) && listOf(a).box === KP.box)) keyDrop(false, true); }, 0); }
 
+  // (v3.0.5) did(step, text): a step done elsewhere (a delete, an edit in a Manager list) — pushed, and said in the
+  // toast with its Undo button
+  K.history = { push, undo: () => step(true), redo: () => step(false), did: (s, text) => { push(s); toast(text || s.what, true); },
+    clear: clearHist };   // (v3.0.5)
   K.reorder = {
     grip: (id, name, attrs) => el("button.grip", { type: "button", "data-grip": "", "data-rid": String(id), title: K.t("reorder.tip"),
       "aria-label": K.t("reorder.label", { name }), ...attrs }, "⠿"),   // i18n-ok (a sign)

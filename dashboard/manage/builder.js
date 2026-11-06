@@ -43,7 +43,8 @@
     ["fan", Kit.t("builder.type.fan.name"), "fan", Kit.t("builder.type.fan.desc"), 4, 2, {}, {}, "home"],
     ["energy", Kit.t("builder.type.energy.name"), "bolt", Kit.t("builder.type.energy.desc"), 5, 4, {}, {}, "home"],
     ["player", Kit.t("builder.type.player.name"), "music", Kit.t("builder.type.player.desc"), 5, 2, {}, {}, "media"],
-    ["status", Kit.t("builder.type.status.name"), "server", Kit.t("builder.type.status.desc"), 3, 2, {}, {}, "home"],
+    // (v3.0.5) a new System card watches these (the owner ticks and orders them: sysPicker); one from before shows its four
+    ["status", Kit.t("builder.type.status.name"), "server", Kit.t("builder.type.status.desc"), 3, 2, {}, { rows: ["hubitat", "bridge", "mqtt", "cameras", "unifi", "weather", "panel"] }, "home"],
     ["photos", Kit.t("builder.type.photos.name"), "image", Kit.t("builder.type.photos.desc"), 4, 3, { a: 0, r: 18 }, { pics: [] }, "media"],
     ["batteries", Kit.t("builder.type.batteries.name"), "batteryLow", Kit.t("builder.type.batteries.desc"), 4, 3, {}, {}, "home"],
     ["power", Kit.t("builder.type.power.name"), "bolt", Kit.t("builder.type.power.desc"), 4, 3, {}, {}, "home"],
@@ -68,6 +69,10 @@
     ["netclients", Kit.t("builder.type.netclients.name"), "users", Kit.t("builder.type.netclients.desc"), 8, 5, {}, {}, "home"],
     ["netlog", Kit.t("builder.type.netlog.name"), "clock", Kit.t("builder.type.netlog.desc"), 4, 5, {}, {}, "home"],
     ["netvals", Kit.t("builder.type.netvals.name"), "gauge", Kit.t("builder.type.netvals.desc"), 4, 2, {}, {}, "home"],
+    // (v3.0.5) UPS / battery backup (NUT or a UniFi UPS), Doorbell (Protect), Activity feed (unifi-v2.html)
+    ["netups", Kit.t("builder.type.netups.name"), "batteryFull", Kit.t("builder.type.netups.desc"), 4, 3, {}, {}, "home"],
+    ["netbell", Kit.t("builder.type.netbell.name"), "doorbell", Kit.t("builder.type.netbell.desc"), 4, 4, {}, {}, "home"],
+    ["netfeed", Kit.t("builder.type.netfeed.name"), "clock", Kit.t("builder.type.netfeed.desc"), 4, 5, {}, {}, "home"],
     ["camera", Kit.t("builder.type.camera.name"), "film", Kit.t("builder.type.camera.desc"), 4, 3, { r: 18 }, {}, "media"],
     ["picture", Kit.t("builder.type.picture.name"), "image", Kit.t("builder.type.picture.desc"), 3, 3, { a: 0 }, {}, "media"],
     // a room's own page: they fill themselves in for the room they're on (one layout can serve every room)
@@ -86,9 +91,14 @@
     batteries: ["info", "devices"], power: ["info", "devices"], weather: ["climate", "time"], calendar: ["time"], thermostat: ["climate"], locks: ["security"], openings: ["security"], people: ["people"],
     temps: ["climate"], guest: ["info"], alerts: ["security", "info"], devices: ["devices", "climate", "security"], device: ["devices"], group: ["devices"], value: ["devices", "climate", "info"],
     netwan: ["network"], netmap: ["network"], netstrip: ["network", "info"], netchips: ["network"], netdevs: ["network"], netpoe: ["network"], netclients: ["network"], netlog: ["network"], netvals: ["network", "info"],
+    netups: ["network", "info"], netbell: ["network", "security"], netfeed: ["network", "info"],
     button: ["devices"], room: ["devices"], text: ["info"], blank: ["devices", "security", "climate", "info"], camera: ["security", "media"], picture: ["media"] };
   const T = Object.fromEntries(TYPES.map((t) => [t[0], t]));
-  const OLD_T = new Set(["device", "group", "value", "button", "lock", "fan", "scenes", "bins", "countdown", "timer"]);
+  // (v3.0.5: and the Devices and Text cards — their items are a blank card's pieces now; service/blank_card.py moved the
+  // saved ones over)
+  // (v3.0.5: and the Alert note — the Notifications card's Compact style now; service/notices_card.py moved them over)
+  // (v3.0.5: and the Picture card — one picture in the Slide show / Picture card now; service/picture_card.py moved them)
+  const OLD_T = new Set(["device", "group", "value", "button", "lock", "fan", "scenes", "bins", "countdown", "timer", "devices", "text", "alerts", "picture"]);
   // a card type: a built-in one, or "card:<id>" — one people made (Manager → Cards)
   const userCard = (type) => (/^card:/.test(type) && st ? (st.cards || []).find((c) => c.id === type.slice(5)) : null);
   // "tpl:<id>": a card saved from this editor (Save card) — dropped, it's a copy of that card
@@ -114,7 +124,7 @@
   const LIVE_RATE = 0.3;   // a live card changes about once every 3 s (the benchmark measures 20 changes a second)
   const LIVE_T = new Set(["devices", "device", "group", "value", "thermostat", "people", "energy", "player", "timers", "status", "power", "batteries", "fan", "alarm",
     "lock", "garage", "modes", "scenes", "roomdevs", "roomhead", "roomopen", "roomthings", "locks", "openings", "temps", "todo", "notes", "clock", "notices",
-    "safety", "countdown", "alerts", "blank", "trash", "netwan", "netmap", "netstrip", "netchips", "netdevs", "netpoe", "netclients", "netlog", "netvals"]);
+    "safety", "countdown", "alerts", "blank", "trash", "netwan", "netmap", "netstrip", "netchips", "netdevs", "netpoe", "netclients", "netlog", "netvals", "netups", "netbell", "netfeed"]);
   const presets = () => (st && st.ctx.room ? ROOM_PRESETS : PRESETS);
   const EDGES = ["bottom", "top", "left", "right"];   // (v3.0.4) the room bar's edges (app.js dockAtNow)
 
@@ -342,7 +352,9 @@
       if (r.status !== 200) return toast(r.error ? (/^blank card: /.test(r.error) ? Kit.t("builder.err.blankCard", { reason: r.error.slice(12) }) : plainError(`Home layout: ${r.error}`)) : Kit.t("builder.err.notSaved"), true);
       if (st) { st.tpls = r.templates || []; palette(); }
       if (done) toast(done);
+      return r;   // (v3.0.5: a remove's answer names its place in the Trash — the Undo)
     } catch {}
+    return null;
   }
   // a new sign-in (or signed out): the builder goes, unsaved changes too — never offered to whoever signs in next
   M.onReset(() => { if (st) teardown(); });
@@ -474,6 +486,9 @@
   // Every change goes through changed(): the layout as it was just before becomes one step back (st.base). A new
   // change clears what could be redone. Kept while the builder is open (any card selected), not over a reload.
   const HIST_MAX = 20;
+  // (v3.0.5) the shortcut's keys as this computer has them: ⌘Z / ⇧⌘Z on a Mac, Ctrl+Z / Ctrl+Y elsewhere (both work)
+  const NAV = typeof navigator === "undefined" ? {} : navigator, MAC = /Mac|iPhone|iPad/.test((NAV.userAgentData && NAV.userAgentData.platform) || NAV.platform || NAV.userAgent || "");
+  const KEY = { undo: MAC ? "⌘Z" : "Ctrl+Z", redo: MAC ? "⇧⌘Z" : "Ctrl+Y" };   // i18n-ok (key names)
   // a step: the layout and the panel's theme / background (they're saved with it)
   const snap = () => JSON.stringify({ g: st.g, look: st.look });
   const histOf = () => { const k = st.ctx.room ? st.key : "home"; if (!st.hist.has(k)) st.hist.set(k, { undo: [], redo: [] }); return st.hist.get(k); };
@@ -509,8 +524,8 @@
   function histBtns() {
     if (!st) return;
     const h = histOf(), u = $(".bld-undo"), r = $(".bld-redo");
-    if (u) { u.disabled = !h.undo.length; u.title = h.undo.length ? Kit.t("builder.hist.undoSteps", { n: h.undo.length }) : Kit.t("builder.hist.undo"); }
-    if (r) { r.disabled = !h.redo.length; r.title = h.redo.length ? Kit.t("builder.hist.redoSteps", { n: h.redo.length }) : Kit.t("builder.hist.redo"); }
+    if (u) { u.disabled = !h.undo.length; u.title = h.undo.length ? Kit.t("builder.hist.undoSteps", { n: h.undo.length, key: KEY.undo }) : Kit.t("builder.hist.undo", { key: KEY.undo }); }
+    if (r) { r.disabled = !h.redo.length; r.title = h.redo.length ? Kit.t("builder.hist.redoSteps", { n: h.redo.length, key: KEY.redo }) : Kit.t("builder.hist.redo", { key: KEY.redo }); }
   }
   // the top bar's boxes follow an undo (overlap, join, spacing, screen)
   function syncTop() {
@@ -518,6 +533,7 @@
     setSw(q(".bld-ov .sw"), !!g.ov);
     setSw(q(".bld-join .sw"), !!g.join);
     if (q(".bld-gap select")) q(".bld-gap select").value = String(g.gap);
+    if (q(".bld-edge select")) q(".bld-edge select").value = g.edge == null ? "" : String(g.edge);   // (v3.0.5)
     // (the screen: also back to a layout saved without one — drawn at 1280 × 800 then, fit(); a size not in the list added)
     const ss = q(".bld-scr select");
     if (ss) {
@@ -644,8 +660,8 @@
         Kit.icon(st.focus ? "minimize" : "maximize", 15), el("span.bld-hide-s", {}, st.focus ? Kit.t("builder.focus.exit") : Kit.t("builder.focus.label"))),
       ib("", Kit.t("builder.top.full"), "full", fullScreen, Kit.t("builder.top.fullTip")),
       el("span.vr"),
-      ib(".bld-undo", Kit.t("builder.hist.undoLabel"), "undo", () => undoRedo(true), Kit.t("builder.hist.undo")),
-      ib(".bld-redo", Kit.t("builder.hist.redoLabel"), "redo", () => undoRedo(false), Kit.t("builder.hist.redo")),
+      ib(".bld-undo", Kit.t("builder.hist.undoLabel"), "undo", () => undoRedo(true), Kit.t("builder.hist.undo", { key: KEY.undo })),
+      ib(".bld-redo", Kit.t("builder.hist.redoLabel"), "redo", () => undoRedo(false), Kit.t("builder.hist.redo", { key: KEY.redo })),
       el("span.vr.bld-hide-s"),
       el("span.bld-unsaved", { role: "status" }, el("span.dot"), el("span.t")),
       el("button.btn.bld-discard", { type: "button", title: Kit.t("builder.top.discardTip"), onclick: discard }, Kit.t("builder.top.discard")),
@@ -701,13 +717,26 @@
         check(".bld-join", Kit.t("builder.page.join"), !!g.join, (e) => { if (e.target.checked) st.g.join = true; else delete st.g.join; changed(false); },
           Kit.t("builder.page.joinTip")),
         // (the spacing kept between cards that snap next to each other — cards are always drawn at the size they're given)
-        line(Kit.t("builder.page.spacing"), sel([0, 4, 6, 10, 14, 20, 28].map((x) => [x, Kit.t("builder.page.px", { n: x })]), g.gap, (v) => { st.g.gap = +v; changed(false); }, Kit.t("builder.page.spacingAria")), ".bld-gap")),
-      sec2(Kit.t("builder.look.title"), themes.length ? line(Kit.t("builder.look.theme"), sel(themes, st.look.theme, (v) => setLook({ theme: v }), Kit.t("builder.look.theme")), ".bld-theme") : null, line(Kit.t("builder.look.background"), bgSel)),
+        line(Kit.t("builder.page.spacing"), sel([0, 4, 6, 10, 14, 20, 28].map((x) => [x, Kit.t("builder.page.px", { n: x })]), g.gap, (v) => { st.g.gap = +v; changed(false); }, Kit.t("builder.page.spacingAria")), ".bld-gap"),
+        // (v3.0.5) the Edge margin around the cards (TESTING-NOTES "Cards can't reach the screen's edges"): as before, or the
+        // same space on every side — 0 lets a card reach the screen's edge; the panel shows the same
+        line(Kit.t("builder.page.edge"), sel([["", Kit.t("builder.page.edgeAsBefore")], ...[0, 8, 16, 24].map((x) => [x, Kit.t("builder.page.px", { n: x })])], g.edge ?? "", (v) => { if (v === "") delete st.g.edge; else st.g.edge = +v; changed(false); }, Kit.t("builder.page.edgeAria")), ".bld-edge"),
+        // (v3.0.5) a builder setting (this browser): double-click edits a card where it is, unless zoom is wanted
+        check(".bld-zoom", Kit.t("builder.page.zoom"), zoomOn(), (e) => { setZoom(e.target.checked); toast(Kit.t(e.target.checked ? "builder.page.zoomOn" : "builder.page.zoomOff")); }, Kit.t("builder.page.zoomTip"))),
+      sec2(Kit.t("builder.look.title"), themes.length ? line(Kit.t("builder.look.theme"), sel(themes, st.look.theme, (v) => setLook({ theme: v }), Kit.t("builder.look.theme")), ".bld-theme") : null, line(Kit.t("builder.look.background"), bgSel),
+        // (v3.0.5) this page's own background pictures (rotating, on the slide-show engine; none: the panel's background)
+        check(".bld-pbg", Kit.t("builder.page.ownBg"), !!g.bg, (e) => { if (e.target.checked) st.g.bg = { pics: [] }; else delete st.g.bg; changed(false); side(); }, Kit.t("builder.page.ownBgTip")),
+        g.bg && Kit.showEditor ? Kit.showEditor({ o: g.bg, which: "bg", uploads: (st.pics || []).filter((u) => u.style === "background"), set: (n) => { st.g.bg = { ...n, ...(Number.isInteger(g.bg.dim) ? { dim: g.bg.dim } : {}) }; changed(false); side(); } }) : null,
+        // (v3.0.5) the veil over this page's own pictures, as the panel's (0–70 %, 35 % when not set — app.js applyBg)
+        g.bg ? ((dim) => { const out = el("span.muted", {}, `${dim} %`);   // i18n-ok (a unit)
+          return line(Kit.t("builder.page.bgDim"), el("span.bld-pbg-dim", {}, el("input", { type: "range", min: "0", max: "70", step: "5", value: String(dim), "aria-label": Kit.t("builder.page.bgDim"),
+            oninput: (e) => { out.textContent = `${e.target.value} %`; },   // i18n-ok (a unit)
+            onchange: (e) => { st.g.bg = { ...st.g.bg, dim: Math.max(0, Math.min(70, +e.target.value || 0)) }; changed(false); } }), out), ".bld-pbgdim"); })(Number.isInteger(g.bg.dim) ? Math.max(0, Math.min(70, g.bg.dim)) : 35) : null),
       // (v3.0.4) the room bar: everything about it in one place (as on Panels → Room bar)
       dockSec(),
       el("div.bld-empty", {}, el("span.ei", {}, Kit.icon("cards", 18)), el("b", {}, Kit.t("builder.empty.title")),
         el("p", {}, Kit.t("builder.empty.text")),
-        el("p", {}, Kit.t("builder.empty.try"))));
+        el("p", {}, Kit.t("builder.empty.try", { key: KEY.undo }))));
   }
   // Focus (F): the side panes hidden, the panel as big as it gets; a side can be opened over it for a moment (peek)
   function setFocus(on) {
@@ -790,7 +819,9 @@
         rooms.map((r, i) => el("div.bld-droom" + (L.hiddenRooms[r.id] ? ".off" : ""), { role: "listitem" }, el("span.nm", {}, r.name),
           el("button.bld-dmv", { type: "button", disabled: i === 0, "aria-label": Kit.t("panels.order.up", { name: r.name }), "data-fk": `up:${r.id}`, onclick: () => move(i, -1) }, Kit.icon("chevU", 14)),
           el("button.bld-dmv", { type: "button", disabled: i === rooms.length - 1, "aria-label": Kit.t("panels.order.down", { name: r.name }), "data-fk": `down:${r.id}`, onclick: () => move(i, 1) }, Kit.icon("chevD", 14)),
-          fkd(Kit.sw(!L.hiddenRooms[r.id], (on) => hide(r.id, on), Kit.t("panels.shownHere", { name: r.name })), `eye:${r.id}`)))) : null);
+          fkd(Kit.sw(!L.hiddenRooms[r.id], (on) => hide(r.id, on), Kit.t("panels.shownHere", { name: r.name })), `eye:${r.id}`))),
+        // (v3.0.5) switched off = off the bar only: a Rooms card, a button's "open a room" and Hubitat still open it
+        el("p.bld-dnote", {}, Kit.t("builder.dock.offNote"))) : null);
   }
   // the panel's rooms in the bar's order (as Panels → Room bar lists them)
   function dockRooms() {
@@ -1117,7 +1148,9 @@
     if (st.inner && !ic) st.inner = null;
     if (screen) screen.classList.toggle("inner", !!ic);
     over.classList.toggle("bld-inner", !!ic);
-    const here = !!ic && ic.t === "blank";   // (v3.0.4: a blank card's pieces are edited where the card is — no zoom)
+    // (v3.0.4: a blank card's pieces are edited where the card is — no zoom; v3.0.5: unless the builder setting "Double-
+    // click zooms into a card" is on)
+    const here = !!ic && ic.t === "blank" && !zoomOn();
     over.classList.toggle("bld-inplace", here); if (screen) screen.classList.toggle("inplace", here);
     if (here) {
       const { cw, ch } = st.cell;
@@ -1154,13 +1187,39 @@
     const keep = over.querySelector(".bld-guides");
     over.replaceChildren(...st.g.cards.map(item), ...(keep ? [keep] : []));
   }
+  // (v3.0.5) a label's real width at the name tag's font (manage.css .bld-name: 11 px, the page's font)
+  let labelCtx = null;
+  function labelW(text) {
+    try {
+      if (!labelCtx) { labelCtx = document.createElement("canvas").getContext("2d"); labelCtx.font = `11px ${getComputedStyle(document.body).fontFamily}`; }   // i18n-ok (a CSS font)
+      return labelCtx.measureText(text).width;
+    } catch { return text.length * 6.6; }   // (no canvas: a wide guess, so it's never cut)
+  }
   function item(c) {
     const t = tdef(c.t);
     const np = c.t === "blank" ? (c.o.parts || []).length : 0;
-    const label = c.t === "blank" ? (np ? Kit.t("builder.canvas.blankPieces", { type: t[1], n: np }) : Kit.t("builder.canvas.blankEmpty", { type: t[1] })) : c.o.title || (c.o.id ? devName(c.o.id) : "") || t[1];
+    // (v3.0.5) a card's label is never cut off: the longest one that fits the card's width, measured at the label's own
+    // font (the whole of it in its tooltip); none fits — the icon alone. A blank card: its name, "Blank card", how many
+    // pieces, "double-click to change it"; any other: its title, else its type
+    const own = c.o.title || (c.o.id ? devName(c.o.id) : "");
+    let opts = own && own !== t[1] ? [own, t[1]] : [t[1]];
+    if (c.t === "blank") {
+      const nm = c.o.title || "", full = np ? Kit.t("builder.canvas.blankPieces", { type: t[1], n: np }) : Kit.t("builder.canvas.blankEmpty", { type: t[1] });
+      const short = np ? Kit.t("builder.canvas.nPieces", { n: np }) : Kit.t("builder.canvas.empty");
+      opts = [nm ? `${nm} · ${full}` : full, nm ? `${nm} · ${t[1]} · ${short}` : `${t[1]} · ${short}`, nm ? `${nm} · ${short}` : short, short];
+    }
+    // (the label's room: the card's width less its 6 px inset each side, the 8 px padding each side, the 14 px icon,
+    // its 4 px gap and the border)
+    const room = Math.max(0, c.w * (st.cell ? st.cell.cw : 6) - 2 * (st.cell ? st.cell.m : 0) - 12 - 16 - 18 - 2);
+    const tip = opts[0], label = opts.find((x) => labelW(x) <= room) ?? "";
     const box = el("div.bld-item", { "data-id": c.i, style: boxStyle(c) },
       el("div.bld-card" + (st.sel === c.i ? ".sel" : "") + (c.show ? ".cond" : ""), {},
-        el("span.bld-name", {}, iconEl(/^(art|up):/.test(c.o.icon || "") ? t[2] : c.o.icon || t[2], 14), label)));
+        el("span.bld-name", { title: tip }, iconEl(/^(art|up):/.test(c.o.icon || "") ? t[2] : c.o.icon || t[2], 14), label)));
+    // (v3.0.5) the move dots at the card's top-left corner (shown on mouse-over): drag them to move the card — the corner
+    // itself would resize it
+    const grip = el("button.bld-grip", { type: "button", tabindex: "-1", title: Kit.t("builder.canvas.gripTip"), "aria-label": Kit.t("builder.canvas.gripAria", { name: tip }) }, gripDots());
+    grip.addEventListener("pointerdown", (e) => { e.stopPropagation(); startDrag(e, c.i, "move", box); });
+    box.append(grip);
     // (v3.0.4: no marks — a press on any edge or corner resizes from there, the cursor says which; anywhere else moves it)
     const zoneAt = (e) => { const r = box.getBoundingClientRect(); return DE().zone(e.clientX - r.left, e.clientY - r.top, r.width, r.height); };
     box.addEventListener("pointermove", (e) => { if (!st.drag) { const z = zoneAt(e); box.firstElementChild.style.cursor = z === "move" ? "" : DE().CURSOR[z]; } });
@@ -1184,13 +1243,13 @@
   const cardSync = (r) => document.querySelectorAll(".bld-side .bld-cxywh input[data-k]").forEach((x) => { if (r[x.dataset.k] != null) x.value = String(r[x.dataset.k]); });
   // pick a card up (mode "move"), or resize it from an edge or a corner ("n", "se"…): it follows the pointer; the panel
   // shows where it would land; let go = it lands there
-  function startDrag(e, id, mode) {
+  // (v3.0.5: node — the card's handle; the move dots pass it, the press being on them)
+  function startDrag(e, id, mode, node = e.currentTarget) {
     if (e.button !== 0 || st.mode !== "arrange" || !st.cell) return;
     const c = st.g.cards.find((x) => x.i === id); if (!c) return;
     e.preventDefault(); e.stopPropagation();
     // (the focus leaves the side panel: Delete then means this card, not the box last typed in)
     if (document.activeElement && document.activeElement !== document.body && !document.activeElement.closest(".bld-stage")) document.activeElement.blur();
-    const node = e.currentTarget;
     try { node.setPointerCapture(e.pointerId); } catch {}
     if (st.sel !== id) select(id);
     const s0 = { px: e.clientX, py: e.clientY, x: c.x, y: c.y, w: c.w, h: c.h };
@@ -1294,6 +1353,17 @@
     if (st.sel === c.i) st.sel = null;
     if (n) n.remove();
     changed();
+    undoToast(Kit.t("builder.hist.cardGone", { name: c.o.title || tdef(c.t)[1] }));   // (v3.0.5: Undo right in the message)
+  }
+  // (v3.0.5) a delete says so, with Undo in the message (the same step as ↶ / Ctrl+Z). The step it means is the one made
+  // just now: anything changed since (another change, an undo, another page) — its Undo does nothing and says so
+  function undoToast(text) {
+    const t = document.getElementById("toast"); if (!t) return toast(text);
+    const h = histOf(), at = st.base, n = h.undo.length;
+    const undo = () => { t.className = ""; if (histOf() !== h || st.base !== at || h.undo.length !== n) return toast(Kit.t("builder.hist.stale")); undoRedo(true); };
+    t.replaceChildren(el("span", {}, text), el("button.rr-undo", { type: "button", onclick: undo }, Kit.icon("undo", 14), Kit.t("builder.hist.undoLabel")));
+    t.className = "show rr";   // i18n-ok (class names)
+    clearTimeout(st.undoT); st.undoT = setTimeout(() => { if (t.classList.contains("rr")) t.className = ""; }, 6000);
   }
   // where the last click was: Delete / Backspace / the arrows only act on the screen when it was on the screen (a
   // click in the side panel redraws it, and the focus falls back to the page — that's not "the screen has the focus")
@@ -1411,18 +1481,25 @@
   // cards. Every change is one undo step. A card from before (cells of a 24 × 24 grid) is moved over as it's opened.
   const IN = 24;
   // [kind, name, icon, what it is, default width, height (cells of 24 — a new piece's size, in thousandths by from24)]
-  const PIECE_T = [["icon", Kit.t("builder.piece.icon.name"), "image", Kit.t("builder.piece.icon.desc"), 8, 10],
+  // (v3.0.5) Device and Fan first — a Devices card's item as a piece (Fan: one that is a fan); then Text, Value, Picture,
+  // and the ones from before
+  const PIECE_T = [["dev", Kit.t("builder.piece.dev.name"), "bulb", Kit.t("builder.piece.dev.desc"), 8, 10],
+    ["fan", Kit.t("builder.piece.fan.name"), "fan", Kit.t("builder.piece.fan.desc"), 8, 10],
+    ["text", Kit.t("builder.piece.text.name"), "edit", Kit.t("builder.piece.text.desc"), 16, 4],
+    ["value", Kit.t("builder.piece.value.name"), "gauge", Kit.t("builder.piece.value.desc"), 8, 6],
+    ["icon", Kit.t("builder.piece.icon.name"), "image", Kit.t("builder.piece.icon.desc"), 8, 10],
     ["light", Kit.t("builder.piece.light.name"), "bulb", Kit.t("builder.piece.light.desc"), 8, 10],
     ["switch", Kit.t("builder.piece.switch.name"), "toggle", Kit.t("builder.piece.switch.desc"), 12, 4],
-    ["value", Kit.t("builder.piece.value.name"), "gauge", Kit.t("builder.piece.value.desc"), 8, 6],
     ["door", Kit.t("builder.piece.door.name"), "door", Kit.t("builder.piece.door.desc"), 12, 4],
     ["lock", Kit.t("builder.piece.lock.name"), "lock", Kit.t("builder.piece.lock.desc"), 14, 5],
-    ["garage", Kit.t("builder.piece.garage.name"), "garage", Kit.t("builder.piece.garage.desc"), 10, 12],
-    ["text", Kit.t("builder.piece.text.name"), "edit", Kit.t("builder.piece.text.desc"), 16, 4]];
+    ["garage", Kit.t("builder.piece.garage.name"), "garage", Kit.t("builder.piece.garage.desc"), 10, 12]];
   const PT = Object.fromEntries(PIECE_T.map((x) => [x[0], x]));
   const innerCard = () => (st && st.inner ? st.g.cards.find((c) => c.i === st.inner.id && (c.t === "blank" || c.t === "devices")) || null : null);   // (v3.0.4: a Devices card opens too)
   const pieceName = (p) => {
+    if (p.t === "dev") return Kit.t("builder.piece.named", { type: PT[p.k === "fan" ? "fan" : "dev"][1], name: dvName(p) });   // (v3.0.5)
+    if (p.t === "text" && p.head && !p.text) return Kit.t("builder.piece.headName", { text: p.head });
     const t = PT[p.t] || ["", Kit.t("builder.piece.fallback")], dev = p.id ? devName(p.id) : p.t === "garage" ? ((p.doors || [])[0] || {}).id && devName(p.doors[0].id) : "";
+    if (p.t === "value" && p.net) return Kit.t("builder.piece.named", { type: t[1], name: p.label || Kit.t(`builder.net.val.${p.net}`) });   // (v3.0.5: a UniFi value)
     return p.t === "text" ? Kit.t("builder.piece.textName", { text: String(p.text || "").replace(/\s+/g, " ").slice(0, 24) || Kit.t("builder.piece.emptyText") }) : p.label || dev ? Kit.t("builder.piece.named", { type: t[1], name: p.label || dev }) : t[1];
   };
   // the zoom goes smoothly (only while going in or out — not while the window is resized; a blank card doesn't zoom)
@@ -1431,9 +1508,13 @@
   function bkOld(c) { return !!c && c.t === "blank" && !!c.o && c.o.fr !== 1; }
   function bkFree(c) { return bkOld(c) ? { ...c, o: { ...c.o, fr: 1, parts: (Array.isArray(c.o.parts) ? c.o.parts : []).map((q) => DE().from24(q)) } } : c; }
   const bkParts = (c) => { if (bkOld(c)) { c.o = bkFree(c).o; return true; } if (!Array.isArray(c.o.parts)) c.o.parts = []; return false; };
+  // (v3.0.5) "Double-click zooms into a card" — a builder setting, off by default (remembered in this browser): off, a
+  // double-click edits the card right where it is
+  const zoomOn = () => { try { return localStorage.getItem("skypane.bld.zoom") === "1"; } catch { return false; } };
+  const setZoom = (on) => { try { localStorage.setItem("skypane.bld.zoom", on ? "1" : "0"); } catch { /* (no storage: off again next time) */ } };
   function enterInner(c, sel = null) {
     if (st.mode !== "arrange") setMode("arrange");
-    innerCss(); if (c.t !== "blank") zooming();
+    innerCss(); if (c.t !== "blank" || zoomOn()) zooming();
     if (c.t === "devices" && dvLook(c.o) === "free" && DE().autoPlace(c.o.items || [])) changed(false);   // (v3.0.4: placed before it's dragged)
     if (c.t === "blank" && bkParts(c)) changed(false);   // (a card added from a saved one of before)
     st.sel = c.i; st.inner = { id: c.i, sel };
@@ -1441,7 +1522,7 @@
   }
   function leaveInner() {
     if (!st.inner) return;
-    if (!(innerCard() && innerCard().t === "blank")) zooming();
+    if (!(innerCard() && innerCard().t === "blank") || zoomOn()) zooming();
     st.inner = null; fit(); drawHandles(); side();
   }
   // a new piece's drop spot over the card, in cells of 24 (the button's drag)
@@ -1523,19 +1604,23 @@
     const c = innerCard(); if (!c) return;
     bkParts(c);
     const parts = c.o.parts;
-    if (parts.length >= 16) return toast(Kit.t("builder.piece.max"), true);
+    if (parts.length >= 25) return toast(Kit.t("builder.piece.max"), true);
     const [, , , , W, H] = PT[t];
     let r = at ? DE().from24({ x: cl(at.x - Math.floor(W / 2), 0, IN - W), y: cl(at.y - Math.floor(H / 2), 0, IN - H), w: W, h: H }) : freeInner(parts, W, H);
     if (!r) { r = DE().from24({ x: 0, y: 0, w: W, h: H }); toast(Kit.t("builder.piece.noRoom"), true); }
     // (a text piece that only fits smaller than it should: medium-sized text, so its words still show)
-    const fresh = { garage: { doors: [{}] }, text: r.h < DE().from24({ x: 0, y: 0, w: 1, h: H }).h ? { text: Kit.t("builder.piece.yourText"), bold: true } : { text: Kit.t("builder.piece.yourText"), size: "l", bold: true } }[t] || {};
-    parts.push({ t, ...r, ...structuredClone(fresh) });
+    const fresh = { garage: { doors: [{}] }, text: r.h < DE().from24({ x: 0, y: 0, w: 1, h: H }).h ? { text: Kit.t("builder.piece.yourText"), bold: true } : { text: Kit.t("builder.piece.yourText"), size: "l", bold: true },
+      fan: { k: "fan" } }[t] || {};
+    parts.push({ t: t === "fan" ? "dev" : t, ...r, ...structuredClone(fresh) });   // (v3.0.5: a Fan is a device piece that is a fan)
+    if (t === "dev" || t === "fan") st.dvTab = "device";
     st.inner.sel = parts.length - 1;
     changed(true); drawInner();
-    setTimeout(() => { const f = document.querySelector(".bld-side .bk-pe .bld-dfind, .bld-side .bk-pe textarea"); if (f) f.focus({ preventScroll: true }); }, 0);
+    setTimeout(() => { const f = document.querySelector(".bld-side .bk-pe .bld-dfind, .bld-side .bk-pe textarea, .bld-side .bk-pe .dve-cbx"); if (f) f.focus({ preventScroll: true }); }, 0);
   }
   // what a piece still needs ("" = it's ready)
   function pieceProblem(p) {
+    if (p.t === "dev") return dvTodo(p);   // (v3.0.5)
+    if (p.t === "value" && p.net) return "";   // (v3.0.5: a UniFi value needs no device)
     if (["light", "switch", "value", "door", "lock"].includes(p.t) && !p.id) return Kit.t("builder.piece.needDevice");
     if (p.t === "value" && !p.at) return Kit.t("builder.piece.needReading");
     if (p.t === "garage") { const n = (p.doors || []).findIndex((d) => !d.id); if (!(p.doors || []).length) return Kit.t("builder.piece.needDoor"); if (n >= 0) return p.doors.length > 1 ? Kit.t("builder.piece.doorNOpener", { n: n + 1 }) : Kit.t("builder.piece.doorOpener"); }
@@ -1592,9 +1677,49 @@
     changed(false, `nudge:${c.i}:${n}`); drawInner(); bkSync(p);
   }
   function removePiece(c, n) {
-    c.o.parts.splice(n, 1);
+    const p = c.o.parts.splice(n, 1)[0];
     st.inner.sel = null; changed(true); drawInner();
+    if (p) undoToast(Kit.t("builder.hist.pieceGone", { name: pieceName(p) }));   // (v3.0.5: Undo right in the message)
   }
+  // (v3.0.5) "Arrange ▾": the Devices card's looks as one-time helpers — List (one row each, the icon on the left), Tiles
+  // (even tiles side by side) or Single item (the picked one over the whole card, in front). They only move the pieces
+  // once (one Undo puts them back); dragging them afterwards is as before. In thousandths of the card.
+  function arrange(c, how) {
+    const parts = c.o.parts || []; if (!parts.length) return;
+    const P = 24, G = 16, inner = 1000 - 2 * P, n = parts.length;
+    const box = (x, y, w, h) => DE().fixRect({ x: Math.round(x), y: Math.round(y), w: Math.max(10, Math.round(w)), h: Math.max(10, Math.round(h)) });
+    if (how === "list") parts.forEach((p, k) => { const h = (inner - (n - 1) * G) / n; Object.assign(p, box(P, P + k * (h + G), inner, h)); if (p.t === "dev") p.tp = "right"; });
+    else if (how === "tiles") {
+      // (as square as the card lets them: the card's own width against its height on the screen)
+      const cw = st.rect ? (c.w * st.rect.w) / st.g.cols : c.w, ch = st.rect ? (c.h * st.rect.h) / st.g.rows : c.h;
+      const cols = Math.max(1, Math.min(n, Math.round(Math.sqrt((n * cw) / Math.max(1, ch))) || 1)), rows = Math.ceil(n / cols);
+      const w = (inner - (cols - 1) * G) / cols, h = (inner - (rows - 1) * G) / rows;
+      parts.forEach((p, k) => { Object.assign(p, box(P + (k % cols) * (w + G), P + Math.floor(k / cols) * (h + G), w, h)); if (p.t === "dev") p.tp = "bottom"; });
+    } else {
+      const k = st.inner && st.inner.sel != null && parts[st.inner.sel] ? st.inner.sel : 0, p = parts.splice(k, 1)[0];
+      Object.assign(p, box(P, P, inner, inner)); parts.push(p); st.inner.sel = parts.length - 1;
+    }
+    changed(true); drawInner(); post();
+    undoToast(Kit.t(`builder.arrange.done.${how}`));
+  }
+  // (v3.0.5) "Grow and shrink with the card" on a piece: on — the card's box now is where what's in it has its own size
+  // (from there it follows the card); off — how much it grew goes into its icon and text size, so it looks the same
+  // (a piece from before 3.0.5 — "fit": "box", filling its box — takes the new way once the owner picks either)
+  function setPieceGrow(c, p, on) {
+    delete p.fit;
+    if (on) { p.grow = { w: c.w, h: c.h }; return; }
+    const g = p.grow, k = g && g.w > 0 && g.h > 0 ? Math.max(0.4, Math.min(4, Math.min(c.w / g.w, c.h / g.h))) : 1;
+    delete p.grow;
+    if (Math.abs(k - 1) < 0.005) return;
+    const bake = (key) => { const v = Math.max(50, Math.min(250, Math.round((p[key] || 100) * k))); if (v === 100) delete p[key]; else p[key] = v; };
+    if (p.t === "dev") { bake("iz"); bake("tz"); }
+    else if (p.t === "text") p.fs = Math.max(9, Math.min(80, Math.round((p.fs || { s: 13, m: 17, l: 24, xl: 34 }[p.size || "m"]) * k)));
+    // (v3.0.5) a light, switch, value, door, lock, garage or picture: its own zoom ("pz", % — grid.js draws it at that size)
+    else { const z = Math.max(40, Math.min(400, Math.round((p.pz || 100) * k))); if (z === 100) delete p.pz; else p.pz = z; }
+  }
+  const growBox = (on, onchange, note) => el("label.dve-tk.bk-grow", { title: Kit.t("builder.grow.tip") },
+    el("input", { type: "checkbox", checked: !!on, onchange: (e) => onchange(e.target.checked) }),
+    el("span", {}, el("b", {}, Kit.t("builder.grow.label")), el("small.muted", {}, note)));
   // the right side while editing inside: the pieces to add, the ones on the card, the selected one's settings
   function innerSide(c) {
     if (c.t === "devices") return dvSide(c);
@@ -1607,7 +1732,12 @@
         el("button.primary.small.bk-done", { type: "button", title: Kit.t("builder.inner.doneTip"), onclick: leaveInner }, Kit.t("builder.top.done")),
         el("small.muted", {}, Kit.t("builder.inner.help"))),
       el("b.bk-h", {}, Kit.t("builder.inner.addPiece")),
-      el("div.bk-addrow", {}, PIECE_T.map(([t]) => pieceBtn(t, (at) => addPiece(t, at), parts.length >= 16))),
+      el("div.bk-addrow", {}, PIECE_T.map(([t]) => pieceBtn(t, (at) => addPiece(t, at), parts.length >= 25))),
+      // (v3.0.5) Arrange ▾ — the old Devices card's looks, as helpers that move the pieces once
+      parts.length > 1 ? el("div.bk-arr", {}, el("span.bld-l", { title: Kit.t("builder.arrange.tip") }, Kit.t("builder.arrange.label")),
+        el("button.ghost.small", { type: "button", title: Kit.t("builder.arrange.listTip"), onclick: () => arrange(c, "list") }, Kit.t("builder.arrange.list")),
+        el("button.ghost.small", { type: "button", title: Kit.t("builder.arrange.tilesTip"), onclick: () => arrange(c, "tiles") }, Kit.t("builder.arrange.tiles")),
+        el("button.ghost.small", { type: "button", title: Kit.t("builder.arrange.singleTip"), onclick: () => arrange(c, "single") }, Kit.t("builder.arrange.single"))) : null,
       parts.length ? el("b.bk-h", {}, Kit.t("builder.inner.onCard", { n: parts.length })) : null, list,
       p ? piecePlace(c, p, n) : null, p ? pieceEditor(c, p, n) : el("small.muted", {}, parts.length ? Kit.t("builder.inner.clickPiece") : ""),
       el("label.bk-gsw", { title: Kit.t("builder.inner.guidesTip") }, el("span", {}, Kit.t("builder.inner.guides")),
@@ -1636,6 +1766,13 @@
     const out = [el("div.bk-peh", {}, iconEl(icn, 18), el("b", {}, name), el("small.muted", {}, tip))];
     const prob = pieceProblem(p);
     if (prob) out.push(el("small.bld-note", {}, Kit.t("builder.piece.stillToDoDot", { problem: prob })));
+    // (v3.0.5) "Grow and shrink with the card" on every piece (off: it keeps its own size whatever the card's size)
+    out.push(growBox(!!p.grow, (on) => { setPieceGrow(c, p, on); put(); toast(Kit.t(on ? "builder.grow.pieceOn" : "builder.grow.pieceOff")); }, Kit.t("builder.grow.pieceNote")));
+    // (v3.0.5) a device piece: everything a Devices item has — Device · Actions · Look · Advanced (dvItem)
+    // (v3.0.5) "Use the new look" on a device piece: the same "Done — Undo" note as the Devices card had (dvCard)
+    if (p.t === "dev" && !p.st && st.dvUndo === `${c.i}#${n}`) out.push(el("div.dve-old", {}, el("small.muted", {}, Kit.t("builder.dve.newLookDone")),
+      el("button.ghost.small", { type: "button", onclick: () => { st.dvUndo = null; undoRedo(true); } }, Kit.t("builder.dve.undo"))));
+    if (p.t === "dev") out.push(dvItem(c, p, n, "piece"));
     const wheelOf = () => {   // its own press-and-hold wheel (none: the panel's automatic one)
       if (!p.id) return null;
       const list = p.wheel || (p.wheel = []), key = `bkw-${c.i}-${n}`, auto = autoWheels(p.id);
@@ -1660,7 +1797,12 @@
     if (p.t === "light") out.push(row(Kit.t("builder.piece.light.name"), devSelect(p.id ?? null, (v) => setp("id", v), Kit.t("builder.piece.pickLight"), { first: (d) => d.kind === "light", firstLabel: Kit.t("builder.dev.lights"), restLabel: Kit.t("builder.dev.otherDevices") })),
       nameRow(p.id ? devName(p.id) : ""), row(Kit.t("builder.f.picture"), iconPick(p.icon, (v) => setp("icon", v), Kit.t("builder.f.automatic"))), wheelOf());
     if (p.t === "switch") out.push(row(Kit.t("builder.f.device"), devSelect(p.id ?? null, (v) => setp("id", v), Kit.t("builder.piece.pickSwitch"), { narrow: switches })), nameRow(p.id ? devName(p.id) : ""), wheelOf());
-    if (p.t === "value") {
+    // (v3.0.5) a Value piece shows a device's reading, or one UniFi Network value (unifi.js: a tap opens its room)
+    if (p.t === "value") out.push(row(Kit.t("builder.value.from"), seg([[false, Kit.t("builder.value.fromDevice")], [true, Kit.t("builder.value.fromNet")]], !!p.net,
+      (v) => { if (v) { delete p.id; delete p.at; delete p.unit; p.net = p.net || "inet"; } else delete p.net; put(); })));
+    if (p.t === "value" && p.net) out.push(row(Kit.t("builder.value.netValue"), el("select", { onchange: (e) => setp("net", e.target.value) }, optList(NET_VALS.map((k) => [k, Kit.t(`builder.net.val.${k}`)]), p.net))),
+      nameRow(Kit.t(`builder.net.val.${p.net}`)), el("small.muted", {}, Kit.t("builder.value.netNote")));
+    if (p.t === "value" && !p.net) {
       const A = p.id ? attrsOf(p.id) : {}, names = Object.keys(A).filter((a) => !SKIP_AT.test(a) || a === p.at);
       out.push(row(Kit.t("builder.f.device"), devSelect(p.id ?? null, (v) => { if (v !== p.id) delete p.at; setp("id", v); }, Kit.t("builder.dev.pick"), { all: true })),
         tipRow(Kit.t("builder.f.reading"), Kit.t("builder.f.readingTip"), el("select", { disabled: !p.id, onchange: (e) => setp("at", e.target.value) },
@@ -1682,16 +1824,22 @@
       out.push(nameRow(Kit.t("builder.f.nonePh")), el("small.muted", {}, Kit.t("builder.garage.tapNote")));
     }
     if (p.t === "text") {
-      const ta = el("textarea", { rows: "3", maxlength: "200", onchange: (e) => setp("text", e.target.value) }); ta.value = p.text || "";
+      const ta = el("textarea", { rows: "3", maxlength: "400", onchange: (e) => setp("text", e.target.value) }); ta.value = p.text || "";
       let insDev = null, insAt = "temperature";
       out.push(row(Kit.t("builder.piece.text.name"), ta),
         el("div.bld-ins", {}, el("small.muted", {}, Kit.t("builder.text.addLive")), devSelect(null, (v) => { insDev = v; }, Kit.t("builder.text.devicePh"), { all: true }),
           el("select", { onchange: (e) => { insAt = e.target.value; } }, optList([["name", Kit.t("builder.text.itsName")], ...ATTRS.map((a) => [a, a])], insAt)),
           el("button.ghost.small", { type: "button", onclick: () => { if (!insDev) return toast(Kit.t("builder.text.pickDevFirst"), true);
-            const add = `${ta.value && !/\s$/.test(ta.value) ? " " : ""}{{${insDev}.${insAt}}}`; if (ta.value.length + add.length > 200) return toast(Kit.t("builder.text.full"), true);
+            const add = `${ta.value && !/\s$/.test(ta.value) ? " " : ""}{{${insDev}.${insAt}}}`; if (ta.value.length + add.length > 400) return toast(Kit.t("builder.text.full"), true);
             ta.value += add; setp("text", ta.value); } }, Kit.t("builder.text.insert"))),
         el("small.muted", {}, Kit.t("builder.text.also", { time: "{{time}}", date: "{{date}}", greeting: "{{greeting}}" })),
-        row(Kit.t("builder.f.size"), seg([["s", Kit.t("builder.f.small")], ["m", Kit.t("builder.f.medium")], ["l", Kit.t("builder.f.large")], ["xl", Kit.t("builder.f.huge")]], p.size || "m", (v) => setp("size", v === "m" ? null : v))),
+        row(Kit.t("builder.f.size"), seg([["s", Kit.t("builder.f.small")], ["m", Kit.t("builder.f.medium")], ["l", Kit.t("builder.f.large")], ["xl", Kit.t("builder.f.huge")]], p.fs ? "" : p.size || "m", (v) => { delete p.fs; setp("size", v === "m" ? null : v); })),
+        // (v3.0.5) its own size in px, its color, a heading over it
+        (() => { const v = p.fs || { s: 13, m: 17, l: 24, xl: 34 }[p.size || "m"], l = el("span.bld-l", {}, Kit.t("builder.text.px", { n: v }));
+          return el("div.bld-row", {}, l, el("input", { type: "range", min: "9", max: "80", step: "1", value: String(v), "aria-label": Kit.t("builder.text.sizeAria"),
+            oninput: (e) => { p.fs = +e.target.value; delete p.size; l.textContent = Kit.t("builder.text.px", { n: p.fs }); changed(false, `bkfs:${c.i}:${n}`); drawInner(); }, onchange: () => side() })); })(),
+        row(Kit.t("builder.text.color"), colorBtn(p.nc, Kit.t("builder.dve.colorAutoShort"), (v) => { if (v) p.nc = v; else delete p.nc; changed(false, `bknc:${c.i}:${n}`); }, () => side())),
+        row(Kit.t("builder.text.head"), el("input", { type: "text", maxlength: "40", value: p.head || "", placeholder: Kit.t("builder.f.nonePh"), onchange: (e) => setp("head", e.target.value.trim()) })),
         row(Kit.t("builder.f.align"), seg([["left", Kit.t("builder.f.left")], ["center", Kit.t("builder.f.centre")], ["right", Kit.t("builder.f.right")]], p.align || "left", (v) => setp("align", v === "left" ? null : v))),
         row(Kit.t("builder.f.bold"), el("label.switch", {}, el("input", { type: "checkbox", checked: !!p.bold, onchange: (e) => setp("bold", e.target.checked ? true : null) }), el("span"))));
     }
@@ -1700,7 +1848,7 @@
       el("button.ghost.small", { type: "button", title: Kit.t("builder.piece.frontTip"), disabled: n === parts.length - 1, onclick: () => { parts.push(parts.splice(n, 1)[0]); st.inner.sel = parts.length - 1; put(); } }, Kit.t("builder.f.toFront")),
       el("button.ghost.small", { type: "button", title: Kit.t("builder.piece.backTip"), disabled: n === 0, onclick: () => { parts.unshift(parts.splice(n, 1)[0]); st.inner.sel = 0; put(); } }, Kit.t("builder.f.toBack")),
       el("button.ghost.small", { type: "button", onclick: () => {
-        if (parts.length >= 16) return toast(Kit.t("builder.piece.maxShort"), true);
+        if (parts.length >= 25) return toast(Kit.t("builder.piece.maxShort"), true);
         const q = structuredClone(p), r = DE().dragRect(p, "move", 30, 30);   // (a little down and to the right)
         parts.push({ ...q, ...r }); st.inner.sel = parts.length - 1; put(); } }, Kit.t("builder.f.duplicate")),
       el("button.ghost.small.bad", { type: "button", onclick: () => removePiece(c, n) }, Kit.t("builder.piece.remove"))));
@@ -1731,6 +1879,8 @@
 .bk-pe { display: flex; flex-direction: column; gap: 7px; border-top: 1px solid var(--glass-line); padding-top: 10px; margin-top: 4px; }
 .bk-peh { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .bk-peh small { flex-basis: 100%; }
 .bk-done { margin-left: auto; }
+.bk-arr { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.bk-grow { align-items: flex-start; } .bk-grow > span { display: flex; flex-direction: column; gap: 2px; }
 .bk-open { width: 100%; padding: 12px; font-size: 15px; }`));
   }
 
@@ -1765,7 +1915,10 @@
                   if (!v) { e.target.value = s.name; return toast(Kit.t("builder.pal.needName", { name: s.name }), true); }
                   if (v !== s.name) tplChange({ action: "rename", id: s.id, name: v }, Kit.t("builder.pal.renamed")); } }),
               el("button.ghost.bad.small", { type: "button", title: Kit.t("builder.pal.removeTip"),
-                onclick: async () => { if (await Kit.ask({ title: Kit.t("builder.pal.removeAsk", { name: s.name }), text: Kit.t("builder.pal.removeText"), yes: Kit.t("builder.pal.remove"), danger: true })) tplChange({ action: "remove", id: s.id }, Kit.t("builder.pal.removed")); } }, "✕")))) : null,
+                // (v3.0.5) a small thing: no question — it goes to the Trash, with Undo in the message
+                onclick: async () => { const r = await tplChange({ action: "remove", id: s.id });
+                  if (r && Kit.trash) Kit.trash.deleted({ name: s.name, trash: r.trash, days: r.days, after: () => loadTpls(),
+                    redo: async () => { const x = await tplChange({ action: "remove", id: s.id }); return x && x.trash; } }); } }, "✕")))) : null,
           mine.length ? el("h4.bld-palh", {}, Kit.t("builder.pal.mine")) : null,
           mine.length ? el("div.bld-pal", {}, mine.map((u) => btn("card:" + u.id, u.name, "grid", u.description || ""))) : null,
           !types.length && !mine.length && !saved.length ? el("small.muted", {}, cat === "yours" && !q
@@ -1935,6 +2088,7 @@
 .bld-cdi:hover, .bld-cdi:focus-within { background: rgba(255, 255, 255, .07); }
 .bld-cdi small { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bld-cdi:has(input:disabled) { opacity: .5; cursor: default; }
+/* (v3.0.5) a calendar's color dot */ .bld-cdi.dot { grid-template-columns: 18px 10px 1fr auto; } .bld-cddot { width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px rgba(255, 255, 255, .08); }
 .bld-cdpanel > small { padding: 4px 6px 2px; }`));
   }
   function checkDrop(key, label, items, cur, pick, opts = {}) {
@@ -1946,7 +2100,10 @@
     const boxes = items.map(([v], k) => el("input", { type: "checkbox", checked: on(v), disabled: !!(opts.disabled && opts.disabled(v)),
       onchange: (e) => { cdOpen = { key, at: k }; pick(items.map(([x]) => x).filter((x) => (x === v ? e.target.checked : on(x)))); } }));
     const panel = el("div.bld-cdpanel", { role: "group", "aria-label": label, hidden: true },
-      items.map(([, n, note], k) => el("label.bld-cdi", {}, boxes[k], el("span", {}, n), note != null ? el("small.muted", {}, note) : null)),
+      // (v3.0.5) opts.dot(v): a color dot before the name (a calendar's own color); opts.tip(v): why a box is off
+      items.map(([v, n, note], k) => el(opts.dot ? "label.bld-cdi.dot" : "label.bld-cdi", { title: (opts.tip && opts.tip(v)) || null }, boxes[k],
+        opts.dot && /^#[0-9a-f]{3,8}$/i.test(opts.dot(v) || "") ? el("i.bld-cddot", { style: `background:${opts.dot(v)}`, "aria-hidden": "true" }) : null,
+        el("span", {}, n), note != null ? el("small.muted", {}, note) : null)),
       opts.foot ? el("small.muted", {}, opts.foot) : null);
     const outside = (e) => { if (!wrap.isConnected) return document.removeEventListener("pointerdown", outside, true); if (!wrap.contains(e.target)) close(); };
     const move = (k) => { const live = boxes.filter((b) => !b.disabled); if (!live.length) return; const i = live.indexOf(document.activeElement); live[(i + k + live.length) % live.length].focus(); };
@@ -2007,9 +2164,67 @@
       onchange: (e) => { const v = Math.round(parseFloat(e.target.value)); if (Number.isFinite(v) && put(k, v) === "overlap") toast(Kit.t("builder.drag.overlap"), true); e.target.value = String(c[k]); } }));
     return el("div.bld-cpos", {}, el("div.dve-xywh.bld-cxywh", {}, num("x"), num("y"), num("w"), num("h")), el("small.muted", {}, Kit.t("builder.cpos.note", { cols: g.cols, rows: g.rows })));
   }
+  // (v3.0.5) a Rooms card's rooms (mockups/prototypes/settings-and-pages.html, the Rooms tab): in order — drag a grip or
+  // ▲ ▼, ✕ takes one off, "Add a room…" puts one at the end. One room: o.room alone (as before 3.0.5); more: o.rooms
+  // too (its first is o.room). A room hidden from this panel's room bar is still offered: the card still opens it
+  function roomsPicker(o, set) {
+    const all = st.ctx.rooms || [], name = (id) => (all.find((r) => r.id === id) || {}).name || id;
+    const ids = Array.isArray(o.rooms) && o.rooms.length ? o.rooms.slice() : o.room ? [o.room] : [];
+    const hidden = (st.look && st.look.hiddenRooms) || {};
+    const put = (l) => { l = [...new Set(l)].slice(0, 12); if (l.length) o.room = l[0]; else delete o.room; set("rooms", l.length > 1 ? l : null); };
+    const mv = (from, to) => { const l = ids.slice(); l.splice(to, 0, l.splice(from, 1)[0]); put(l); };
+    const out = [el("b", { style: "display:block;margin-top:6px" }, Kit.t("builder.rooms.title"))];
+    const box = el("div.bld-wxlist.bld-rooms", {}, ids.map((id, n) => el("div.bld-row", {}, Kit.reorder && ids.length > 1 ? Kit.reorder.grip(id, name(id)) : null,
+      el("span", {}, name(id)), hidden[id] ? el("small.muted", { title: Kit.t("builder.rooms.offBarTip") }, Kit.t("builder.rooms.offBar")) : null,
+      el("button.ghost.small", { type: "button", disabled: n === 0, "aria-label": Kit.t("builder.wx.up"), title: Kit.t("builder.wx.up"), onclick: () => mv(n, n - 1) }, "▲"),
+      el("button.ghost.small", { type: "button", disabled: n === ids.length - 1, "aria-label": Kit.t("builder.wx.down"), title: Kit.t("builder.wx.down"), onclick: () => mv(n, n + 1) }, "▼"),
+      el("button.ghost.small", { type: "button", "aria-label": Kit.t("builder.rooms.remove", { name: name(id) }), title: Kit.t("builder.pal.remove"), onclick: () => put(ids.filter((_, k) => k !== n)) }, "✕"))));
+    if (ids.length) out.push(Kit.reorder && ids.length > 1 ? Kit.reorder.list(box, "rooms-card", { name: (i) => name(ids[i]), move: mv, ownUndo: true }) : box);
+    const left = all.filter((r) => !ids.includes(r.id));
+    if (ids.length < 12 && left.length) out.push(row(Kit.t("builder.rooms.add"), el("select", { onchange: (e) => { if (e.target.value) put([...ids, e.target.value]); } },
+      optList(left.map((r) => [r.id, hidden[r.id] ? Kit.t("builder.rooms.hiddenOpt", { name: r.name }) : r.name]), null, Kit.t("builder.room.pick")))));
+    out.push(el("small.muted", {}, Kit.t(ids.length > 1 ? "builder.rooms.manyNote" : "builder.rooms.oneNote")));
+    return out;
+  }
+  // (v3.0.5) the System card's rows (mockups/prototypes/cards-editor.html, System): tick what it watches, order the ticked
+  // ones (a grip or ▲ ▼); a part this house hasn't set up is grayed out, "not set up" (the panel's own word on it:
+  // GET /api/panel/<id>/health → sys, row names only — asked once per builder visit). A card from before 3.0.5 (no
+  // rows) shows its four: they start ticked
+  const SYS = ["hubitat", "bridge", "notifier", "mqtt", "protect", "cameras", "unifi", "calendars", "weather", "music", "led", "panel"];
+  // (the panel's own to judge: never grayed out)
+  const SYS_ALWAYS = new Set(["hubitat", "bridge", "weather", "led", "panel"]);
+  function sysPicker(o, set) {
+    if (st.sys === undefined) {
+      st.sys = null;
+      api(`/api/panel/${encodeURIComponent(st.ctx.panel.id)}/health`).then((j) => {
+        st.sys = j && j.sys && Array.isArray(j.sys.set) ? j.sys : false;
+        // (the canvas follows: the panel page there doesn't ask itself — status.js stays off in the builder)
+        try { const w = $(".bld-frame").contentWindow; if (w && st.sys) { w.PanelSys = st.sys; if (w.App && w.App.render) w.App.render(); } } catch {}
+        side();
+      }).catch(() => { st.sys = false; side(); });
+    }
+    const known = st.sys && Array.isArray(st.sys.set), isSet = (k) => SYS_ALWAYS.has(k) || !known || st.sys.set.includes(k);
+    const picked = Array.isArray(o.rows) ? o.rows.filter((k) => SYS.includes(k)) : ["hubitat", "bridge", "weather", "panel"];
+    const put = (l) => set("rows", l);
+    const order = [...picked, ...SYS.filter((k) => !picked.includes(k))];
+    const mv = (from, to) => { const l = picked.slice(); l.splice(to, 0, l.splice(from, 1)[0]); put(l); };
+    const box = el("div.bld-wxlist.bld-sys", {}, order.map((k) => {
+      const on = picked.includes(k), n = picked.indexOf(k), ok = isSet(k);
+      return el("div.bld-row" + (on ? "" : ".off"), {}, Kit.reorder && on && picked.length > 1 ? Kit.reorder.grip(k, Kit.t(`builder.sys.${k}`)) : null,
+        el("label.bld-sysl", {}, el("input", { type: "checkbox", checked: on, onchange: (e) => put(e.target.checked ? [...picked, k] : picked.filter((x) => x !== k)) }), el("span", {}, Kit.t(`builder.sys.${k}`))),
+        ok ? null : el("small.muted", { title: Kit.t("builder.sys.notSetTip") }, Kit.t("builder.sys.notSet")),
+        el("button.ghost.small", { type: "button", disabled: !on || n === 0, "aria-label": Kit.t("builder.wx.up"), title: Kit.t("builder.wx.up"), onclick: () => mv(n, n - 1) }, "▲"),
+        el("button.ghost.small", { type: "button", disabled: !on || n === picked.length - 1, "aria-label": Kit.t("builder.wx.down"), title: Kit.t("builder.wx.down"), onclick: () => mv(n, n + 1) }, "▼"));
+    }));
+    // (the grips move the ticked rows only — they come first, in their order)
+    const list = Kit.reorder && picked.length > 1 ? Kit.reorder.list(box, "sys-rows", { name: (i) => Kit.t(`builder.sys.${order[i]}`), move: (a, b) => (a < picked.length && b < picked.length ? mv(a, b) : null), ownUndo: true }) : box;
+    return [el("b", { style: "display:block;margin-top:6px" }, Kit.t("builder.sys.title")), el("small.muted", { style: "display:block" }, Kit.t("builder.sys.hint")), list,
+      !picked.length ? el("small.pn-warn", {}, Kit.t("builder.sys.noneNote")) : null];
+  }
   function inspector(c) {
     const t = tdef(c.t), o = c.o, s = c.s, u = userCard(c.t);
-    const set = (k, v, redraw = true) => { if (v == null || v === "" || (Array.isArray(v) && !v.length && k !== "items")) delete o[k]; else o[k] = v; refreshItem(c); changed(redraw); };
+    // (v3.0.5: a System card's "rows": [] is kept — every row unticked, "Pick rows"; no rows at all would be the old four)
+    const set = (k, v, redraw = true) => { if (v == null || v === "" || (Array.isArray(v) && !v.length && k !== "items" && !(k === "rows" && c.t === "status"))) delete o[k]; else o[k] = v; refreshItem(c); changed(redraw); };
     const sty = (k, v, merge) => { if (v == null) delete s[k]; else s[k] = v; changed(false, merge); };
     // a slider whose name says its value as it moves (one undo step per drag); done = once let go
     const slide = (label, v, lo, hi, step, k, map, done) => {
@@ -2027,6 +2242,8 @@
     // what it shows
     const what = [];
     if (!["clock", "picture", "blank"].includes(c.t)) what.push(row(Kit.t("builder.f.title"), el("input", { type: "text", value: o.title || "", maxlength: "40", placeholder: Kit.t("builder.f.automaticPh"), onchange: (e) => set("title", e.target.value.trim()) })));
+    // (v3.0.5) a blank card's own name: here in the builder only (its label on the screen), not drawn on the panel
+    if (c.t === "blank") what.push(tipRow(Kit.t("builder.f.name"), Kit.t("builder.blank.nameTip"), el("input", { type: "text", value: o.title || "", maxlength: "40", placeholder: Kit.t("builder.type.blank.name"), onchange: (e) => { set("title", e.target.value.trim()); drawHandles(); } })));
     if (c.t === "lock") what.push(row(Kit.t("builder.piece.lock.name"), devSelect(o.id ?? null, (v) => set("id", v), Kit.t("builder.f.pickLock"), { only: (d) => d.kind === "lock" })),
       el("small.muted", {}, Kit.t("builder.lock.cardNote")),
       o.id ? (() => {   // (what this panel will really do with this lock)
@@ -2056,19 +2273,38 @@
     if (c.t === "player") what.push(row(Kit.t("builder.player.speaker"), devSelect(o.id ?? null, (v) => set("id", v), Kit.t("builder.player.pick"),
       { only: (d) => (rawDev(d.id).cmds || []).some((x) => ["play", "setVolume"].includes(x)) || d.kind === "speaker" || /speaker|sonos/i.test(d.kind) })),
       tipRow(Kit.t("builder.player.art"), Kit.t("builder.player.artTip"), el("label.switch", {}, el("input", { type: "checkbox", checked: o.art !== false, onchange: (e) => set("art", e.target.checked ? null : false) }), el("span"))));
+    // (v3.0.5) Slide show / Picture: one picture stays, several (or a picture folder) play — the options shared with the
+    // background and the screensaver (folders.js Kit.showEditor; service/layouts.py show_opts checks them again)
     if (c.t === "photos") {
-      const ups = (st.pics || []).filter((p) => p.style !== "background" || true), cur = o.pics || [];
-      what.push(ups.length ? el("div.bld-photos", {}, ups.map((u) => { const v = "up:" + u.id, on = cur.includes(v);
-        return el("button.ghost.bld-ph" + (on ? ".cur" : ""), { type: "button", title: u.name, onclick: () => {
-          const next = on ? cur.filter((x) => x !== v) : cur.length >= 12 ? (toast(Kit.t("builder.photos.max"), true), cur) : [...cur, v];
-          set("pics", next.length ? next : []); } }, el("img", { src: `/pictures/${u.id}`, alt: "" })); }))
-        : el("small.muted", {}, Kit.t("builder.photos.none")));
-      what.push(row(Kit.t("builder.photos.every"), el("select", { onchange: (e) => set("every", +e.target.value) }, optList([[5, Kit.t("builder.f.secs", { n: 5 })], [10, Kit.t("builder.f.secs", { n: 10 })], [20, Kit.t("builder.f.secs", { n: 20 })], [60, Kit.t("builder.f.mins", { n: 1 })], [300, Kit.t("builder.f.mins", { n: 5 })]], o.every || 10))),
-        tipRow(Kit.t("builder.fit.label"), Kit.t("builder.fit.tip"), seg([["cover", Kit.t("builder.fit.fill")], ["contain", Kit.t("builder.fit.whole")]], o.fit || "cover", (v) => set("fit", v))));
+      what.push(Kit.showEditor ? Kit.showEditor({ o, which: "card", uploads: st.pics || [], set: (n) => {
+        for (const k of Object.keys(o)) if (k !== "title") delete o[k];
+        Object.assign(o, n); refreshItem(c); changed(true);
+      } }) : el("small.muted", {}, Kit.t("builder.photos.none")));
     }
-    if (c.t === "batteries") what.push(row(Kit.t("builder.batteries.below"), el("select", { onchange: (e) => set("below", +e.target.value) }, optList([[10, "10 %"], [15, "15 %"], [25, "25 %"], [40, "40 %"], [60, "60 %"], [100, Kit.t("builder.batteries.all")]], o.below || 25))));
-    if (c.t === "power") what.push(row(Kit.t("builder.f.show"), el("select", { onchange: (e) => set("top", +e.target.value) }, optList([3, 5, 8, 12, 20].map((n) => [n, Kit.t("builder.power.top", { n })]), o.top || 8))),
-      el("small.muted", {}, Kit.t("builder.power.note")));
+    // (v3.0.5) Batteries: "Low batteries" (every device with one) or "Custom" (the devices picked, with their own low
+    // level); "Show only when low" or "Always show" (every watched battery, the low ones marked)
+    if (c.t === "batteries") {
+      // (v3.0.5: a battery with no level yet says so — never "— %")
+      const lvl = (id) => { const b = parseFloat(rawDev(id).attrs.battery); return Number.isFinite(b) ? `${Math.round(b)} %` : Kit.t("builder.batteries.noLevel"); };   // i18n-ok (a unit)
+      const custom = o.mode === "custom", bats = devices().filter((d) => "battery" in (rawDev(d.id).attrs || {})).map((d) => [d.id, d.label, lvl(d.id)]);
+      what.push(row(Kit.t("builder.batteries.what"), seg([[false, Kit.t("builder.batteries.low")], [true, Kit.t("builder.batteries.custom")]], custom, (v) => set("mode", v ? "custom" : null))));
+      if (custom) what.push(bats.length ? checkDrop(`bat:${c.i}`, Kit.t("builder.batteries.watch"), bats, (o.ids || []).filter((x) => bats.some((b) => b[0] === x)),
+        (next) => set("ids", next.length ? next : null), { noneText: Kit.t("builder.batteries.noneYet"), foot: Kit.t("builder.batteries.watchFoot") }) : el("small.muted", {}, Kit.t("builder.batteries.noBattery")));
+      if (custom && !(o.ids || []).length) what.push(el("small.pn-warn", {}, Kit.t("builder.batteries.pickNote")));   // (v3.0.5: as the card shows it)
+      what.push(tipRow(custom ? Kit.t("builder.batteries.lowAt") : Kit.t("builder.batteries.below"), Kit.t("builder.batteries.lowTip"),
+        el("select", { onchange: (e) => set("below", +e.target.value) }, optList([[10, "10 %"], [15, "15 %"], [20, "20 %"], [25, "25 %"], [30, "30 %"], [40, "40 %"], [50, "50 %"], [60, "60 %"], [100, Kit.t("builder.batteries.all")]], o.below || 25))),
+        row(Kit.t("builder.batteries.when"), seg([[false, Kit.t("builder.batteries.onlyLow")], [true, Kit.t("builder.batteries.always")]], o.show === "all", (v) => set("show", v ? "all" : null))),
+        el("small.muted", {}, o.show === "all" ? Kit.t("builder.batteries.alwaysNote") : Kit.t("builder.batteries.onlyLowNote")));
+    }
+    // (v3.0.5) Power now: the devices it watches (none picked: every device that reports watts), then all or the top N
+    if (c.t === "power") {
+      // (v3.0.5) every device that reports watts — hidden ones too (an inverter or a meter is often hidden from the rooms)
+      const meters = ((((M.devices && M.devices()) || {}).devices) || []).filter(reportsW).map((d) => [d.id, d.label || Kit.t("builder.dev.fallback", { id: d.id })])
+        .sort((a, b) => String(a[1]).localeCompare(String(b[1])));
+      what.push(meters.length ? checks(`pw:${c.i}`, Kit.t("builder.power.watch"), meters, o.ids, (v) => set("ids", v), Kit.t("builder.power.every")) : null,
+        row(Kit.t("builder.f.show"), el("select", { onchange: (e) => set("top", +e.target.value) }, optList([[0, Kit.t("builder.power.allOf")], ...[3, 5, 8, 10, 12, 20].map((n) => [n, Kit.t("builder.power.top", { n })])], o.top ?? 8))),
+        el("small.muted", {}, Array.isArray(o.ids) && o.ids.length ? Kit.t("builder.power.pickedNote", { n: o.ids.length }) : Kit.t("builder.power.note")));
+    }
     if (c.t === "alarm") what.push(el("small.muted", {}, Kit.t("builder.alarm.note")));
     // (a value card's new device: its reading only if that device has it too — else "Pick…" again)
     if (["device", "value", "button"].includes(c.t)) what.push(row(c.t === "button" ? Kit.t("builder.button.litWhenOn") : Kit.t("builder.f.device"), devSelect(o.id ?? null, (v) => {
@@ -2096,7 +2332,11 @@
       what.push(el("small.muted", {}, Kit.t("builder.text.also", { time: "{{time}}", date: "{{date}}", greeting: "{{greeting}}" })));
       what.push(row(Kit.t("builder.f.align"), seg([["left", Kit.t("builder.f.left")], ["center", Kit.t("builder.f.centre")], ["right", Kit.t("builder.f.right")]], o.align || "left", (v) => set("align", v))));
     }
-    if (c.t === "room") what.push(row(Kit.t("builder.type.room.name"), el("select", { onchange: (e) => set("room", e.target.value) }, optList(st.ctx.rooms.map((r) => [r.id, r.name]), o.room, Kit.t("builder.room.pick")))));
+    if (c.t === "room") what.push(...roomsPicker(o, set));
+    if (c.t === "status") what.push(...sysPicker(o, set));
+    // (v3.0.5) Notifications: Compact (the Alert note's button) or List (mockups/prototypes/cards-editor.html)
+    if (c.t === "notices") what.push(row(Kit.t("builder.f.style"), seg([["compact", Kit.t("builder.notices.compact")], ["list", Kit.t("builder.notices.list")]], o.style === "compact" ? "compact" : "list",
+      (v) => set("style", v === "compact" ? "compact" : null))), el("small.muted", {}, Kit.t(o.style === "compact" ? "builder.notices.compactNote" : "builder.notices.listNote")));
     if (c.t === "camera") {
       what.push(row(Kit.t("builder.type.camera.name"), camSelect(o.cam, (v) => set("cam", v))));
       what.push(row(Kit.t("builder.f.shows"), seg([["live", Kit.t("builder.cam.live")], ["still", Kit.t("builder.cam.still")], ["icon", Kit.t("builder.cam.button")]], o.view || "live", (v) => set("view", v === "live" ? null : v))));
@@ -2108,6 +2348,28 @@
       what.push(tipRow(Kit.t("builder.fit.label"), Kit.t("builder.fit.tip"), seg([["cover", Kit.t("builder.fit.fill")], ["contain", Kit.t("builder.fit.whole")]], o.fit || "cover", (v) => set("fit", v))));
     }
     if (c.t === "calendar") what.push(row(Kit.t("builder.calendar.days"), el("select", { onchange: (e) => set("days", +e.target.value) }, optList([1, 2, 3, 4, 5, 7].map((n) => [n, n]), o.days || 3))));
+    // (v3.0.5; mockups/prototypes/calendar-pick-305.html) "Same as the panel" (the default) or "Choose": a card only ever
+    // narrows the panel — a calendar off on this panel stays off, ticked or not; one added later shows only on "Same
+    // as the panel" cards. Going back to "Same as the panel" keeps the ticks for next time.
+    if (c.t === "calendar") {
+      const house = st.ctx.houseCalendars || [], own = new Map((st.ctx.managed.calendars || []).map((x) => [x.id, x]));
+      const offHere = (id) => (own.get(id) || {}).on === false, pick = o.cal === "pick";
+      const shown = house.filter((h) => !offHere(h.id)).map((h) => h.id), color = new Map(house.map((h) => [h.id, h.color]));
+      // (v3.0.5) "Choose" the first time: the calendars the panel shows start ticked
+      what.push(row(Kit.t("builder.calendar.which"), seg([[false, Kit.t("builder.calendar.same")], [true, Kit.t("builder.calendar.choose")]], pick,
+        (v) => { if (v && !Array.isArray(o.cals)) o.cals = shown.slice(); set("cal", v ? "pick" : null); })));
+      if (!house.length) what.push(el("small.muted", {}, Kit.t("builder.calendar.noneYet")));
+      else if (pick) {
+        // (v3.0.5) each with its color dot; one off on the panel: dimmed and disabled (narrowing: it can't show), the tooltip says why
+        const items = house.map((h) => [h.id, h.name, offHere(h.id) ? Kit.t("builder.calendar.offHere", { panel: st.ctx.panel.name }) : null]);
+        const ticked = (Array.isArray(o.cals) ? o.cals : []).filter((id) => house.some((h) => h.id === id));
+        what.push(checkDrop(`cal:${c.i}`, Kit.t("builder.calendar.onCard"), items, ticked,
+          (next) => { o.cals = next; set("cal", "pick"); },   // (v3.0.5: none ticked stays none — set() would drop an empty list)
+          { noneText: Kit.t("builder.calendar.noneTicked"), disabled: offHere, foot: Kit.t("builder.calendar.narrowNote"),
+            dot: (id) => color.get(id), tip: (id) => (offHere(id) ? Kit.t("builder.calendar.offTip", { panel: st.ctx.panel.name }) : null) }));
+        if (!ticked.some((id) => !offHere(id))) what.push(el("small.pn-warn", {}, Kit.t("builder.calendar.emptyCard")));
+      } else what.push(el("small.muted", {}, Kit.t("builder.calendar.sameNote", { n: house.filter((h) => !offHere(h.id)).length, panel: st.ctx.panel.name })));
+    }
     if (c.t === "weather") what.push(...wxSource(o, set), ...wxPlaces(o, set));
     if (c.t === "weather") what.push(row(Kit.t("builder.weather.days"), el("select", { onchange: (e) => set("days", e.target.value === "" ? null : +e.target.value) },
       optList([[0, Kit.t("builder.weather.nowOnly")], [1, "1"], [2, "2"], [3, "3"], [4, "4"], [5, "5"], [7, "7"], [14, "14"]], o.days, Kit.t("builder.weather.all")))));
@@ -2152,7 +2414,7 @@
       what.push(el("button.primary.bk-open", { type: "button", title: Kit.t("builder.blank.openTip"), onclick: () => enterInner(c) }, parts.length ? Kit.t("builder.blank.edit") : Kit.t("builder.blank.fill")),
         el("small.muted", {}, parts.length ? Kit.t("builder.blank.pieces", { n: parts.length, list: parts.map(pieceName).join(" · ") }) : Kit.t("builder.blank.empty")),
         ...parts.map(pieceProblem).filter(Boolean).slice(0, 1).map((x) => el("small.bld-note", {}, Kit.t("builder.blank.needs", { problem: x }))),
-        el("b.bk-h", {}, Kit.t("builder.inner.addPiece")), (innerCss(), el("div.bk-addrow", {}, PIECE_T.map(([t]) => pieceBtn(t, () => { enterInner(c); addPiece(t, null); }, parts.length >= 16)))));
+        el("b.bk-h", {}, Kit.t("builder.inner.addPiece")), (innerCss(), el("div.bk-addrow", {}, PIECE_T.map(([t]) => pieceBtn(t, () => { enterInner(c); addPiece(t, null); }, parts.length >= 25)))));
     }
     if (c.t === "value" && o.style === "gauge") what.push(row(Kit.t("builder.gauge.from"), el("input", { type: "text", inputmode: "decimal", value: o.min ?? 0, onchange: (e) => { const n = parseFloat(e.target.value); set("min", Number.isFinite(n) ? n : null); } })),
       row(Kit.t("builder.gauge.to"), el("input", { type: "text", inputmode: "decimal", value: o.max ?? 100, onchange: (e) => { const n = parseFloat(e.target.value); set("max", Number.isFinite(n) ? n : null); } })),
@@ -2215,8 +2477,10 @@
     // on top, where it's seen (it was hidden under Style)
     // (v3.0.3) the words and icons keep their own size (Style's Icon / Text size); "Grow and shrink with the card" (off by
     // default) makes them follow the box from the size it has when it's switched on
-    if (c.t !== "blank") { const fitNow = s.fit === "scroll" || s.fit === false ? "scroll" : "scale", growOn = !!(s.grow && s.grow.w && s.grow.h);
-      what.unshift(tipRow(Kit.t("builder.grow.label"), Kit.t("builder.grow.tip"), el("label.switch", {}, el("input", { type: "checkbox", checked: growOn, onchange: (e) => { setGrow(c, e.target.checked); side(); } }), el("span"))),
+    // (v3.0.5: on every card — a blank card too, where its pieces then follow the card; each piece has its own as well)
+    { const fitNow = s.fit === "scroll" || s.fit === false ? "scroll" : "scale", growOn = !!(s.grow && s.grow.w && s.grow.h);
+      if (c.t === "blank") what.unshift(growBox(growOn, (on) => { setGrow(c, on); side(); }, growOn ? Kit.t("builder.grow.onNote") : Kit.t("builder.grow.blankNote")));
+      else what.unshift(tipRow(Kit.t("builder.grow.label"), Kit.t("builder.grow.tip"), el("label.switch", {}, el("input", { type: "checkbox", checked: growOn, onchange: (e) => { setGrow(c, e.target.checked); side(); } }), el("span"))),
         tipRow(Kit.t("builder.resize.label"), Kit.t("builder.resize.tip"), seg([["scale", Kit.t("builder.resize.scale")], ["scroll", Kit.t("builder.resize.scroll")]], fitNow, (v) => { sty("fit", v === "scale" ? null : "scroll"); side(); })),
         el("small.muted", {}, growOn ? Kit.t("builder.grow.onNote") : fitNow === "scale" ? Kit.t("builder.resize.scaleNote")
           : Kit.t("builder.resize.scrollNote"))); }
@@ -2489,10 +2753,15 @@
     const put = (list) => set("locs", list.length ? list : null);
     const out = [el("b", { style: "display:block;margin-top:6px" }, Kit.t("builder.wx.places")), el("small.muted", { style: "display:block" }, locs.length ? Kit.t("builder.wx.placesNote")
       : Kit.t("builder.wx.noPlaces"))];
-    locs.forEach((p, n) => out.push(el("div.bld-row", {}, el("span", {}, `${n === 0 ? "🏠 " : ""}${p.name}${p.region ? `, ${p.region}` : ""}`),
-      el("button.ghost.small", { type: "button", disabled: n === 0, "aria-label": Kit.t("builder.wx.up"), title: n === 1 ? Kit.t("builder.wx.makeHome") : Kit.t("builder.wx.up"), onclick: () => { const l = locs.slice(); l.splice(n - 1, 0, l.splice(n, 1)[0]); put(l); } }, "▲"),
-      el("button.ghost.small", { type: "button", disabled: n === locs.length - 1, "aria-label": Kit.t("builder.wx.down"), title: Kit.t("builder.wx.down"), onclick: () => { const l = locs.slice(); l.splice(n + 1, 0, l.splice(n, 1)[0]); put(l); } }, "▼"),
+    // (v3.0.5) each place has a grip too: drag it (or Alt+↑ ↓, Space on the grip) — Kit.reorder, one Undo per move
+    const pname = (p) => `${p.name}${p.region ? `, ${p.region}` : ""}`;
+    const mv = (from, to) => { const l = locs.slice(); l.splice(to, 0, l.splice(from, 1)[0]); put(l); };
+    // (v3.0.5) the grip only with two places or more; a drag is the builder's own Undo step (ownUndo), not Kit.history's
+    const wbox = el("div.bld-wxlist", {}, locs.map((p, n) => el("div.bld-row", {}, Kit.reorder && locs.length > 1 ? Kit.reorder.grip(`${p.name}|${p.lat},${p.lon}`, pname(p)) : null, el("span", {}, `${n === 0 ? "🏠 " : ""}${pname(p)}`),
+      el("button.ghost.small", { type: "button", disabled: n === 0, "aria-label": Kit.t("builder.wx.up"), title: n === 1 ? Kit.t("builder.wx.makeHome") : Kit.t("builder.wx.up"), onclick: () => mv(n, n - 1) }, "▲"),
+      el("button.ghost.small", { type: "button", disabled: n === locs.length - 1, "aria-label": Kit.t("builder.wx.down"), title: Kit.t("builder.wx.down"), onclick: () => mv(n, n + 1) }, "▼"),
       el("button.ghost.small", { type: "button", "aria-label": Kit.t("builder.pal.remove"), onclick: () => put(locs.filter((_, k) => k !== n)) }, "✕"))));
+    if (locs.length) out.push(Kit.reorder && locs.length > 1 ? Kit.reorder.list(wbox, "wx-places", { name: (i) => pname(locs[i]), move: mv, ownUndo: true }) : wbox);
     if (!wxAdding) {
       if (locs.length < 6) out.push(el("button.ghost.small", { type: "button", onclick: () => { wxAdding = true; wxFound = null; changed(); } }, Kit.t("builder.wx.add")));
       return out;
@@ -2642,6 +2911,9 @@
     netclients: { icon: "#dacfff", named: "#a5b4fc" },
     netlog: { join: "#34d399", roam: "#7dd3fc" },
     netvals: { val: "#f3efff", icon: "#a78bfa" },
+    netups: { mains: "#34d399", batt: "#fbbf24", low: "#fb7185", fill: "#a78bfa" },
+    netbell: { ring: "#fbbf24", acc: "#a78bfa" },
+    netfeed: { join: "#34d399", leave: "#94a3b8", alert: "#fb7185", ok: "#38bdf8" },
   };
   const NET_PARTS = ["counts", "uptime", "uptodate", "isp", "thru", "ping"], NET_STRIP = ["net", "gw", "wifi", "sw", "pro", "clients"];
   const NET_VALS = ["inet", "line", "ping", "gw", "poe", "wifi", "wired", "clients", "devs"], NET_VALS0 = ["inet", "line", "ping", "wifi", "devs"];
@@ -2658,9 +2930,18 @@
     if (!st.netDevs) { st.netDevs = []; api("/api/manage/unifi").then((r) => { if (st) { st.netDevs = (r.devices || []).filter((d) => d.kind === "switch"); side(); } }).catch(() => {}); }
     return st.netDevs;
   };
+  // (v3.0.5) the UPSes there are (the UPS card's picker): the Manager's read, once
+  const netUpses = () => {
+    if (!st.netUps) { st.netUps = []; api("/api/manage/ups").then((r) => { if (st) { st.netUps = r.upses || []; side(); } }).catch(() => {}); }
+    return st.netUps;
+  };
+  // (v3.0.5) a slider for a percent (the map's card title sizes): saved when let go; the default saves as nothing
+  const pctSlider = (label, v, def, min, max, put) => { const lab = el("span.bld-l", {}, Kit.t(label, { n: v }));
+    return el("div.bld-row", {}, lab, el("input", { type: "range", min, max, step: 5, value: v, oninput: (e) => { lab.textContent = Kit.t(label, { n: e.target.value }); },
+      onchange: (e) => put(+e.target.value === def ? null : +e.target.value) })); };
   function netEditor(c, o, set) {
     const look = ["a", "b", "c"].includes(o.look) ? o.look : "a", out = [];
-    out.push(row(Kit.t("builder.dock.style"), seg(["a", "b", "c"].map((v) => [v, Kit.t(`builder.net.look.${c.t}.${v}`)]), look, (v) => set("look", v === "a" ? null : v))));
+    if (c.t !== "netfeed") out.push(row(Kit.t("builder.dock.style"), seg(["a", "b", "c"].map((v) => [v, Kit.t(`builder.net.look.${c.t}.${v}`)]), look, (v) => set("look", v === "a" ? null : v))));
     if (c.t === "netmap") {
       const glow = Number.isInteger(o.glow) ? o.glow : 60, lab = el("span.bld-l", {}, Kit.t("builder.net.glowN", { n: glow }));
       out.push(el("div.bld-row", {}, lab, el("input", { type: "range", min: 0, max: 100, step: 5, value: glow,
@@ -2678,10 +2959,16 @@
       out.push(row(Kit.t("builder.net.follow"), swIn(o.follow !== false, (v) => set("follow", v ? null : false))),
         el("h4.bld-sub", {}, Kit.t("builder.net.arrange")),
         el("div.bld-row", {}, el("button" + (arr ? ".primary" : ".ghost") + ".small", { type: "button", onclick: () => netArrange(arr ? null : c.i) }, Kit.t(arr ? "builder.net.arrangeDone" : "builder.net.arrangeGo")),
-          o.pos ? el("button.ghost.small", { type: "button", onclick: () => set("pos", null) }, Kit.t("builder.net.reset")) : null),
-        el("small.muted", {}, Kit.t(arr ? "builder.net.arrangeOn" : "builder.net.arrangeNote")),
-        row(Kit.t("builder.net.snap"), swIn(o.snap, (v) => set("snap", v || null))),
+          // (v3.0.5) "Arrange for me": your own places go, the parts spread over the whole card again (one undo step)
+          el("button.ghost.small", { type: "button", title: Kit.t("builder.net.autoTip"), onclick: () => { if (o.pos) set("pos", null); toast(Kit.t("builder.net.autoDone")); } }, Kit.t("builder.net.auto"))),
+        el("small.muted", {}, Kit.t(arr ? "builder.net.arrangeOn" : o.pos ? "builder.net.arrangeKept" : "builder.net.arrangeNote")),
+        row(Kit.t("builder.net.snap"), swIn(o.snap !== false, (v) => set("snap", v ? null : false))),   // (v3.0.5: on by default)
         row(Kit.t("builder.net.ports"), swIn(o.ports, (v) => set("ports", v || null))),
+        // (v3.0.5) the parts follow the card's Style Icon size / Text size, never the card's size; the title has its own
+        el("h4.bld-sub", {}, Kit.t("builder.net.mapSizes")),
+        el("small.muted", {}, Kit.t("builder.net.mapSizesNote")),
+        pctSlider("builder.net.htxN", Number.isInteger(o.htx) ? o.htx : 100, 100, 60, 180, (v) => set("htx", v)),
+        pctSlider("builder.net.hicN", Number.isInteger(o.hic) ? o.hic : 100, 100, 60, 180, (v) => set("hic", v)),
         el("h4.bld-sub", {}, Kit.t("builder.net.protectGear")),
         row(Kit.t("builder.net.protect"), swIn(o.protect !== false, (v) => set("protect", v ? null : false))),
         o.protect !== false ? row(Kit.t("builder.net.cams"), seg([["bubble", Kit.t("builder.net.camsBubble")], ["each", Kit.t("builder.net.camsEach")]], o.camEach ? "each" : "bubble", (v) => set("camEach", v === "each" || null))) : null);
@@ -2695,11 +2982,27 @@
       row(Kit.t("builder.net.filter"), seg(["all", "wired", "wifi", "guest"].map((k) => [k, Kit.t(`builder.net.f.${k}`)]), o.filter || "all", (v) => set("filter", v === "all" ? null : v))),
       el("small.muted", {}, Kit.t("builder.net.clientsNote")));
     if (c.t === "netlog") out.push(row(Kit.t("builder.net.logWifi"), swIn(o.wifi !== false, (v) => set("wifi", v ? null : false))), el("small.muted", {}, Kit.t("builder.net.logNote")));
+    if (c.t === "netups") out.push(row(Kit.t("builder.net.ups"), el("select", { onchange: (e) => set("ups", e.target.value || null) },
+      optList(netUpses().map((u) => [u.id, `${u.name} · ${Kit.t(u.src === "nut" ? "builder.net.upsNut" : "builder.net.upsUnifi")}`]), o.ups || "", Kit.t("builder.net.upsFirst")))),
+      el("small.muted", {}, Kit.t("builder.net.upsNote")));   // (says it hides without a UPS)
+    if (c.t === "netbell") {
+      const bells = ((window.HUBITAT && HUBITAT.cameras) || st.cams || []).filter((x) => x && x.doorbell);
+      out.push(row(Kit.t("builder.net.bell"), el("select", { onchange: (e) => set("cam", e.target.value ? +e.target.value : null) },
+        optList(bells.map((x) => [String(x.id), x.name]), o.cam != null ? String(o.cam) : "", Kit.t("builder.net.bellFirst")))),
+        row(Kit.t("builder.net.bellMsgs"), swIn(o.msgs !== false, (v) => set("msgs", v ? null : false))),
+        el("small.muted", {}, Kit.t("builder.net.bellNote")));
+    }
+    if (c.t === "netfeed") out.push(row(Kit.t("builder.net.feedCounts"), swIn(o.counts !== false, (v) => set("counts", v ? null : false))),
+      row(Kit.t("builder.net.feedDense"), swIn(o.dense === true, (v) => set("dense", v || null))),
+      row(Kit.t("builder.net.feedGuests"), swIn(o.guests !== false, (v) => set("guests", v ? null : false))),
+      row(Kit.t("builder.net.feedAlerts"), swIn(o.alerts !== false, (v) => set("alerts", v ? null : false))),
+      el("small.muted", {}, Kit.t("builder.net.feedNote")));
     if (c.t === "netstrip") out.push(checks(`netstrip:${c.i}`, Kit.t("builder.net.tabs"), NET_STRIP.map((k) => [k, Kit.t(`builder.net.tab.${k}`)]), o.items, (v) => set("items", v), Kit.t("builder.net.allTabs")),
       el("small.muted", {}, Kit.t("builder.net.stripNote")));
     if (c.t === "netvals") out.push(checks(`netvals:${c.i}`, Kit.t("builder.net.vals"), NET_VALS.map((k) => [k, Kit.t(`builder.net.val.${k}`)]), o.vals || NET_VALS0, (v) => set("vals", v || NET_VALS), Kit.t("builder.net.allVals")),
       el("small.muted", {}, Kit.t("builder.net.valsNote")));
-    out.push(el("small.muted", { style: "display:block;margin-top:6px" }, Kit.t("builder.net.hiddenNote")));   // (its own line: not run into the note above)
+    // (its own line: not run into the note above; v3.0.5: the UPS and the Doorbell don't need UniFi Network — their notes say when they hide)
+    if (c.t !== "netups" && c.t !== "netbell") out.push(el("small.muted", { style: "display:block;margin-top:6px" }, Kit.t("builder.net.hiddenNote")));
     return out.filter(Boolean);
   }
   // the map's arranging: on for one card (the frame lets the drag through), off when that card isn't the one selected
@@ -2715,7 +3018,7 @@
     const clean = {};
     for (const [k, v] of Object.entries(pos).slice(0, 300)) if (/^(wan:WAN2?|(pg:)?[0-9a-f]{12})$/.test(k) && Array.isArray(v) && v.length === 2 && v.every((n) => Number.isInteger(n) && n >= 0 && n <= 1000)) clean[k] = v;
     c.o = c.o || {}; c.o.pos = clean;
-    changed(true, `netpos:${i}`);
+    changed(true);   // (v3.0.5: each move its own undo step — ↶ / Ctrl+Z takes back one move at a time)
   }
 
   function trashEditor(o) {
@@ -2976,8 +3279,9 @@
 
   // ---------- one item: the live preview, then the four tabs ----------
   const DV_TABS = [["device", "builder.dve.tab.device"], ["actions", "builder.dve.tab.actions"], ["look", "builder.dve.tab.look"], ["adv", "builder.dve.tab.adv"]];
-  function dvItem(c, it, n) {
-    const d = dvDev(it.id), raw = it.id != null ? rawDev(it.id) : {}, own = dvOwn(it), look = dvLook(c.o);
+  // (v3.0.5: lookOver "piece" — a blank card's device piece: its place is the piece's, its look has the icon background)
+  function dvItem(c, it, n, lookOver = null) {
+    const d = dvDev(it.id), raw = it.id != null ? rawDev(it.id) : {}, own = dvOwn(it), look = lookOver || dvLook(c.o);
     const put = (redraw = true, merge = null) => { changed(redraw, merge); dvRedraw(); };
     const setv = (k, v, redraw = true, merge = null) => { if (v == null || v === "" || (Array.isArray(v) && !v.length)) delete it[k]; else it[k] = v; put(redraw, merge); };
     const tab = DV_TABS.some(([k]) => k === st.dvTab) ? st.dvTab : "device";
@@ -2987,7 +3291,7 @@
       onkeydown: (e) => { const j = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: DV_TABS.length - 1 }[e.key]; if (j != null) { e.preventDefault(); go(DV_TABS[(j + DV_TABS.length) % DV_TABS.length][0]); } } }, Kit.t(w))));
     const x = { d, raw, own, look, put, setv };
     const body = { device: dvTabDevice, actions: dvTabActions, look: dvTabLook, adv: dvTabAdv }[tab](c, it, n, x);
-    return el("div.dve-ed", {}, el("b.bk-h", {}, Kit.t("builder.dve.itemN", { n: n + 1, name: dvName(it) })), dvPreview(c, it, n, x), tabs,
+    return el("div.dve-ed", {}, look === "piece" ? null : el("b.bk-h", {}, Kit.t("builder.dve.itemN", { n: n + 1, name: dvName(it) })), dvPreview(c, it, n, x), tabs,
       el("div.dve-panel", { role: "tabpanel", id: "dve-panel", "aria-labelledby": `dve-t-${tab}` }, ...body.filter(Boolean)));
   }
   // what it shows now, from the hub's last values (the preview only)
@@ -3005,9 +3309,18 @@
     const pic = dvPic(it), sz = Math.round((30 * (it.iz || 100)) / 100), mot = it.motion && window.Motion && !/^(art|up):/.test(pic) ? Motion.pick(it.motion, pic, (d || {}).kind) : "";
     const icx = mot ? (() => { const s = el("span"); s.innerHTML = Motion.wrap(icon(pic, Math.round(sz * 0.8)), mot, on, Math.round(sz * 0.8)); return s; })() : picEl(pic, sz);
     const tp = it.tp || (look === "list" ? "right" : "bottom"), words = dvWords(it, d, raw, on);
+    // (v3.0.5) a device piece: drawn as the panel draws it (grid.js dvItem bk, theme.css .dv-pc — builder.css mirrors it):
+    // the icon background's shape, size, color and transparency, the icon white unless set, the name's color
+    let cls = (it.bg === "none" || it.shape === "none" ? ".bg-none" : ""), sty = `${it.col ? `--dc:${it.col};` : ""}--tz:${(it.tz || 100) / 100}`;
+    if (look === "piece") {
+      const art = /^art:/.test(pic), up = /^up:/.test(pic), disc = Math.round(art || up ? sz * (art ? 1.85 : 1.3) * 1.14 : sz * 1.74);
+      const shape = ["rounded", "none"].includes(it.shape) ? it.shape : "circle", icc = it.icc === "auto" ? "" : it.icc || "#ffffff";
+      cls = `.dv-pc.sh-${shape}` + (icc ? ".icc" : "");
+      sty += `;--disc:${disc}px${it.bc ? `;--dvb:${it.bc}` : ""}${it.ba ? `;--dva:${(100 - it.ba) / 100}` : ""}${icc ? `;--dvi:${icc}` : ""}${it.nc ? `;--dvn:${it.nc}` : ""}`;
+    }
     return el("div.dve-pv", {},
-      el(`button.dve-pvit.tp-${tp}` + (on ? ".on" : "") + (it.bg === "none" ? ".bg-none" : ""), { type: "button", title: Kit.t("builder.dve.previewTip"), "aria-pressed": String(on),
-        style: `${it.col ? `--dc:${it.col};` : ""}--tz:${(it.tz || 100) / 100}`, onclick: () => { st.dvPv = { k: key, on: !on }; side(); } },
+      el(`button.dve-pvit.tp-${tp}` + (on ? ".on" : "") + cls, { type: "button", title: Kit.t("builder.dve.previewTip"), "aria-pressed": String(on),
+        style: sty, onclick: () => { st.dvPv = { k: key, on: !on }; side(); } },
         el("span.dve-pvic", {}, icx), el("span.dve-pvtx", {}, el("b", {}, dvName(it)), words ? el("small", {}, words) : null)),
       el("small.muted", {}, Kit.t("builder.dve.previewNote")));
   }
@@ -3098,7 +3411,8 @@
     out.push(row(Kit.t("builder.dve.icon"), ib));
     if (!/^(art|up):/.test(it.icon || "") && window.Motion) out.push(row(Kit.t("builder.dve.motion"), el("select", { "aria-label": Kit.t("builder.dve.motion"), onchange: (e) => setv("motion", e.target.value || null) },
       optList([["auto", Kit.t("builder.f.automatic")], ...Motion.MOTIONS], it.motion, Kit.t("builder.dve.still")))), el("small.muted", {}, Kit.t("builder.dve.motionNote")));
-    out.push(row(Kit.t("builder.dve.background"), seg([["round", Kit.t("builder.dve.round")], ["none", Kit.t("builder.dve.none")]], it.bg === "none" ? "none" : "round", (v) => setv("bg", v === "none" ? "none" : null))),
+    if (look === "piece") out.push(...dvPieceLook(c, it, n, setv));   // (v3.0.5: the icon background's shape, transparency, colors)
+    else out.push(row(Kit.t("builder.dve.background"), seg([["round", Kit.t("builder.dve.round")], ["none", Kit.t("builder.dve.none")]], it.bg === "none" ? "none" : "round", (v) => setv("bg", v === "none" ? "none" : null))),
       el("small.muted", {}, Kit.t(it.bg === "none" ? "builder.dve.bgNoneNote" : "builder.dve.bgRoundNote")));
     // color when on: Automatic, or any color (the full picker: hue, saturation, brightness, a hex code)
     const sw = el("i.dve-colsw", { style: it.col ? `background:${it.col}` : "" }), sl = el("span", {}, it.col || Kit.t("builder.dve.colorAutoShort"));
@@ -3126,9 +3440,43 @@
     } else if (look === "tiles") {
       const span = (k, label) => el("label.dve-num", {}, el("span", {}, label), el("select", { onchange: (e) => setv(k, +e.target.value > 1 ? +e.target.value : null) }, optList([1, 2, 3, 4].map((v) => [v, String(v)]), it[k] || 1)));
       out.push(el("b.bk-h", {}, Kit.t("builder.dve.span")), el("div.dve-xywh", {}, span("sw", Kit.t("builder.dve.spanW")), span("sh", Kit.t("builder.dve.spanH"))), el("small.muted", {}, Kit.t("builder.dve.spanNote")));
-    } else out.push(el("small.muted", {}, Kit.t(look === "single" ? "builder.dve.placeSingle" : "builder.dve.placeList")));
+    } else if (look !== "piece") out.push(el("small.muted", {}, Kit.t(look === "single" ? "builder.dve.placeSingle" : "builder.dve.placeList")));
     return out;
   }
+  // (v3.0.5) a color button: its swatch and hex (or Automatic), the full picker on a click (devedit.js pickColor)
+  function colorBtn(cur, autoLabel, onPick, onClose) {
+    const sw = el("i.dve-colsw", { style: cur ? `background:${cur}` : "" }), sl = el("span", {}, cur || autoLabel);
+    const b = el("button.ghost.small.dve-colbtn", { type: "button", "aria-haspopup": "dialog", onclick: () => DE().pickColor(b, cur || null, (v) => {
+      cur = v || null; sw.style.background = v || ""; sl.textContent = v || autoLabel; onPick(v || null);
+    }, COLORS.map(([name, , , hex]) => [name, hex]), onClose) }, sw, sl);
+    return b;
+  }
+  // (v3.0.5) a device piece's Look: the icon background — Circle / Rounded square / None — its transparency and color
+  // (sized to the larger side of the drawing, centered; no square behind it), the icon's color (white by default;
+  // Automatic: gray when off, as before) and the name's color
+  function dvPieceLook(c, it, n, setv) {
+    const shape = ["rounded", "none"].includes(it.shape) ? it.shape : "circle";
+    const out = [row(Kit.t("builder.dve.background"), seg([["circle", Kit.t("builder.dve.circle")], ["rounded", Kit.t("builder.dve.rounded")], ["none", Kit.t("builder.dve.none")]], shape,
+      (v) => setv("shape", v === "circle" ? null : v))), el("small.muted", {}, Kit.t(shape === "none" ? "builder.dve.bgNoneNote" : "builder.dve.shapeNote"))];
+    if (shape !== "none") {
+      const v = it.ba || 0, l = el("span.bld-l", {}, Kit.t("builder.dve.alpha", { n: v }));
+      out.push(el("div.bld-row", {}, l, el("input", { type: "range", min: "0", max: "100", step: "5", value: String(v), "aria-label": Kit.t("builder.dve.alphaAria"),
+        oninput: (e) => { const nv = +e.target.value; if (nv) it.ba = nv; else delete it.ba; l.textContent = Kit.t("builder.dve.alpha", { n: nv }); changed(false, `dvba:${c.i}:${n}`); dvRedraw(); },
+        onchange: () => side() })),
+      row(Kit.t("builder.dve.bgColor"), colorBtn(it.bc, Kit.t("builder.dve.colorAutoShort"), (cv) => { if (cv) it.bc = cv; else delete it.bc; changed(false, `dvbc:${c.i}:${n}`); dvRedraw(); }, () => side())));
+    }
+    // (the icon: white unless picked; "Automatic" is the old gray-when-off — kept as "auto")
+    const icc = it.icc === "auto" ? null : it.icc || "#ffffff";
+    out.push(row(Kit.t("builder.dve.iconColor"), colorBtn(icc, Kit.t("builder.dve.iconAuto"), (cv) => { it.icc = cv ? cv : "auto"; if (it.icc === "#ffffff") delete it.icc; changed(false, `dvicc:${c.i}:${n}`); dvRedraw(); }, () => side())),
+      el("small.muted", {}, Kit.t("builder.dve.iconColorNote")),
+      row(Kit.t("builder.dve.nameColor"), colorBtn(it.nc, Kit.t("builder.dve.colorAutoShort"), (cv) => { if (cv) it.nc = cv; else delete it.nc; changed(false, `dvnc:${c.i}:${n}`); dvRedraw(); }, () => side())),
+      el("small.muted", {}, Kit.t("builder.dve.nameColorNote")));
+    return out;
+  }
+  // (v3.0.5) the move dots (as the room bar's grip)
+  const gripDots = () => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 10 14"); s.setAttribute("width", "10"); s.setAttribute("height", "14"); s.setAttribute("aria-hidden", "true");
+    for (const [x, y] of [[2, 2], [8, 2], [2, 7], [8, 7], [2, 12], [8, 12]]) { const ci = document.createElementNS("http://www.w3.org/2000/svg", "circle"); ci.setAttribute("cx", x); ci.setAttribute("cy", y); ci.setAttribute("r", "1.6"); ci.setAttribute("fill", "currentColor"); s.append(ci); }
+    return s; };
   // Advanced: a value's unit, decimals and range; a plug-in appliance's running watts; a garage door's contact; the
   // old card's look; duplicate, remove
   function dvTabAdv(c, it, n, { d, setv, put }) {
@@ -3143,7 +3491,8 @@
     if (d || it.tap) out.push(el("label.dve-tk", {}, el("input", { type: "checkbox", checked: gar || it.ask === true, disabled: gar, onchange: (e) => setv("ask", e.target.checked ? true : null) }),
       el("span", {}, Kit.t("builder.dve.ask"))), el("small.muted", {}, Kit.t(gar ? "builder.dve.askGarage" : "builder.dve.askNote")));
     if (it.st) out.push(el("div.dve-old", {}, el("small.muted", {}, Kit.t("builder.dve.oldItem")),
-      el("button.ghost.small", { type: "button", onclick: () => { delete it.st; st.dvUndo = c.i; put(); } }, Kit.t("builder.dve.newLook"))));
+      el("button.ghost.small", { type: "button", onclick: () => { delete it.st; st.dvUndo = Array.isArray(c.o.items) ? c.i : `${c.i}#${n}`; put(); } }, Kit.t("builder.dve.newLook"))));   // (v3.0.5: a piece — its own key, pieceEditor)
+    if (!Array.isArray(c.o.items)) return out;   // (v3.0.5: a blank card's device piece — the piece's own buttons do these)
     out.push(el("div.bld-row.dve-mini", {},
       el("button.ghost.small", { type: "button", disabled: c.o.items.length >= 24, onclick: () => { const cp = structuredClone(it); if (DE().placed(cp)) Object.assign(cp, DE().dragRect(cp, "move", 30, 30)); c.o.items.splice(n + 1, 0, cp); st.inner.sel = n + 1; put(); } }, Kit.t("builder.f.duplicate")),
       el("button.ghost.small.bad", { type: "button", onclick: () => dvRemove(c, n) }, Kit.t("builder.pal.remove"))));

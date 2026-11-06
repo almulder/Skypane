@@ -15,10 +15,16 @@ A panel's own Home page (Manager → Panels → Look & layout → "Custom") is a
 An action: {"do": "toggle" | "on" | "off" | "lock" | "unlock" | "cmd" | "room" | "camera" | "page" | "none",
             "id": device, "c": command, "v": value, "room": room id, "cam": camera id, "page": "home"|"cameras"|…}
 A rule:    {"id": device, "at": attribute, "op": "eq" | "ne" | "gt" | "lt", "v": text or number}  (all must match)
-A blank card's piece (o.parts, up to 16): {"t": "icon" | "light" | "switch" | "value" | "door" | "lock" | "garage" | "text",
+A blank card's piece (o.parts, up to 25 — v3.0.5; before: 16): {"t": "icon" | "light" | "switch" | "value" | "door" | "lock" | "garage" | "text",
             "x", "y", "w", "h": thousandths of the card (o.fr = 1, v3.0.4; before: cells of its 24 × 24 grid — moved over
             as it's saved), "id": device, "label", "icon", "at", "unit",
             "doors": [{"id", "contact", "travel", "tclose", "vib", "wide", "label"}] (1–4), "text", "size": "s"|"m"|"l"|"xl", "align", "bold", "wheel": [action…]}
+  (v3.0.5) "t": "dev" — a device piece: everything a Devices card's item has (below) where it was put; the Devices and
+  Text cards became blank cards (service/blank_card.py). Every piece may have "grow": {"w", "h"} ("Grow and shrink with
+  the card": the card's box in the grid's cells when it was switched on; none = it keeps its own size) and "fit": "box" (a
+  piece from before 3.0.5: what's in it fills its box as it did then — blank_card.py marks them), "pz": its own zoom
+  40–400 % (what it had grown by when "Grow and shrink" was switched off). A text piece
+  may have "fs": its size in px (9–80), "nc": its color, "head": a small heading over it and "icon" (a Text card moved over).
 A "Devices" card (v3.0.4 — it replaces Device, Devices, Value, Button, Lock, Fan and Scene buttons; service/devices_card.py
 moves the old ones over once): o = {"title", "look": "list" | "tiles" | "free" | "single", "cols": 1–8 (Tiles), "items": [item…]}
   an item: {"id": device (a Button / Scene may have none), "k": "value" | "switch" | "button" | "lock" | "fan" | "scene"
@@ -28,7 +34,13 @@ moves the old ones over once): o = {"title", "look": "list" | "tiles" | "free" |
             "x", "y", "w", "h": Freeform place in thousandths of the card, "sw", "sh": Tiles span (1–4),
             "st": the old card's look kept for a card moved over ("row" | "square" | "icon" | "slider" | "bar" | "big" |
             "gauge" | "chip" | "button" | "lock" | "fan"), "unit", "dec", "min", "max" (a value), "runW", "contact",
-            "travel" (a plug's running watts, a garage opener's door), "ask": true ("Ask before doing it")}
+            "travel" (a plug's running watts, a garage opener's door), "ask": true ("Ask before doing it"),
+            (v3.0.5) "shape": "circle" | "rounded" | "none" (the icon's background), "ba": its transparency 0–100 %,
+            "bc": its color, "icc": the icon's color ("auto": as before; none: white), "nc": the name's color}
+A grid's (v3.0.5) "edge": the margin around the cards, 0 | 8 | 16 | 24 px (none: as before 3.0.5)
+(v3.0.5) A grid's "bg": that page's own background pictures (show_opts: pics or src, every, order, trans…; none: the
+panel's). The Slide show / Picture card ("photos", service/picture_card.py moved the Picture cards over): show_opts —
+one picture stays put, several play with the transition picked.
 
 (v3.0.4) The UniFi cards ("Network" in the builder; dashboard/layouts/v4/shared/unifi.js draws them from service/
 unifi_net.py's model): netwan (Internet), netchips (Clients & gateway), netstrip (Status tabs), netmap (Network map),
@@ -39,6 +51,13 @@ netdevs (UniFi devices), netpoe (PoE power), netclients (Clients), netlog (Clien
   false, "camEach" (each camera, not a bubble per switch), "pos": {node id: [x, y]} (dragged by hand, thousandths of the
   map); netdevs "cols": 1 | 2, "group"; netpoe "sw": a switch's id (none: all); netclients "sort", "filter"; netlog
   "wifi": false; netstrip "items" and netvals "vals": [what's shown, NET_STRIP / NET_VALS]}
+  (v3.0.5) netmap "htx" / "hic": the card title's text / icon size, 60–180 %; "snap": false (snapping is on by
+  default). New cards: netups (UPS / battery backup: "ups": the UPS's id — a UniFi one's hash or "nut:<name>" — none:
+  every UPS), netbell (Doorbell: "cam": its camera's id, none: the first doorbell; "msgs": false — no message buttons),
+  netfeed (Activity feed: "counts": false, "dense": true, "guests": false, "alerts": false).
+(v3.0.5) Notifications ("notices"): "style": "list" (none) | "compact" (the Alert note's button, only while alerts wait —
+  the "alerts" cards became this: service/notices_card.py). System ("status"): "rows": [SYS_ROWS…] in order (none: the
+  four from before — hubitat, bridge, weather, panel; []: no row, the card says to pick some). Rooms ("room"): "rooms": [room id…] (2–12, in order; "room" is the first), else "room" alone.
 
 (v3.0.4) "Bins / Trash" (replaces Bin day; service/time_cards.py moves the old ones over once): o = {"title", "calm": true
   (no animation), "rem": {"when": "before" | "same", "at": "HH:MM"} (the reminder: the evening before / pickup day, from),
@@ -88,6 +107,7 @@ BUILTIN = ("clock", "weather", "calendar", "thermostat", "locks", "openings", "p
            "todo", "notes",   # the shared lists (to-do, shopping…) and the note board (service/lists.py)   # health, a slideshow, low batteries, what uses power   # Hubitat Safety Monitor (the PIN), one lock (slide to unlock), a garage door
            "trash", "timers",   # (v3.0.4: Bins / Trash, Countdown & timers — they replace bins, countdown and timer)
            "netwan", "netchips", "netstrip", "netmap", "netdevs", "netpoe", "netclients", "netlog", "netvals",   # (v3.0.4) UniFi
+           "netups", "netbell", "netfeed",   # (v3.0.5) UPS / battery backup, Doorbell, Activity feed
            "blank")   # a blank card: the owner's own pieces (pictures, lights, switches, values, a lock, a garage, text) inside it
 USER_CARD = re.compile(r"card:[a-z0-9-]{1,40}")       # an uploaded card (service/cards.py)
 ACTIONS = ("none", "toggle", "on", "off", "lock", "unlock", "cmd", "room", "camera", "page", "nudge")
@@ -100,12 +120,20 @@ MOTIONS = ("auto", "spin", "rock", "twist", "swing", "sonar", "rumble", "hop", "
 STYLES = {"thermostat": ("dial", "big", "compact", "arc"), "device": ("row", "square", "icon", "slider", "bar"), "value": ("big", "gauge", "chip"),
           "people": ("pills", "avatars", "count"), "alarm": ("full", "buttons", "badge"), "player": ("row", "big", "volume")}
 OPS = ("eq", "ne", "gt", "lt")
+# (v3.0.5) the Notifications card's styles ("alerts", the Alert note, is Compact now — service/notices_card.py), the
+# System card's rows (the order the builder lists them) and how many rooms a Rooms card holds
+STYLES["notices"] = ("list", "compact")
+# (v3.0.5, M6) "notifier": the Skypane Notifier driver (up to date / update waiting) — next to the bridge
+SYS_ROWS = ("hubitat", "bridge", "notifier", "mqtt", "protect", "cameras", "unifi", "calendars", "weather", "music", "led", "panel")
+ROOMS_MAX = 12
 # (v3.0.4) the Devices card: its looks, what an item is, where its words sit, the old cards' looks a moved card keeps
 DEV_LOOKS = ("list", "tiles", "free", "single")
 DEV_KINDS = ("value", "switch", "button", "lock", "fan", "scene")
 DEV_TP = ("top", "bottom", "left", "right")
 DEV_ST = ("row", "square", "icon", "slider", "bar", "big", "gauge", "chip", "button", "lock", "fan")
 DEV_ITEMS, DEV_FREE = 24, 1000
+DEV_SHAPES = ("circle", "rounded", "none")   # (v3.0.5) an item's / a device piece's icon background
+EDGES = (0, 8, 16, 24)   # (v3.0.5) the grid's Edge margin, px
 # a thermostat card's buttons: its modes ("fan" = off with the fan on, as the dial has it) and its fan's modes
 THERMO_MODES = ("heat", "cool", "auto", "off", "fan", "emergency heat")
 FAN_MODES = ("auto", "on", "circulate")
@@ -127,14 +155,24 @@ PAGE = re.compile(r"home|cameras|music|[a-z0-9-]{1,60}")
 ICON = re.compile(r"[a-zA-Z][a-zA-Z0-9]{0,30}|art:[a-z0-9-]{1,30}|up:[0-9a-f]{16}")
 COLOR = re.compile(r"#[0-9a-fA-F]{6}")
 PIC = re.compile(r"up:[0-9a-f]{16}")
+# (v3.0.5) the slide-show engine (dashboard/layouts/v4/shared/slideshow.js): the Slide show / Picture card ("photos"),
+# a rotating background (look.bgShow, a page's "bg") and the screensaver ("saver") share these options. A folder of
+# pictures: "fs:<id>" (service/picture_folders.py — one the admin picked under the media root)
+FOLDER = re.compile(r"fs:[0-9a-f]{12}")
+SHOW_TRANS = ("none", "fade", "whip", "punch", "match", "leak", "page", "cube", "ramp", "dip", "shape", "mix")
+SHOW_SPEEDS = ("slow", "normal", "fast")
+SHOW_DIRS = ("left", "right", "up", "down")
+SHOW_DIPS = ("black", "white")
+SHOW_SHAPES = ("circle", "star", "diagonal")
+SHOW_MAX = 50   # (v3.0.5: up to 50 uploads in one show; a folder holds as many as it has)
 MAX_CARDS = 60
 # a blank card's pieces sit anywhere on it, in thousandths of the card (v3.0.4, o.fr = 1 — as a Devices card's Freeform
 # items); before, on its own small grid of 24 × 24 cells: moved over as it's saved, edges where they were (shares of
 # the card either way, so the pieces move and grow with it)
 PIECES = {"icon": "picture", "light": "light", "switch": "switch", "value": "value", "door": "door", "lock": "lock",
-          "garage": "garage", "text": "text"}
+          "garage": "garage", "text": "text", "dev": "device"}   # (v3.0.5: "dev" — a Devices item as a piece)
 INNER = 24
-MAX_PIECES = 16
+MAX_PIECES = 25   # (v3.0.5: 25 — a title heading plus a Devices card's 24 items, moved over)
 MAX_SPEAKERS = 3   # (v3.0.4) a timer's speakers on "Timer up"
 
 
@@ -146,10 +184,13 @@ BIN_SCH = ("weekly", "every", "evenodd", "monthly", "seasonal")
 # (v3.0.4) the UniFi cards: each one's color keys (unifi.js COL — the builder's NET_COLORS), what they may show
 NET_COLORS = {"netwan": ("dl", "ul", "lat", "ok", "warn", "bad"), "netchips": ("acc", "bar"), "netstrip": ("ok", "warn", "bad", "sel"),
               "netmap": ("line", "wifi", "orb", "node", "idle", "bad", "ok", "warn"), "netdevs": ("ok", "bad", "warn"),
-              "netpoe": ("gauge", "warn", "port"), "netclients": ("icon", "named"), "netlog": ("join", "roam"), "netvals": ("val", "icon")}
+              "netpoe": ("gauge", "warn", "port"), "netclients": ("icon", "named"), "netlog": ("join", "roam"), "netvals": ("val", "icon"),
+              "netups": ("mains", "batt", "low", "fill"), "netbell": ("ring", "acc"), "netfeed": ("join", "leave", "alert", "ok")}   # (v3.0.5)
 NET_WAN_PARTS = ("counts", "uptime", "uptodate", "isp", "thru", "ping")
 NET_STRIP = ("net", "gw", "wifi", "sw", "pro", "clients")
 NET_VALS = ("inet", "line", "ping", "gw", "poe", "wifi", "wired", "clients", "devs")
+MAX_PICK = 100                                  # (v3.0.5) Power now / Batteries: the devices picked to watch
+CAL_ID = re.compile(r"[a-z0-9][a-z0-9_-]{0,39}")   # (v3.0.5) a house calendar's id (service/calendars.py ID_RE)
 NET_SORT = ("name", "type", "network", "ssid", "conn", "signal", "traffic")
 NET_NODE = re.compile(r"wan:WAN2?|(?:pg:)?[0-9a-f]{12}")
 HHMM = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d")
@@ -161,6 +202,33 @@ def _int(v, lo, hi, what):
     if not isinstance(v, int) or isinstance(v, bool) or not lo <= v <= hi:
         raise Invalid(f"{what}: a whole number {lo}..{hi}")
     return v
+
+
+def show_opts(o, out=None):
+    """(v3.0.5) A slide show's options (slideshow.js), made safe, into `out`: "pics" (up to SHOW_MAX of your uploads, in
+    order; [] = none picked yet) or "src" (a picture folder, "fs:<id>" — then "pics" isn't kept), "every" (s, 3–3600),
+    "order": "random" (none: in order), "trans" (SHOW_TRANS; none: Cross dissolve — the Photo frame's fade), "speed",
+    "dir" (Whip), "dip" (Dip to black / white), "shape" (Shape reveal) and "fit" ("cover" | "contain"). Returns out."""
+    out = {} if out is None else out
+    o = o if isinstance(o, dict) else {}
+    if o.get("src") is not None:
+        if not isinstance(o["src"], str) or not FOLDER.fullmatch(o["src"]):
+            raise Invalid("pictures from: a picture folder")
+        out["src"] = o["src"]
+    else:
+        pics = o.get("pics", [])
+        if not isinstance(pics, list) or len(pics) > SHOW_MAX or not all(isinstance(x, str) and PIC.fullmatch(x) for x in pics):
+            raise Invalid(f"pictures: up to {SHOW_MAX} of your pictures")
+        out["pics"] = list(dict.fromkeys(pics))
+    if o.get("every") is not None:
+        out["every"] = _int(o["every"], 3, 3600, "seconds")
+    for k, opts in (("order", ("random",)), ("trans", SHOW_TRANS), ("speed", SHOW_SPEEDS), ("dir", SHOW_DIRS), ("dip", SHOW_DIPS),
+                    ("shape", SHOW_SHAPES), ("fit", ("cover", "contain"))):
+        if o.get(k) is not None and not (k == "order" and o[k] == "order"):   # ("order": in order — the default)
+            if o[k] not in opts:
+                raise Invalid(f"slide show: {k}")
+            out[k] = o[k]
+    return out
 
 
 def _dev(v, what="device"):
@@ -329,9 +397,27 @@ def options(t, o):
         if o.get("align") in ("left", "center", "right"):
             out["align"] = o["align"]
     if t == "room":
-        if not isinstance(o.get("room"), str) or not ROOM.fullmatch(o["room"]):
+        # (v3.0.5) "Rooms": several rooms on one card ("rooms", in order, up to ROOMS_MAX); "room" is always the first —
+        # an older page still draws that one. A card from before 3.0.5 has "room" only: one room, as it was
+        if o.get("rooms") is not None:
+            rs = o["rooms"]
+            if not isinstance(rs, list) or not rs or len(rs) > ROOMS_MAX or not all(isinstance(r, str) and ROOM.fullmatch(r) for r in rs):
+                raise Invalid(f"rooms: 1 to {ROOMS_MAX} rooms")
+            rs = list(dict.fromkeys(rs))
+            if len(rs) > 1:
+                out["rooms"] = rs
+            out["room"] = rs[0]
+        elif not isinstance(o.get("room"), str) or not ROOM.fullmatch(o["room"]):
             raise Invalid("room: which room")
-        out["room"] = o["room"]
+        else:
+            out["room"] = o["room"]
+    if t == "status" and o.get("rows") is not None:
+        # (v3.0.5) the System card's rows, in order (SYS_ROWS); none: the four from before 3.0.5 (hubitat, bridge,
+        # weather, panel); an empty list: no row ("Pick rows")
+        rows = o["rows"]
+        if not isinstance(rows, list) or len(rows) > len(SYS_ROWS) or not all(isinstance(r, str) and r in SYS_ROWS for r in rows):
+            raise Invalid("system: which rows")
+        out["rows"] = list(dict.fromkeys(rows))
     if t == "camera":
         if not isinstance(o.get("cam"), str) or not CAM.fullmatch(o["cam"]):
             raise Invalid("camera: which camera or view")
@@ -366,6 +452,14 @@ def options(t, o):
             out["wheel"] = wh
     if t == "calendar" and o.get("days") is not None:
         out["days"] = _int(o["days"], 1, 7, "days")
+    if t == "calendar":   # (v3.0.5) "Same as the panel" (none) or "Choose": the house calendars this card shows — only
+        # ever fewer than the panel (a calendar off on the panel stays off; one added later shows on "Same as the panel")
+        if o.get("cal") == "pick":
+            out["cal"] = "pick"
+        if o.get("cals") is not None:   # (kept with "Same as the panel" too: the ticks come back on "Choose")
+            if not isinstance(o["cals"], list) or len(o["cals"]) > 40 or not all(isinstance(x, str) and CAL_ID.fullmatch(x) for x in o["cals"]):
+                raise Invalid("calendar: which calendars")
+            out["cals"] = list(dict.fromkeys(o["cals"]))
     if t == "weather" and o.get("days") is not None:   # (v3.0.4: up to 14 — Open-Meteo has 16)
         out["days"] = _int(o["days"], 0, 14, "days")
     if t == "weather" and o.get("hours") is False:   # (v3.0.4: "Tap a day for its hours" switched off; on by default)
@@ -428,23 +522,25 @@ def options(t, o):
                 out[k] = o[k]
     if t == "player" and isinstance(o.get("art"), bool):
         out["art"] = o["art"]
-    if t == "photos":
-        pics = o.get("pics", [])
-        if not isinstance(pics, list) or len(pics) > 12 or not all(isinstance(x, str) and PIC.fullmatch(x) for x in pics):
-            raise Invalid("photos: up to 12 of your pictures")
-        out["pics"] = list(dict.fromkeys(pics))
-        if o.get("every") is not None:
-            out["every"] = _int(o["every"], 3, 600, "seconds")
-        if o.get("fit") in ("cover", "contain"):
-            out["fit"] = o["fit"]
+    if t == "photos":   # (v3.0.5) Slide show / Picture: one picture stays, several play (show_opts)
+        show_opts(o, out)
     if t == "batteries" and o.get("below") is not None:
         out["below"] = _int(o["below"], 1, 100, "below")
-    if t == "power":
-        if o.get("top") is not None:
-            out["top"] = _int(o["top"], 3, 20, "how many")
+    if t == "batteries":   # (v3.0.5) "Custom": the devices it watches, with their own low level; "Always show" or only when low
+        if o.get("mode") == "custom":
+            out["mode"] = "custom"
         if o.get("ids") is not None:
-            if not isinstance(o["ids"], list) or len(o["ids"]) > 30:
-                raise Invalid("which devices: up to 30")
+            if not isinstance(o["ids"], list) or len(o["ids"]) > MAX_PICK:
+                raise Invalid(f"which devices: up to {MAX_PICK}")
+            out["ids"] = list(dict.fromkeys(_dev(x) for x in o["ids"]))
+        if o.get("show") == "all":
+            out["show"] = "all"
+    if t == "power":
+        if o.get("top") is not None:   # (v3.0.5: 0 = all of them, the card scrolls)
+            out["top"] = 0 if o["top"] == 0 and not isinstance(o["top"], bool) else _int(o["top"], 3, 20, "how many")
+        if o.get("ids") is not None:   # (v3.0.5: the devices it watches — up to MAX_PICK; before: 30)
+            if not isinstance(o["ids"], list) or len(o["ids"]) > MAX_PICK:
+                raise Invalid(f"which devices: up to {MAX_PICK}")
             out["ids"] = list(dict.fromkeys(_dev(x) for x in o["ids"]))
     if t == "modes" and o.get("style") in ("segmented", "chip"):
         out["style"] = o["style"]
@@ -665,10 +761,20 @@ def dev_item(it, n):
             if not isinstance(it[k], str) or not rx.fullmatch(it[k]):
                 raise Invalid(f"devices: {what}")
             out[k] = it[k]
-    for k, allowed in (("motion", MOTIONS), ("bg", ("round", "none")), ("tp", DEV_TP), ("st", DEV_ST)):
+    for k, allowed in (("motion", MOTIONS), ("bg", ("round", "none")), ("tp", DEV_TP), ("st", DEV_ST), ("shape", DEV_SHAPES)):
         if it.get(k) in allowed:
             out[k] = it[k]
-    for k, lo, hi in (("iz", 50, 250), ("tz", 50, 250), ("sw", 1, 4), ("sh", 1, 4), ("dec", 0, 2), ("runW", 1, 10000), ("travel", 3, 60)):
+    # (v3.0.5) the icon background's color and the name's color; the icon's own color ("auto": as before 3.0.5)
+    for k in ("bc", "nc"):
+        if it.get(k) is not None:
+            if not isinstance(it[k], str) or not COLOR.fullmatch(it[k]):
+                raise Invalid("devices: a color")
+            out[k] = it[k]
+    if it.get("icc") is not None:
+        if not isinstance(it["icc"], str) or not (it["icc"] == "auto" or COLOR.fullmatch(it["icc"])):
+            raise Invalid("devices: the icon's color")
+        out["icc"] = it["icc"]
+    for k, lo, hi in (("iz", 50, 250), ("tz", 50, 250), ("sw", 1, 4), ("sh", 1, 4), ("dec", 0, 2), ("runW", 1, 10000), ("travel", 3, 60), ("ba", 0, 100)):
         if it.get(k) is not None:
             out[k] = _int(it[k], lo, hi, f"devices: {k}")
     if all(it.get(k) is not None for k in ("x", "y", "w", "h")):   # (Freeform: thousandths of the card, inside it)
@@ -697,6 +803,16 @@ def _of24(v):
     return round(v * DEV_FREE / INNER)   # (never a tie: v × 1000 / 24 ends in .0, .33 or .67 — as the builder's Math.round)
 
 
+def _grow(v):
+    """(v3.0.5) A piece's "Grow and shrink with the card": the card's box ({w, h}, the grid's cells) when it was
+    switched on, else None (off: it keeps its own size)."""
+    if v is None or v is False:
+        return None
+    if not isinstance(v, dict):
+        raise Invalid("blank card: grow {w, h}")
+    return {"w": _int(v.get("w"), 1, 256, "blank card: grow w"), "h": _int(v.get("h"), 1, 256, "blank card: grow h")}
+
+
 def piece(p, n, fr=True):
     """One piece of a blank card: its kind, where it sits (thousandths of the card; fr False: cells of the old 24 × 24
     grid, moved over — devedit.js from24), and its settings."""
@@ -710,6 +826,27 @@ def piece(p, n, fr=True):
         x0, y0 = _of24(x), _of24(y)
         x, y, w, h = x0, y0, max(1, _of24(x + w) - x0), max(1, _of24(y + h) - y0)
     out = {"t": t, "x": x, "y": y, "w": w, "h": h}
+    g = _grow(p.get("grow"))   # (v3.0.5) "Grow and shrink with the card", on every piece
+    if g:
+        out["grow"] = g
+    # (v3.0.5) "fit": "box" — a piece from before 3.0.5 (service/blank_card.py marks them): what's in it still fills its box
+    # as it did then (theme.css .bk-p.fit-box); a new piece keeps its own size
+    if p.get("fit") == "box":
+        out["fit"] = "box"
+    if p.get("pz") is not None:   # (v3.0.5) a piece's own zoom, % ("Grow and shrink" switched off: how much it had grown)
+        out["pz"] = _int(p["pz"], 40, 400, "blank card: a piece's size")
+    if t == "dev":   # (v3.0.5) a device piece: a Devices card's item (dev_item), here its place is the piece's
+        if p.get("id") is None and p.get("k") not in ("button", "scene"):
+            raise Invalid("blank card: the device needs its device")
+        it = dev_item({k: v for k, v in p.items() if k not in ("t", "x", "y", "w", "h", "sw", "sh", "grow", "fit", "pz")}, n)
+        return {**out, **it}
+    if t == "value" and p.get("net") is not None:   # (v3.0.5) a UniFi value instead of a device's reading (unifi.js valItems)
+        if p["net"] not in NET_VALS:
+            raise Invalid("blank card: which network value")
+        out["net"] = p["net"]
+        if isinstance(p.get("label"), str) and p["label"].strip():
+            out["label"] = _text(p["label"], 30, "a piece's name")
+        return out
     if t in ("light", "switch", "value", "door", "lock") or (t == "icon" and p.get("id") is not None):
         if not isinstance(p.get("id"), int) or isinstance(p.get("id"), bool) or not 0 < p["id"] < 10 ** 9:
             raise Invalid(f"blank card: the {name} needs its device")
@@ -748,9 +885,22 @@ def piece(p, n, fr=True):
     if t == "text":
         if not isinstance(p.get("text", ""), str):
             raise Invalid("blank card: the text")
-        out["text"] = _plain(p.get("text", ""), 200, lines=True)
+        out["text"] = _plain(p.get("text", ""), 400, lines=True)   # (v3.0.5: 400, as a Text card's — they're pieces now)
         if p.get("size") in ("s", "m", "l", "xl"):
             out["size"] = p["size"]
+        # (v3.0.5) its own size in px, its color, and a Text card's heading and icon (moved over: service/blank_card.py)
+        if p.get("fs") is not None:
+            out["fs"] = _int(p["fs"], 9, 80, "blank card: the text's size")
+        if p.get("nc") is not None:
+            if not isinstance(p["nc"], str) or not COLOR.fullmatch(p["nc"]):
+                raise Invalid("blank card: the text's color")
+            out["nc"] = p["nc"]
+        if isinstance(p.get("head"), str) and p["head"].strip():
+            out["head"] = _text(p["head"], 40, "blank card: the heading")
+        if p.get("icon") is not None:
+            if not isinstance(p["icon"], str) or not ICON.fullmatch(p["icon"]):
+                raise Invalid("blank card: a piece's picture")
+            out["icon"] = p["icon"]
         if p.get("align") in ("left", "center", "right"):
             out["align"] = p["align"]
         if p.get("bold") is True:
@@ -796,7 +946,8 @@ def net(t, o):
             raise Invalid("colors")
         if col:
             out["col"] = dict(col)
-    bools = {"netwan": ("lat",), "netmap": ("follow", "snap", "ports", "protect", "camEach"), "netdevs": ("group",), "netlog": ("wifi",)}.get(t, ())
+    bools = {"netwan": ("lat",), "netmap": ("follow", "snap", "ports", "protect", "camEach"), "netdevs": ("group",), "netlog": ("wifi",),
+             "netbell": ("msgs",), "netfeed": ("counts", "dense", "guests", "alerts")}.get(t, ())
     for k in bools:
         if isinstance(o.get(k), bool):
             out[k] = o[k]
@@ -808,6 +959,9 @@ def net(t, o):
     if t == "netmap":
         if o.get("glow") is not None:
             out["glow"] = _int(o["glow"], 0, 100, "orb glow")
+        for k, what in (("htx", "card title size"), ("hic", "card icon size")):   # (v3.0.5)
+            if o.get(k) is not None:
+                out[k] = _int(o[k], 60, 180, what)
         pos = o.get("pos")
         if pos is not None:
             if not isinstance(pos, dict) or len(pos) > 300:
@@ -817,6 +971,10 @@ def net(t, o):
                 if not isinstance(k, str) or not NET_NODE.fullmatch(k) or not isinstance(v, list) or len(v) != 2:
                     raise Invalid("map: a place is {node: [x, y]}")
                 out["pos"][k] = [_int(v[0], 0, 1000, "map x"), _int(v[1], 0, 1000, "map y")]
+    if t == "netups" and isinstance(o.get("ups"), str) and re.fullmatch(r"[0-9a-f]{12}|nut:[A-Za-z0-9._-]{1,64}", o["ups"]):   # (v3.0.5)
+        out["ups"] = o["ups"]
+    if t == "netbell" and o.get("cam") is not None:
+        out["cam"] = _int(o["cam"], 0, 2**31 - 1, "doorbell camera")
     if t == "netdevs" and o.get("cols") is not None:
         out["cols"] = _int(o["cols"], 1, 2, "columns")
     if t == "netpoe" and isinstance(o.get("sw"), str) and re.fullmatch(r"[0-9a-f]{12}", o["sw"]):
@@ -1037,6 +1195,10 @@ def card_devices(settings):
                 if p is not o and p.get("t") in ("icon", "light", "switch", "lock"):
                     ids.append(p.get("id"))
                     acts(p)
+                if p is not o and p.get("t") == "dev":   # (v3.0.5: a device piece — as a Devices item: a value only shows)
+                    if p.get("k") != "value":
+                        ids.append(p.get("id"))
+                    acts(p)
                 ids += [d.get("id") for d in p.get("doors") or [] if isinstance(d, dict)] if isinstance(p.get("doors"), list) else []
             out.update(i for i in ids if isinstance(i, int) and not isinstance(i, bool))
     return {i for i in out if 0 < i < 10 ** 9}
@@ -1094,9 +1256,11 @@ def card_refs(c):
     for p in [o, *(o.get("parts") or [] if isinstance(o.get("parts"), list) else [])]:
         if not isinstance(p, dict):
             continue
-        if p is not o and p.get("t") in ("icon", "light", "switch", "lock", "value"):
+        if p is not o and p.get("t") in ("icon", "light", "switch", "lock", "value", "dev"):   # (v3.0.5: "dev", a device piece)
             take(p.get("id"))
             acts(p)
+            if p.get("t") == "dev":
+                take(p.get("contact"))
         for d in p.get("doors") or [] if isinstance(p.get("doors"), list) else []:
             if isinstance(d, dict):
                 take(d.get("id"))
@@ -1131,6 +1295,16 @@ def grid(v):
     for k in ("ov", "join", "sp"):   # ov: may overlap; join: overlapping edges look like one; sp: the gap is spacing, not an inset
         if v.get(k) is True:
             g[k] = True
+    if v.get("edge") is not None:   # (v3.0.5) the Edge margin around the cards (none: as before)
+        if isinstance(v["edge"], bool) or v["edge"] not in EDGES:
+            raise Invalid("edge margin: 0, 8, 16 or 24")
+        g["edge"] = v["edge"]
+    if v.get("bg") not in (None, ""):   # (v3.0.5) this page's own background pictures (none: the panel's background)
+        b = show_opts(v["bg"])
+        if isinstance(v["bg"], dict) and v["bg"].get("dim") is not None:   # (v3.0.5) a veil over them, 0–70 %
+            b["dim"] = _int(v["bg"]["dim"], 0, 70, "dim")
+        if b.get("src") or b.get("pics"):   # (switched on with nothing picked yet: not kept — the panel's background)
+            g["bg"] = b
     scr = v.get("scr")
     if scr is not None:   # the screen the owner designed it for (the editor's canvas; the panel fills its own)
         if not isinstance(scr, dict):

@@ -13,7 +13,10 @@ client list at each read) —
     of the MAC (the salt never leaves this file's memory), so the map can keep its positions;
   - keeps its memory in private/unifi-net-state.json (mode 0600): the salt, the 24 h history, the last client list and
     every client ever seen — all by hash, never a MAC.
-The model: {ok, readAt, error, wans, gateway, devices, protect, clients, topology, counts, log, notices}. The line
+The model: {ok, readAt, error, wans, gateway, devices, protect, clients, topology, counts, log, notices, alerts}.
+(v3.0.5) A UniFi UPS's device row has "ups" (its battery from stat/device's vbms_table — ups_of), and "alerts" are the
+network's own events seen between reads (a UniFi device going offline / back, an internet line down / back, a UPS on
+battery / back on mains) for the Activity feed — next to the client log (joins, leaves, guests). The line
 labels, icons and who sees what are the owner's settings (house/unifi-net.json, written by the server, admin only),
 put on by apply_settings() when the server answers — a renamed line shows at once.
 Usage: python -I -u service/unifi_net.py --data-dir /data [--once]
@@ -31,10 +34,11 @@ import threading
 import time
 
 try:   # (the server imports it as service.unifi_net; run_all runs it isolated, from its own folder)
-    from service import guest_wifi
+    from service import guest_wifi, nut_ups
 except ImportError:  # pragma: no cover
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
     import guest_wifi
+    import nut_ups
 
 Fail, read_json, write_private = guest_wifi.Fail, guest_wifi.read_json, guest_wifi.write_private
 
@@ -48,6 +52,7 @@ SLOW_MS = 150                # latency above this = "slow" (yellow) on the uptim
 LOG_MAX = 2000               # client log events kept
 NOTICE_KEEP = 86400          # s a "new device" notice is offered to the panels
 NOTICES_MAX = 20
+ALERTS_MAX = 300             # (v3.0.5) the Activity feed's network events kept
 SEEN_MAX = 20000
 DAY = 86400
 
@@ -251,6 +256,55 @@ def wan_rows(gw, health):
     return out
 
 
+def _flat(o, pre="", out=None, depth=0):
+    """A nested dict → [("battpool.batteryLevel", 100), …] (numbers, booleans and short text only)."""
+    out = [] if out is None else out
+    if isinstance(o, dict) and depth <= 4:
+        for k, v in list(o.items())[:200]:
+            key = f"{pre}.{k}" if pre else str(k)
+            if isinstance(v, dict):
+                _flat(v, key, out, depth + 1)
+            elif isinstance(v, (int, float, bool)) or (isinstance(v, str) and len(v) <= 40):
+                out.append((key, v))
+    return out
+
+
+def ups_of(d):
+    """(v3.0.5) A UniFi UPS's battery from stat/device (vbms_table, as mockups/tools/unifi_snapshot.py found it:
+    battpool.batteryLevel, timeToRemain, device_total_power_output / _budget, device_input / output_voltage,
+    is_battery_mode, ischarging) — the names are matched loosely, as the mockup does; what isn't there is None."""
+    kv = _flat(d.get("vbms_table")) + [(k, v) for k, v in d.items() if isinstance(v, (int, float, bool)) and re.search(r"batt|ups_|load|runtime|charge|volt", k, re.I)
+                                       and not re.search(r"mac|ip|serial", k, re.I)]
+    last = lambda k: k.rsplit(".", 1)[-1]  # noqa: E731
+
+    def find(pat, no=None):
+        for k, v in kv:
+            if re.search(pat, last(k), re.I) and not (no and re.search(no, last(k), re.I)) and not isinstance(v, bool):
+                f = num(v)
+                if f is not None:
+                    return f, last(k)
+        return None, None
+
+    def flag(pat):
+        return next((v for k, v in kv if isinstance(v, bool) and re.search(pat, last(k), re.I)), None)
+    charge, _ = find(r"^(batterylevel|battery_?level|battery_?charge|charge|soc|battery_?percent)$")
+    rt, rk = find(r"timetoremain|runtime|remain", r"shutdown|cycle|since")
+    runtime = None if rt is None else rt * 60 if re.search(r"min", rk or "", re.I) else rt
+    watts, _ = find(r"power_output|output_power")
+    budget, _ = find(r"power_budget|max_power")
+    load, _ = find(r"^(load|load_?percent|output_?load|ups_?load)$")
+    if load is None and watts is not None and budget:
+        load = round(watts * 100 / budget)
+    on_batt = flag(r"is_battery_mode|on_?battery|battery_?mode")
+    if charge is None and watts is None and on_batt is None:
+        return None
+    st = "low" if on_batt and charge is not None and charge <= nut_ups.LOW_CHARGE else "battery" if on_batt else "mains"
+    return {"charge": None if charge is None else round(charge), "runtime": None if runtime is None else round(runtime),
+            "load": None if load is None else round(load), "watts": None if watts is None else round(watts),
+            "vin": num(find(r"input_?voltage|in_?volt")[0], 1), "vout": num(find(r"output_?voltage|out_?volt")[0], 1),
+            "state": st, "charging": flag(r"is_?charging") is True}
+
+
 def build(devices, health, stas, hid, now):
     """The scrubbed model from the console's three lists. hid(mac) → the id a device / client goes by (never the MAC)."""
     mac_ids = {d["mac"]: hid(d["mac"]) for d in devices if isinstance(d.get("mac"), str)}
@@ -285,6 +339,8 @@ def build(devices, health, stas, hid, now):
             "uplinkType": "wireless" if up.get("type") == "wireless" else "wire" if up else None,
             "uplinkSpeed": count(up.get("speed")),
         })
+        if rows[-1]["kind"] == "ups":   # (v3.0.5: the UPS card — its battery, when the console says it)
+            rows[-1]["ups"] = ups_of(d)
         by_id[did] = rows[-1]
     gw_raw = next((d for d in devices if TYPES.get(d.get("type")) == "gateway"), None)
     gw = by_id.get(mac_ids.get((gw_raw or {}).get("mac")))
@@ -377,6 +433,11 @@ class Watcher:
         self.history = st.get("history") if isinstance(st.get("history"), dict) else {}
         self.log = [e for e in st.get("log") or [] if isinstance(e, dict)]
         self.notices = [n for n in st.get("notices") or [] if isinstance(n, dict)]
+        # (v3.0.5) the Activity feed's network events, and what they're worked out from (by id: never a MAC)
+        self.alerts = [e for e in st.get("alerts") or [] if isinstance(e, dict)][-ALERTS_MAX:]
+        self.dev_on = st.get("devOn") if isinstance(st.get("devOn"), dict) else None
+        self.wan_up = st.get("wanUp") if isinstance(st.get("wanUp"), dict) else None
+        self.ups_last = st.get("upsLast") if isinstance(st.get("upsLast"), dict) else {}
         self.model, self.polled_at, self.reads = None, 0, 0
 
     def hid(self, mac):
@@ -411,6 +472,7 @@ class Watcher:
         model = build(devices, health, stas, self.hid, now)
         self.track_history(model, now)
         self.track_clients(model, now, s)
+        self.track_alerts(model, now)
         self.model = model
         self.write_status(model)
         self.save_state()
@@ -463,8 +525,38 @@ class Watcher:
         self.prev, self.prev_at = cur, now
         model["log"], model["notices"] = self.log[-500:][::-1], self.notices[::-1]   # (newest first)
 
+    def track_alerts(self, model, now):
+        """(v3.0.5) The network's own events since the last read, for the Activity feed: a UniFi device offline / back
+        ("devOff" / "devOn"), an internet line down / back ("wanDown" / "wanUp"), a UniFi UPS on battery, low or back on
+        mains ("battery" / "low" / "mains", nut_ups.power_events). The first read only remembers how things are."""
+        at, out = round(now), []
+        on = {d["id"]: bool(d["online"]) for d in model["devices"]}
+        if self.dev_on is not None:
+            for d in model["devices"]:
+                was = self.dev_on.get(d["id"])
+                if was is not None and was != on[d["id"]]:
+                    out.append({"at": at, "kind": "devOn" if on[d["id"]] else "devOff", "name": d["name"], "dev": d["kind"]})
+        self.dev_on = on
+        up = {w["key"]: w["up"] is not False for w in model["wans"]}
+        if self.wan_up is not None:
+            for w in model["wans"]:
+                was = self.wan_up.get(w["key"])
+                if was is not None and was != up[w["key"]]:
+                    out.append({"at": at, "kind": "wanUp" if up[w["key"]] else "wanDown", "wan": w["key"], "name": w.get("uniFiName") or w["slot"]})
+        self.wan_up = up
+        upses = [{"id": d["id"], "name": d["name"], "online": d["online"], "state": d["ups"]["state"]} for d in model["devices"] if d.get("ups")]
+        out += nut_ups.power_events(self.ups_last, upses, now)
+        self.alerts = (self.alerts + out)[-ALERTS_MAX:]
+        self.alerts = [e for e in self.alerts if now - (e.get("at") or 0) < 7 * DAY]
+        for d in model["devices"]:   # (each UPS's last power event: the card's "last power event")
+            if d.get("ups"):
+                e = next((e for e in reversed(self.alerts) if e.get("ups") == d["id"]), None)
+                d["ups"]["last"] = {"kind": e["kind"], "at": e["at"]} if e else None
+        model["alerts"] = self.alerts[::-1]
+
     def write_status(self, model):
         model = dict(model)
+        model.setdefault("alerts", self.alerts[::-1])
         model.setdefault("log", self.log[-500:][::-1])
         model.setdefault("notices", self.notices[::-1])
         write_private(self.private / STATUS, json.dumps(model, separators=(",", ":"), ensure_ascii=False))
@@ -472,7 +564,8 @@ class Watcher:
     def save_state(self):
         write_private(self.private / STATE, json.dumps({"salt": self.salt, "seen": sorted(self.seen), "prev": self.prev,
                                                         "prevAt": self.prev_at, "history": self.history,
-                                                        "log": self.log, "notices": self.notices}, separators=(",", ":")))
+                                                        "log": self.log, "notices": self.notices, "alerts": self.alerts,
+                                                        "devOn": self.dev_on, "wanUp": self.wan_up, "upsLast": self.ups_last}, separators=(",", ":")))
 
 
 # TODO (Protect storage, the "Recordings & NVR" card): the UNVR's storage, days of recording left and its drives are
@@ -492,7 +585,7 @@ def mark_stale(st, now, since):
         return dict(st, stale=True)
     return st
 
-def apply_settings(model, settings, panel=None):
+def apply_settings(model, settings, panel=None, alerts=True):
     """The model as one reader sees it: the lines' names (the owner's label, else UniFi's name, else "Internet 1 / 2";
     "WAN 1 / 2" stays the small label) and icons; for a panel (`panel` = its id) guests hidden when the owner says so,
     the log only when it's on, the new-device notices only for the panels chosen."""
@@ -513,6 +606,8 @@ def apply_settings(model, settings, panel=None):
         m["log"] = [e for e in m.get("log") or [] if (e.get("at") or 0) >= cut]
     shown = s["newDevice"] and (panel is None or s["newDevicePanels"] == "all" or panel in s["newDevicePanels"])
     m["notices"] = list(m.get("notices") or []) if shown else []
+    # (v3.0.5: the Activity feed) alerts=False: this panel has no Activity feed showing them — none sent
+    m["alerts"] = [e for e in m.get("alerts") or [] if isinstance(e, dict)][:200] if alerts or panel is None else []
     if panel is not None:
         m["log"] = m["log"][:200]
         if s["hideGuests"]:

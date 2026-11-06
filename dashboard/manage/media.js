@@ -234,29 +234,31 @@
     const name = el("input", { type: "text", value: u.name, maxlength: "40", "aria-label": K.t("media.name") });
     const types = bg ? null : el("div.md-types", { role: "group", "aria-label": K.t("media.fitsTypes") }, LIB.types.map((t) => el("label.cm-chip", {}, el("input", { type: "checkbox", value: t, checked: u.types.includes(t) }), PK().TYPE_NAMES[t] || t)));
     const save = el("button.btn.sm.pri", { type: "button", onclick: async () => {
-      const r = await api("/api/manage/pictures", { action: "edit", id: u.id, name: name.value, ...(types ? { types: [...types.querySelectorAll("input:checked")].map((i) => i.value) } : {}) }).catch(() => ({}));
+      const was = { name: u.name, types: u.types.slice() }, now = { name: name.value, ...(types ? { types: [...types.querySelectorAll("input:checked")].map((i) => i.value) } : {}) };
+      const edit = (v) => api("/api/manage/pictures", { action: "edit", id: u.id, ...v }).catch(() => ({}));
+      const r = await edit(now);
       if (r.error === "in-use-own") return toast(K.t("media.edit.inUseRename"), true);
       if (!r.ok) return toast(r.error || K.t("media.notSaved"), true);
-      toast(K.t("media.saved")); after();
+      after();
+      // (v3.0.5) an edit in a Manager list is a step too: Undo puts the name and types back (Ctrl+Z, ↶ ↷)
+      const name2 = (r.picture && r.picture.name) || now.name, back = (v) => async () => { const x = await edit(types ? v : { name: v.name }); if (x.ok) { LIB = null; after(); } return !!x.ok; };
+      if (K.history && K.history.did) K.history.did({ what: K.t("media.edit.renamedWhat", { name: name2 }), undo: back(was), redo: back(now) }, K.t("media.saved"));
+      else toast(K.t("media.saved"));
     } }, K.t("media.save"));
+    // (v3.0.5) in use: blocked — the dialog lists each panel, card and device, each a link (take it off those first).
+    // Not used: asked once (a picture is a big thing), then it goes to the Trash with Undo in the message.
+    const blocked = (uses) => K.trash.inUse(K.t("trash.inUsePicture", { name: u.name }), uses, PK().useWords, PANELS);
     const del = el("button.btn.sm.pn-danger", { type: "button", onclick: async () => {
-      let body = { action: "delete", id: u.id };
-      if (users.length) {
-        const pw = await PK().askPassword(K.t("media.edit.stillInUse", { uses: PK().afterDelete(users).join("; ") }));
-        if (!pw) return;
-        body = { ...body, password: pw };
-      } else if (!(await K.ask({ title: K.t("media.edit.removeAsk", { name: u.name }), text: K.t("media.edit.unused"), yes: K.t("media.remove"), danger: true }))) return;
-      let r = await api("/api/manage/pictures", body).catch(() => ({}));
-      if (r.error === "in-use") {   // (something started using it since this page loaded: ask now)
-        const pw = await PK().askPassword(K.t("media.edit.nowInUse", { uses: PK().afterDelete(r.uses || []).join("; ") }));
-        if (!pw) return;
-        r = await api("/api/manage/pictures", { ...body, password: pw }).catch(() => ({}));
-      }
+      if (users.length) return blocked(users);
+      if (!(await K.ask({ title: K.t("media.edit.removeAsk", { name: u.name }), text: K.t("media.edit.unused"), yes: K.t("media.remove"), danger: true }))) return;
+      const once = () => api("/api/manage/pictures", { action: "delete", id: u.id }).catch(() => ({}));
+      const r = await once();
+      if (r.error === "in-use") return blocked(r.uses || []);   // (something started using it since this page loaded)
       if (r.error === "in-use-own") return toast(K.t("media.edit.inUseRemove"), true);
-      if (!r.ok) return toast(r.error === "wrong" ? K.t("media.edit.wrongPassword") : r.error === "locked" || r.error === "reset-needed" ? K.t("media.edit.locked")
-        : r.refused ? K.t("media.edit.refused") : r.error || K.t("media.notRemoved"), true);
-      if (r.cleared) M.devicesStale = true;
-      toast(K.t("media.removed")); after(true);
+      if (!r.ok) return toast(r.refused ? K.t("media.edit.refused") : r.error || K.t("media.notRemoved"), true);
+      after(true);
+      K.trash.deleted({ name: u.name, trash: r.trash, days: r.days, after: () => { LIB = null; after(false); },
+        redo: async () => { const x = await once(); if (x.error === "in-use") blocked(x.uses || []); return x.ok ? x.trash : false; } });
     } }, ic("trash", 14), K.t("media.remove"));
     return el("div.md-sec", { "data-unsaved": K.t("media.edit.unsaved", { name: u.name }) }, el("h4", {}, K.t("media.edit.this")),
       el("label.cm-fld", {}, el("span", {}, K.t("media.name")), name), types ? el("div.cm-fld", {}, el("span", {}, K.t("media.edit.fits")), fewChips(types)) : null,
@@ -278,6 +280,7 @@
     return [...built, ...ups];
   }
   async function renderBackgrounds() {
+    if (pageNow() !== "backgrounds") return;   // (v3.0.5: an Undo finishing on another page never draws this one there)
     if (!LIB) M.$main.replaceChildren(S.isPhone() ? el("div.p-skel", { role: "status", "aria-label": K.t("common.loading") }, el("i"), el("i"), el("i")) : el("p.muted", {}, K.t("common.loading")));   // (v2.9.0: a phone, skeleton rows)
     if (!(await loadPictures())) return;
     await panels();
@@ -302,11 +305,11 @@
     if (!list.length) body = K.empty("image", s.q ? K.t("media.bg.noMatch", { q: s.q.trim() }) : K.t("media.bg.none"), s.q ? K.t("media.bg.noMatchHint") : K.t("media.bg.noneHint"), mayUp && !s.q ? upBtn() : null);
     else if (viewOf("backgrounds") === "list") {
       body = K.table({ label: K.t("media.bg.title"), cur: s.cur, onPick: (id) => pick("backgrounds", id), sort: s.sort, onSort: onSort("backgrounds"),
-        cols: [["name", K.t("media.col.background"), { sort: true }], ["kind", K.t("media.up.kind"), { sort: true }], ["size", K.t("media.col.size"), { cls: "c-mid", sort: true }], ["used", K.t("media.usedBy"), { sort: true }], ["by", K.t("media.col.addedBy"), { cls: "c-wide" }], ["added", K.t("media.col.added"), { cls: "c-wide", sort: true }]],
+        cols: [["name", K.t("media.col.background"), { sort: true }], ["kind", K.t("media.up.kind"), { sort: true }], ["size", K.t("media.col.size"), { cls: "c-mid", sort: true }], ["used", K.t("trash.inUse"), { sort: true }], ["by", K.t("media.col.addedBy"), { cls: "c-wide" }], ["added", K.t("media.col.added"), { cls: "c-wide", sort: true }]],
         rows: sortRows(list, s.sort, (x, k) => (k === "kind" ? (x.built ? 0 : 1) : k === "size" ? (x.u ? x.u.bytes || 0 : 0) : k === "used" ? uses(x).length : k === "added" ? (x.u ? x.u.added || 0 : 0) : x.name.toLowerCase()))
           .map((x) => ({ id: x.id, cells: { name: el("span.md-nm", {}, el("span.md-th", {}, K.scene(x.id)), el("b", {}, x.name)),
             kind: x.built ? K.t("media.bg.builtAnimated") : K.t("media.uploaded"), size: x.u ? (x.u.missing ? K.t("media.bg.fileMissing") : K.t("media.bg.dims", { w: x.u.w || "?", h: x.u.h || "?", size: kb(x.u.bytes) })) : K.t("media.bg.drawn"),
-            used: usedWords(x) || "—", by: x.u ? x.u.by || "—" : "Skypane", added: x.u ? day(x.u.added) : "—" } })) });   // i18n-ok (the name)
+            used: K.trash.inUseBadge(uses(x).length, K.t("trash.nPlaces", { n: uses(x).length })), by: x.u ? x.u.by || "—" : "Skypane", added: x.u ? day(x.u.added) : "—" } })) });   // i18n-ok (the name) (v3.0.5: the In use badge)
     } else {
       body = el("div.md-grid.md-bg", {}, list.map((x) => tile("backgrounds", x.id, s.cur, [el("span.md-art", {}, K.scene(x.id), x.built ? el("span.md-badge", {}, K.t("media.bg.builtAnimated")) : null, el("span.md-ck", {}, ic("check", 13))),
         el("span.md-meta", {}, el("b", {}, x.name), el("small", {}, usedWords(x) || (x.built ? K.t("media.bg.drawnBy") : K.t("media.bg.dims", { w: x.u.w || "?", h: x.u.h || "?", size: kb(x.u.bytes) }))))], x.name)),
@@ -350,9 +353,11 @@
     return [...ups, ...art, ...line];
   }
   async function renderIcons() {
+    if (pageNow() !== "icons") return;   // (v3.0.5: an Undo finishing on another page never draws this one there)
     if (!LIB) M.$main.replaceChildren(S.isPhone() ? el("div.p-skel", { role: "status", "aria-label": K.t("common.loading") }, el("i"), el("i"), el("i")) : el("p.muted", {}, K.t("common.loading")));   // (v2.9.0: a phone, skeleton rows)
     if (!(await loadPictures())) return;
     if (!M.devices() && (M.can("devices") || M.can("panels"))) { try { await M.loadDevices(); } catch { /* (no devices: "used by" from the server only) */ } }   // i18n-ok (a comment)
+    await panels();   // (v3.0.5: an "in use" dialog's links go to those panels)
     if (pageNow() === "icons") drawIcons();
   }
   const iconFace = (x, size) => (x.kind === "up" ? el("img.md-upimg", { src: PK().upURL(x.u.id), alt: "" }) : x.kind === "art" ? PK().artEl(x.id.slice(4), size + 20) : iconEl(x.code || x.name, size));
@@ -373,12 +378,12 @@
     if (!list.length) body = K.empty("shapes", s.q ? K.t("media.icons.noMatch", { q: s.q.trim() }) : K.t("media.icons.none"), s.q ? K.t("media.icons.noMatchHint") : K.t("media.icons.noneHint"));
     else if (viewOf("icons") === "list") {
       body = K.table({ label: K.t("media.icons.title"), cur: s.cur, onPick: (id) => pick("icons", id), sort: s.sort, onSort: onSort("icons"),
-        cols: [["name", K.t("media.col.icon"), { sort: true }], ["kind", K.t("media.up.kind"), { sort: true }], ["format", K.t("media.col.format"), { cls: "c-mid" }], ["used", K.t("media.usedBy"), { sort: true }], ["by", K.t("media.col.addedBy"), { cls: "c-wide" }]],
+        cols: [["name", K.t("media.col.icon"), { sort: true }], ["kind", K.t("media.up.kind"), { sort: true }], ["format", K.t("media.col.format"), { cls: "c-mid" }], ["used", K.t("trash.inUse"), { sort: true }], ["by", K.t("media.col.addedBy"), { cls: "c-wide" }]],
         rows: sortRows(list, s.sort, (x, k) => (k === "kind" ? x.kind : k === "used" ? uses(x).length : x.name.toLowerCase())).map((x) => ({ id: x.id, cells: {
           name: el("span.md-nm", {}, el("span.md-ic" + (s.on ? ".on" : ""), {}, iconFace(x, 18)), el("b", {}, x.name)),
           kind: { line: K.t("media.icons.kindLine"), art: K.t("media.icons.kindArt"), up: K.t("media.uploaded") }[x.kind],
           format: x.kind === "up" ? K.t(x.u.animated ? "media.icons.formatMoves" : "media.icons.format", { ext: x.u.ext ? x.u.ext.toUpperCase() : "", w: x.u.w || "?", h: x.u.h || "?" }) : x.kind === "art" ? K.t("media.icons.animated") : K.t("media.icons.svgLine"),
-          used: uses(x).length ? K.t("media.icons.places", { n: uses(x).length }) : "—", by: x.kind === "up" ? x.u.by || "—" : "Skypane" } })) });   // i18n-ok (the name)
+          used: K.trash.inUseBadge(uses(x).length, K.t("trash.nPlaces", { n: uses(x).length })), by: x.kind === "up" ? x.u.by || "—" : "Skypane" } })) });   // i18n-ok (the name) (v3.0.5: the In use badge)
     } else {
       body = el("div.md-grid.md-icons" + (s.on ? ".on" : ""), {}, list.slice(0, 400).map((x) => tile("icons", x.id, s.cur,
         [x.kind === "up" ? el("span.md-up", {}, K.t("media.icons.upBadge")) : null, el("span.md-g" + (x.kind === "art" ? ".art" : ""), {}, iconFace(x, 26)), el("b", {}, x.name),
@@ -415,6 +420,7 @@
 
   // ================================================================== Cards
   async function renderCards() {
+    if (pageNow() !== "cards") return;   // (v3.0.5: an Undo finishing on another page never draws this one there)
     if (!CARDS) M.$main.replaceChildren(S.isPhone() ? el("div.p-skel", { role: "status", "aria-label": K.t("common.loading") }, el("i"), el("i"), el("i")) : el("p.muted", {}, K.t("common.loading")));   // (v2.9.0: a phone, skeleton rows)
     try { CARDS = await M.cardList(); } catch (e) { if (e.message !== "login") M.$main.replaceChildren(K.empty("cards", K.t("media.cards.cantRead"), K.t("media.cantReadWhy"))); return; }
     await panels();
@@ -439,11 +445,11 @@
     if (!list.length) body = K.empty("cards", s.q ? K.t("media.cards.noMatch", { q: s.q.trim() }) : K.t("media.cards.none"), s.q ? K.t("media.cards.noMatchHint") : K.t("media.cards.noneHint"), may && !s.q ? instBtn() : null);
     else if (viewOf("cards") === "list") {
       body = K.table({ label: K.t("media.cards.title"), cur: s.cur, onPick: (id) => pick("cards", id), sort: s.sort, onSort: onSort("cards"),
-        cols: [["name", K.t("media.col.card"), { sort: true }], ["tier", K.t("media.up.kind"), { sort: true }], ["version", K.t("media.cards.version"), { cls: "c-mid" }], ["author", K.t("media.cards.author"), { cls: "c-wide", sort: true }], ["checked", K.t("media.cards.checked"), { sort: true }], ["used", K.t("media.cards.usedOn"), { sort: true }]],
+        cols: [["name", K.t("media.col.card"), { sort: true }], ["tier", K.t("media.up.kind"), { sort: true }], ["version", K.t("media.cards.version"), { cls: "c-mid" }], ["author", K.t("media.cards.author"), { cls: "c-wide", sort: true }], ["checked", K.t("media.cards.checked"), { sort: true }], ["used", K.t("trash.inUse"), { sort: true }]],
         rows: sortRows(list, s.sort, (c, k) => (k === "tier" ? c.tier : k === "author" ? (c.author || "").toLowerCase() : k === "checked" ? c.checkedAt || 0 : k === "used" ? c.used.length : c.name.toLowerCase())).map((c) => ({ id: c.id, cells: {
           name: el("span.md-nm", {}, ic(cardIcon(c), 15), el("b", {}, c.name), c.changed ? el("span.pill.warn", {}, K.t("media.cards.changed")) : null),
           tier: c.tier === "script" ? K.t("media.cards.script") : K.t("media.cards.template"), version: c.version, author: c.author || "—", checked: day(c.checkedAt),
-          used: c.used.length ? c.used.map((p) => names.get(p) || p).join(", ") : "—" } })) });
+          used: el("span", { title: c.used.map((p) => names.get(p) || p).join(", ") || null }, K.trash.inUseBadge(c.used.length, K.t("trash.nPanels", { n: c.used.length }))) } })) });   // (v3.0.5: the In use badge; the names on hover)
     } else {
       body = el("div.md-grid.md-cards", {}, list.map((c) => tile("cards", c.id, s.cur, [mini(c),
         el("span.md-meta", {}, el("b", {}, c.name), el("small", {}, K.t(c.tier === "script" ? "media.cards.scriptBy" : "media.cards.templateBy", { author: c.author || K.t("media.cards.someone") })),
@@ -471,12 +477,19 @@
         el("button.btn.sm", { type: "button", onclick: () => M.cardKit.exportCard(c) }, ic("download", 14), K.t("media.cards.export")),
         el("button.btn.sm", { type: "button", onclick: () => M.cardKit.aiPrompt(c, c.flags, c.words, null) }, K.t("media.cards.askAi")),
         el("span.sp"),
+        // (v3.0.5) on a panel: blocked, each layout a link (the builder); else asked once, to the Trash, Undo
         M.can("cards") && !phone() ? el("button.btn.sm.pn-danger", { type: "button", onclick: async () => {
-          const on = c.used.map((p) => names.get(p) || p);
-          if (!(await K.ask({ title: K.t("media.edit.removeAsk", { name: c.name }), text: on.length ? K.t("media.cards.removeOn", { places: on.join(", ") }) : K.t("media.cards.noLayout"), yes: K.t("media.cards.removeYes"), danger: true }))) return;
-          const r = await api("/api/manage/cards", { action: "delete", id: c.id }).catch(() => ({}));
+          const words = (u) => (u.kind === "cards" ? K.t("trash.onPanel", { panel: u.panel }) : u.kind === "savedCard" ? K.t("pictures.use.savedCard", { name: u.name }) : K.t("trash.onOtherPanel"));   // (v3.0.5: a saved card too)
+          const blocked = (uses) => K.trash.inUse(K.t("trash.inUseCard", { name: c.name }), uses, words, PANELS);
+          if (c.used.length) return blocked(c.used.map((p) => (names.has(p) ? { kind: "cards", n: 1, where: "home", panel: names.get(p), id: p } : { kind: "otherPanel" })));
+          if (!(await K.ask({ title: K.t("media.edit.removeAsk", { name: c.name }), text: K.t("media.cards.noLayout"), yes: K.t("media.cards.removeYes"), danger: true }))) return;
+          const once = () => api("/api/manage/cards", { action: "delete", id: c.id }).catch(() => ({}));
+          const r = await once();
+          if (r.error === "in-use") return blocked(r.uses || []);
           if (!r.ok) return toast(r.error || K.t("media.notRemoved"), true);
-          toast(K.t("media.removed")); st.cards.cur = null; CARDS = null; renderCards();
+          st.cards.cur = null; CARDS = null; renderCards();
+          K.trash.deleted({ name: c.name, trash: r.trash, days: r.days, after: () => { CARDS = null; renderCards(); },
+            redo: async () => { const x = await once(); return x.ok ? x.trash : false; } });
         } }, ic("trash", 14), K.t("media.remove")) : null));
   }
 

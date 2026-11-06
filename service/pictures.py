@@ -250,6 +250,44 @@ class Library:
             except OSError:
                 pass
 
+    def take_out(self, pid, move):
+        """(v3.0.5) A picture going to the Trash: move(its record, the path of its file) moves the file into the Trash
+        and writes its note first; only then does it leave the index (a failure on the way leaves it in the library).
+        → (its record, what move returned)."""
+        with self.lock:
+            p = next((x for x in self._index() if x["id"] == pid), None)
+            if not p:
+                raise Invalid("no such picture")
+            got = move(dict(p), self.dir / f"{pid}.{p['ext']}")
+            self._save([x for x in self._index() if x["id"] != pid])
+            return p, got
+
+    def put_back(self, item, src):
+        """(v3.0.5) A picture back from the Trash: its record (checked again) and its file. Its id stays (so the panels
+        and cards that still name it see it again) unless that id is taken; a name already used gets " (restored)"."""
+        if not isinstance(item, dict) or item.get("ext") not in MIME or item.get("style") not in STYLES:
+            raise Invalid("not a picture")
+        raw = pathlib.Path(src).read_bytes()
+        ext, w, h, animated = sniff(raw)   # (what the file really is: never trusted from the note)
+        with self.lock:
+            items = self._index()
+            if len(items) >= MAX_PICTURES:
+                raise Invalid(f"at most {MAX_PICTURES} pictures — delete some first")
+            pid = item.get("id") if isinstance(item.get("id"), str) and ID_RE.fullmatch(item["id"]) and not any(x["id"] == item["id"] for x in items) else secrets.token_hex(8)
+            name, style, types = self._clean(item.get("name") or "Picture", item["style"], item.get("types") or ["other"])
+            if any(x.get("name", "").lower() == name.lower() and x.get("style") == style for x in items):
+                name = (name[:29] + " (restored)")[:40]
+            self.dir.mkdir(parents=True, exist_ok=True)
+            tmp = self.dir / f".{pid}.tmp"
+            tmp.write_bytes(raw)
+            os.replace(tmp, self.dir / f"{pid}.{ext}")
+            back = {"id": pid, "name": name, "style": style, "types": types, "w": w, "h": h, "bytes": len(raw), "ext": ext,
+                    "animated": animated, "added": item.get("added") if isinstance(item.get("added"), int) else int(time.time()),
+                    **({"by": item["by"]} if isinstance(item.get("by"), str) else {})}
+            items.append(back)
+            self._save(items)
+        return back
+
     def rename_owner(self, old, new):
         """A Manager login got a new name: its uploads stay its own."""
         if not (isinstance(old, str) and isinstance(new, str)):

@@ -150,3 +150,55 @@ span.md-chip { border: 1px solid var(--line); background: var(--surface-2); colo
 .cdlg-or { margin: 6px 0 6px; font-size: 13px; }
 /* a phone: the filter chips scroll sideways instead of wrapping */
 @media (max-width: 640px) { .md-tools .seg { max-width: 100%; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; } .md-tools .seg button { flex: none; } }
+
+/* ===== (v3.0.5) the slide-show options (folders.js Kit.showEditor) — mockups/prototypes/settings-and-pages.html ===== */
+.sh-ed { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.sh-pics { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
+.sh-th { position: relative; aspect-ratio: 4 / 3; border-radius: 9px; overflow: hidden; border: 2px solid transparent; padding: 0; background: #000; min-width: 0; }
+.sh-th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sh-th.on { border-color: var(--acc); box-shadow: 0 0 0 3px var(--acc-soft); }
+.sh-ord { position: absolute; right: 5px; top: 5px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--acc); color: #fff; font-size: 11px; font-weight: 600; display: grid; place-items: center; }
+.sh-count { color: var(--t3); }
+.sh-grp { margin: 0; }
+.sh-dim { opacity: .5; }
+.sh-trbox { display: flex; flex-direction: column; gap: 10px; }
+.sh-trh { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.sh-trgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
+.sh-trt { display: flex; flex-direction: column; gap: 4px; padding: 4px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface-2); color: var(--t2); min-width: 0; }
+.sh-trt:hover, .sh-trt:focus-visible { border-color: var(--line-2); color: var(--text); outline: none; }
+.sh-trt.on { border-color: var(--acc); box-shadow: 0 0 0 2px var(--acc-soft); color: var(--text); }
+.sh-show { position: relative; display: block; aspect-ratio: 16 / 10; border-radius: 6px; background: #000; overflow: hidden; }
+.sh-tn { font-size: 11.5px; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; padding: 0 2px; }
+.sh-gentle { display: flex; align-items: center; gap: 6px; }
+/* the panels' engine in a preview tile (theme.css has the panel's copy) */
+.sh-show .ss-ly { position: absolute; inset: 0; overflow: hidden; backface-visibility: hidden; }
+.sh-show .ss-ly > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.sh-show .ss-ly.ss-mask > img { right: auto; bottom: auto; }
+.sh-show .ss-bb { display: none; }
+.sh-show .ss-circle { border-radius: 50%; }
+.sh-show .ss-star { clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }
+.sh-show .ss-fx { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.sh-show .ss-ly > .ss-fx { z-index: 1; }
+.sh-show .ss-shade, .sh-show .ss-black { background: #000; }
+.sh-show .ss-white { background: #fff; }
+.sh-show .ss-leak { left: -40%; right: -40%; background: radial-gradient(42% 85% at 50% 50%, rgba(255, 246, 214, .95), rgba(255, 170, 70, .8) 32%, rgba(255, 70, 120, .4) 58%, rgba(255, 70, 120, 0) 76%); }
+
+/* ===== (v3.0.5) the Picture folders page (folders.js) ===== */
+.pf-page { display: flex; flex-direction: column; gap: 16px; }
+.pf-list { display: flex; flex-direction: column; }
+.pf-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--line); min-width: 0; flex-wrap: wrap; }
+.pf-row:first-child { border-top: 0; }
+.pf-tx { display: flex; flex-direction: column; min-width: 0; flex: 1 1 200px; }
+.pf-tx small { overflow-wrap: anywhere; }
+.pf-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.pf-empty { padding: 14px 16px; margin: 0; }
+.pf-cmd { margin: 8px 0; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line); font: 12.5px/1.6 var(--mono, monospace); white-space: pre-wrap; overflow-wrap: anywhere; }
+.pf-steps { margin: 8px 0; padding-left: 20px; line-height: 1.7; color: var(--t2); }
+.pf-dlg { width: min(560px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 10px; }
+.pf-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+.pf-browse { display: flex; flex-direction: column; max-height: 46vh; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+.pf-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: none; text-align: left; color: var(--text); box-shadow: none; min-width: 0; }
+.pf-item:first-child { border-top: 0; }
+.pf-item span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-item:hover, .pf-item:focus-visible { background: var(--surface-2); }
+.pf-name { display: flex; flex-direction: column; gap: 4px; }

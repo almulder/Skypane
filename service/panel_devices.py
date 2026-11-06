@@ -20,6 +20,11 @@ Python 3.12 stdlib only; used by the dashboard server alone (one process: the fi
                                      gone with the device on unlink),
                        "prevAgentToken": str  (3.0.2 re-test: the token an unlink replaced — the agent may still hold it
                                      and takes the new one with it as prevToken; kept until the next unlink),
+                       "agentKey": str  ((v3.0.5) the LED agent's own HMAC key, plain like agentToken: made with it, handed
+                                     to the agent once with it (trust on first use); signs its self-update offers and
+                                     answers its /hello; kept and dropped with agentToken — never logged or shown),
+                       "agentKeyed": bool  ((v3.0.5) the agent on this tablet proved that key once (/hello): from then
+                                     on the page refuses an agent that can't — an app squatting on the port),
                        "agentSeen": bool  (an LED agent answered on this tablet once: ok/off at a check-in; kept on
                                      re-pair unless the profile is clearly another tablet)}}}
   private/panel-notices.json   [{id, kind, panel, at, ip, agent, count, read}]  newest last, at most MAX_NOTICES
@@ -247,7 +252,7 @@ class PanelDevices:
     def devices(self):
         """{pid: {profile, pairedAt, lastSeen, lastIp, adopted, locked, copyAt}} — never a hash."""
         return {pid: {k: (dict(r.get("profile") or {}) if k == "profile" else r.get(k))
-                      for k in ("profile", "pairedAt", "lastSeen", "lastIp", "adopted", "locked", "copyAt", "agentSeen")}
+                      for k in ("profile", "pairedAt", "lastSeen", "lastIp", "adopted", "locked", "copyAt", "agentSeen", "agentKeyed")}   # (v3.0.5: agentKeyed — never the key)
                 for pid, r in self.doc["devices"].items()}
 
     def issue(self, pid, profile, ip, adopted=False):
@@ -271,6 +276,11 @@ class PanelDevices:
         t = old.get("agentToken")
         if _token_ok(t):
             self.doc["devices"][pid]["agentToken"] = t
+            # (v3.0.5) its key and whether the agent proved it go with the token
+            if _token_ok(old.get("agentKey")):
+                self.doc["devices"][pid]["agentKey"] = old["agentKey"]
+                if old.get("agentKeyed") is True:
+                    self.doc["devices"][pid]["agentKeyed"] = True
         # (3.0.2 re-test: after an unlink, the token the agent may still hold — it takes the new one with this one)
         p = old.get("prevAgentToken") if old else self.doc["agentPrev"].get(pid)
         if _token_ok(p):
@@ -419,6 +429,18 @@ class PanelDevices:
                     raise
             return t
 
+    def agent_panel(self, token):
+        """(v3.0.5) The panel whose tablet's LED agent holds this token (its self-update asks with it) — None for no
+        match. Every device is compared (constant time), so the answer takes as long for a wrong token."""
+        if not _token_ok(token):
+            return None
+        found = None
+        with self.lock:
+            for pid, r in self.doc["devices"].items():
+                if _eq(r.get("agentToken"), token):
+                    found = pid
+        return found
+
     def agent_seen(self, pid):
         """(v3.0.2 rev. 2) An LED agent answered on this panel's tablet (ok/off): remembered with the device (the Manager
         then says "Not found" when it stops answering). Saved once. False when the panel has no device."""
@@ -433,6 +455,41 @@ class PanelDevices:
                 except OSError:
                     r.pop("agentSeen", None)
             return True
+
+    def agent_key(self, pid):
+        """(v3.0.5) The LED agent's HMAC key for this panel's tablet — made (with its token, agent_token) on the first
+        ask and kept with the token (issue() carries both; unlink drops both). None when the panel has no device.
+        OSError when it can't be saved. Never logged."""
+        self.agent_token(pid)
+        with self.lock:
+            r = self.doc["devices"].get(pid)
+            if not r:
+                return None
+            k = r.get("agentKey")
+            if not (isinstance(k, str) and len(k) >= 43):
+                r["agentKey"] = k = secrets.token_urlsafe(32)
+                r.pop("agentKeyed", None)
+                try:
+                    self._save()
+                except OSError:
+                    r.pop("agentKey", None)
+                    raise
+            return k
+
+    def agent_keyed(self, pid, proved=None):
+        """(v3.0.5) Has the agent on this tablet proved its key (/hello, as the page reported at a check-in)? With
+        proved=True: remembered (saved once). False when the panel has no device."""
+        with self.lock:
+            r = self.doc["devices"].get(pid)
+            if not r:
+                return False
+            if proved is True and r.get("agentKeyed") is not True and r.get("agentKey"):
+                r["agentKeyed"] = True
+                try:
+                    self._save()
+                except OSError:
+                    r.pop("agentKeyed", None)
+            return r.get("agentKeyed") is True
 
     def move(self, pid, to):
         """"Move this device to…": the device of `pid` now belongs to the unclaimed panel `to` (the caller deletes the

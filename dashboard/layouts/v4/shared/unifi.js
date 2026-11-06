@@ -7,16 +7,20 @@
 // no MAC address (devices and clients go by a salted hash). It's read every 30 s while any UniFi card is on one of this
 // panel's layouts, shown or not, so the client log and the "new device" notices keep going; nothing is read without one.
 // A card stays hidden on the wall while UniFi isn't connected (the builder's canvas says why instead).
-// The map: drawn in its own space (1000 wide, as high as the card's shape), laid out by itself — left to right, top
-// down or round the gateway — unless the owner dragged a part: o.pos {node id: [x, y]} in thousandths, saved with the
+// The map: (v3.0.5) drawn in the card's own pixels over the whole card (before: a 1000-wide space), laid out by itself —
+// left to right, top down or round the gateway — unless the owner dragged a part: o.pos {node id: [x, y]} in thousandths, saved with the
 // card (the builder's "Arrange the parts": the canvas lets the drag through and sends each place back, design.js).
 // The "new device" notice: a small note at the bottom (not one of the 1–5 system alerts), each one once (by its id).
+// (v3.0.5, M3) netups UPS / battery backup · netbell Doorbell · netfeed Activity feed (unifi-v2.html); the map drawn
+// in the card's own pixels over the whole card (network-map-305.html).
 (function () {
   const H = Home, esc = (s) => UI.esc(s);
   const PC = window.PANEL_CONFIG || {}, DESIGN = window.PANEL_DESIGN === true;
   const D = "—", POLL = 30000;
-  const U = { m: null, st: {}, arranging: null, dragged: 0 };
-  const TYPES = ["netwan", "netchips", "netstrip", "netmap", "netdevs", "netpoe", "netclients", "netlog", "netvals"];
+  const U = { m: null, st: {}, arranging: null, dragged: 0, ups: null, bell: null };
+  const TYPES = ["netwan", "netchips", "netstrip", "netmap", "netdevs", "netpoe", "netclients", "netlog", "netvals", "netups", "netbell", "netfeed"];
+  // (v3.0.5) the cards with their own reads (not UniFi Network's model): the UPS card (/ups) and the Doorbell (/doorbell)
+  const OWN = { netups: "ups", netbell: "doorbell" };
   // each card's colors and their defaults (service/layouts.py NET_COLORS; the builder's list has the same — builder.js)
   const COL = {
     netwan: { dl: "#38bdf8", ul: "#c084fc", lat: "#fbbf24", ok: "#34d399", warn: "#fbbf24", bad: "#fb7185" },
@@ -28,6 +32,9 @@
     netclients: { icon: "#dacfff", named: "#a5b4fc" },
     netlog: { join: "#34d399", roam: "#7dd3fc" },
     netvals: { val: "#f3efff", icon: "#a78bfa" },
+    netups: { mains: "#34d399", batt: "#fbbf24", low: "#fb7185", fill: "#a78bfa" },
+    netbell: { ring: "#fbbf24", acc: "#a78bfa" },
+    netfeed: { join: "#34d399", leave: "#94a3b8", alert: "#fb7185", ok: "#38bdf8" },
   };
   const isCol = (v) => typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v);
   const colVars = (t, col) => Object.entries(COL[t] || {}).map(([k, d]) => `--c-${k}:${col && isCol(col[k]) ? col[k] : d}`).join(";");
@@ -49,6 +56,7 @@
     chip: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/>',
     arrowDown: '<path d="M12 4v15M6 13l6 6 6-6"/>', arrowUp: '<path d="M12 20V5M6 11l6-6 6 6"/>',   // i18n-ok (drawings)
     roam: '<path d="M4 8h13l-3-3M20 16H7l3 3"/>',
+    msg: '<path d="M4 5h16v11H9l-5 4z"/>',   // (v3.0.5: a doorbell message)
   };
   const ic = (n, size = 20) => (P[n] ? `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n]}</svg>` : window.icon(n, size));
   const KIND_IC = { gateway: "router", switch: "netSwitch", ap: "ap", ups: "ups", power: "plug", bridge: "wireless", other: "chip", nvr: "nas", camera: "cctv", doorbell: "doorbell", cams: "cctv" };
@@ -277,59 +285,156 @@
     c: (p, q) => [p, { x: p.x + (q.x - p.x) * 0.33, y: p.y + (q.y - p.y) * 0.33 }, { x: p.x + (q.x - p.x) * 0.66, y: p.y + (q.y - p.y) * 0.66 }, q] };
   const dpath = (p) => `M${p[0].x.toFixed(1)} ${p[0].y.toFixed(1)}C${p[1].x.toFixed(1)} ${p[1].y.toFixed(1)} ${p[2].x.toFixed(1)} ${p[2].y.toFixed(1)} ${p[3].x.toFixed(1)} ${p[3].y.toFixed(1)}`;
   const bez = (p, t) => { const u = 1 - t; return { x: u * u * u * p[0].x + 3 * u * u * t * p[1].x + 3 * u * t * t * p[2].x + t * t * t * p[3].x, y: u * u * u * p[0].y + 3 * u * u * t * p[1].y + 3 * u * t * t * p[2].y + t * t * t * p[3].y }; };
-  // (v3.0.4) a port tag's place on its line: the first spot clear of both ends' parts and their captions
-  const tagAt = (p) => { for (const t of [0.5, 0.62, 0.38, 0.74, 0.26]) { const q = bez(p, t);
-    if (![p[0], p[3]].some((n) => Math.abs(q.x - n.x) < 82 && q.y - n.y > -44 && q.y - n.y < 54)) return q; } return bez(p, 0.5); };
+  // (v3.0.4) a port tag's place on its line — (v3.0.5) the first spot clear of every part, every name and every tag
+  // already placed (busy: boxes [x0, y0, x1, y1]); no clear spot: no tag (it never covers a name)
+  const tagAt = (p, busy, w) => { for (const t of [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.2, 0.8]) { const q = bez(p, t);
+    if (!busy.some((k) => q.x + w / 2 + 2 > k[0] && q.x - w / 2 - 2 < k[2] && q.y + 11 > k[1] && q.y - 11 < k[3])) return q; } return null; };
   const trunc = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
-  // the map's own space: 1000 wide, as high as the card is for its width (the grid's cells on a 16 : 10 screen)
+  // (v3.0.5) a map name's drawn width in px (theme.css .um-n: 600 weight, the page's font), measured on a canvas
+  const textW = (s, px, wt = 600) => {
+    const c = textW.c || (textW.c = document.createElement("canvas").getContext("2d"));
+    textW.f = textW.f || getComputedStyle(document.body).fontFamily || "sans-serif";
+    c.font = `${wt} ${px.toFixed(1)}px ${textW.f}`;
+    return c.measureText(s).width;
+  };
+  // (v3.0.5) the map's own space is the card itself, in pixels (network-map-305.html): the parts and their names keep
+  // their size whatever the card's size — only the card's Style Icon size / Text size change them — and the arrange
+  // area is the whole card (the title and the legend sit over it). The size: measured after it's drawn (U.px, its ResizeObserver: measure),
+  // until then the grid's cell size (--g-cw / --g-rh, grid.js Grid.fit) or the screen's share
+  U.px = {};
   function space(c) {
-    const g = (window.Grid && Grid.cur) || {}, w = ((c.w || 6) / (g.cols || 12)) * 16, h = ((c.h || 4) / (g.rows || 8)) * 10;
-    return { W: 1000, H: Math.round(cl((1000 * h) / Math.max(0.1, w), 320, 1600) * 0.86) };
+    const m = U.px[c.i]; if (m) return { W: m.w, H: m.h };
+    const g = (window.Grid && Grid.cur) || {}, main = document.querySelector("main");
+    const cw = main ? parseFloat(main.style.getPropertyValue("--g-cw")) : NaN, rh = main ? parseFloat(main.style.getPropertyValue("--g-rh")) : NaN;
+    const w = cw > 0 ? (c.w || 6) * cw : ((c.w || 6) / (g.cols || 12)) * (innerWidth || 1280), h = rh > 0 ? (c.h || 4) * rh : ((c.h || 4) / (g.rows || 8)) * (innerHeight || 800);
+    return { W: Math.round(cl(w, 200, 4000)), H: Math.round(cl(h, 150, 3000)) };
   }
-  // the automatic places: every end part gets its own row (A), column (B) or slot on the ring (C); the space grows when
-  // the parts need more room than the card's shape gives (the whole map is then drawn smaller, never on top of itself),
-  // and what still touches is nudged apart (the gateway and the internet lines stay put)
-  function layout(G, v, sp, ws) {
-    const { N, root } = G, pos = {};
-    let leaf = 0, maxD = 1;
-    const walk = (id, d) => { const n = N.get(id); n.depth = d; maxD = Math.max(maxD, d); if (!n.kids.length) n.cross = leaf++; else { n.kids.forEach((k) => walk(k, d + 1)); n.cross = (N.get(n.kids[0]).cross + N.get(n.kids[n.kids.length - 1]).cross) / 2; } };
+  // the sizes: the card's Style Icon size / Text size (c.s.ic / c.s.tx, 50–250 %); the title's own (o.htx / o.hic)
+  const pc = (v, d, a, b) => cl(isN(v) ? v : d, a, b) / 100;
+  const mapSizes = (c) => { const s = c.s || {}, o = c.o || {}; return { ic: pc(s.ic, 100, 50, 250), tx: pc(s.tx, 100, 50, 250), hs: pc(o.htx, 100, 60, 180), hi: pc(o.hic, 100, 60, 180) }; };
+  const nodeR = (n, root, ic) => (root ? 26 : n.protect && n.kind !== "nvr" ? 15 : n.kind === "cams" ? 17 : 19) * ic;
+  // the automatic places ("Arrange for me" = no places of your own): the parts in layers — the internet lines, the
+  // gateway (its UPS and power strips beside it), then each step down — spread over the whole card: A in columns left
+  // to right, B in rows top down (a layer too long for one row wraps onto more), C round the gateway. Only when the parts
+  // need more room than the card has is the space made bigger (the whole map drawn smaller, never on top of itself);
+  // what still touches is nudged apart (the gateway and the internet lines stay put)
+  function layout(G, v, sp, ws, k) {
+    const { N, root } = G, pos = {}, { ic, tx, top, bot } = k;
+    let { W, H: Hh } = sp, tight = false;
+    const order = [], walk = (id, d) => { const n = N.get(id); n.depth = d; order.push(id); n.kids.forEach((x) => walk(x, d + 1)); };
     walk(root, 1);
-    const L = Math.max(1, leaf), wn = ws.length;
-    let W = sp.W, Hh = sp.H;
-    if (v === "a") {
-      Hh = Math.max(Hh, 70 + L * 76);
-      const xd = (d) => 70 + (d * (W - 190)) / maxD, yc = (cr) => 36 + ((cr + 0.5) * (Hh - 90)) / L;
-      N.forEach((n) => { pos[n.id] = { x: xd(n.depth), y: yc(n.cross) }; });
-      ws.forEach((w, i) => { pos[`wan:${w.key}`] = { x: 70, y: cl(pos[root].y + (wn > 1 ? (i ? 100 : -100) : 0), 40, Hh - 60) }; });
-    } else if (v === "b") {
-      W = Math.max(W, 80 + L * 130); Hh = Math.max(Hh, 120 + maxD * 100);
-      const yd = (d) => 50 + (d * (Hh - 120)) / maxD, xc = (cr) => 40 + ((cr + 0.5) * (W - 80)) / L;
-      N.forEach((n) => { pos[n.id] = { x: xc(n.cross), y: yd(n.depth) }; });
-      ws.forEach((w, i) => { pos[`wan:${w.key}`] = { x: cl(pos[root].x + (wn > 1 ? (i ? 170 : -170) : 0), 60, W - 60), y: 50 }; });
-    } else {
-      Hh = Math.max(Hh, 540);
-      const cx = W / 2, cy = Hh * 0.54, rx = W / 2 - 120, ry = Hh / 2 - 70;
+    const side = (n) => n.parent === root && !n.kids.length && (n.kind === "ups" || n.kind === "power");
+    const layers = [ws.map((w) => `wan:${w.key}`)];
+    order.forEach((id) => { const n = N.get(id), d = side(n) ? 1 : n.depth; (layers[d] = layers[d] || []).push(id); });
+    if (layers[1]) { const sideIds = layers[1].filter((id) => id !== root); layers[1] = [...sideIds.slice(0, Math.ceil(sideIds.length / 2)), root, ...sideIds.slice(Math.ceil(sideIds.length / 2))]; }
+    // (v3.0.5) the names' room from their measured width (textW: the drawn font), not a fixed 112 px — long names in
+    // looks B and C overlapped on a big screen; widest(n): the widest name cut to n characters
+    const labels = [...ws.map((w) => String(w.name || "")), ...[...N.values()].map((n) => (n.kind === "cams" ? T("net.map.cams", { n: (n.members || []).length }) : String(n.name || "")))];
+    const widest = (n) => Math.max(0, ...labels.map((x) => textW(trunc(x, n), 13.5 * tx)));
+    const L = layers.filter((x) => x && x.length), r0 = 19 * ic, nameW0 = Math.max(112 * tx, widest(20) + 10 * tx), rowH = 2 * r0 + 36 * tx;
+    const parentOf = (id) => (id.startsWith("wan:") ? null : id === root ? "wan" : N.get(id).parent);
+    // (a crowded card: the names are shortened to the room each part has, the second line goes — only past that is the
+    // space made bigger; need: one row's height, a part and the gateway's bigger one with a name between them)
+    const need = (19 + 26) * ic + 24 * tx, fitName = (room) => Math.max(7, Math.floor(room / (7.4 * tx)));
+    let nameMax = 20, left = true, nameW = nameW0;
+    // (still touching after the nudging: the space a little bigger, laid out again — at most a few times)
+    for (let tries = 0; tries < 6 && left; tries++) {
+    if (tries) { W *= 1.15; Hh = top + bot + (Hh - top - bot) * 1.15; }
+    tight = false; nameMax = 20; nameW = nameW0;
+    for (const id of Object.keys(pos)) delete pos[id];
+    if (v === "c") {
+      Hh = Math.max(Hh, top + bot + 4 * rowH);
+      const rest = order.filter((id) => id !== root), nL = Math.max(1, rest.filter((id) => !N.get(id).kids.length).length);
+      // (the ring: room for every end part's name round 300° of it — else the space grows)
+      const ring = () => [Math.max(nameW, W / 2 - nameW / 2 - 8), Math.max(rowH, (Hh - top - bot) / 2 - r0 - 22 * tx)];
+      let [rx, ry] = ring();
+      let want = nL * Math.max(2 * r0 + 16, nameW * 0.8), have = Math.PI * (rx + ry) * (300 / 360);
+      // (v3.0.5) crowded: the names shortened and the second lines gone first — only then is the space made bigger
+      if (want > have) {
+        nameMax = Math.min(20, fitName(have / nL / 0.8 - 10 * tx)); nameW = Math.max(2 * r0 + 16, Math.min(nameW, widest(nameMax) + 10 * tx)); tight = true;
+        [rx, ry] = ring(); want = nL * Math.max(2 * r0 + 16, nameW * 0.8); have = Math.PI * (rx + ry) * (300 / 360);
+      }
+      if (want > have) { const f = want / have; W *= f; Hh = top + bot + (Hh - top - bot) * f; [rx, ry] = ring(); }
+      const cx = W / 2, cy = top + (Hh - top - bot) * 0.56;
+      let leaf = 0; const ang = {};
+      const place = (id) => { const n = N.get(id); if (!n.kids.length) ang[id] = leaf++; else { n.kids.forEach(place); ang[id] = (ang[n.kids[0]] + ang[n.kids[n.kids.length - 1]]) / 2; } };
+      N.get(root).kids.forEach(place);
+      const maxD = Math.max(2, ...rest.map((id) => N.get(id).depth));
       pos[root] = { x: cx, y: cy };
-      N.forEach((n) => { if (n.id === root) return;
-        const a = (-60 + ((n.cross + 0.5) / L) * 300) * (Math.PI / 180), f = n.kids.length ? cl((n.depth - 1) / Math.max(1, maxD - 1), 0.4, 0.72) : 1;
-        pos[n.id] = { x: cx + Math.cos(a) * rx * f, y: cy + Math.sin(a) * ry * f }; });
-      ws.forEach((w, i) => { pos[`wan:${w.key}`] = { x: cx + (wn > 1 ? (i ? 230 : -230) : 0), y: 46 }; });
+      rest.forEach((id) => { const n = N.get(id), a = (-60 + ((ang[id] + 0.5) / nL) * 300) * (Math.PI / 180), f = n.kids.length ? cl((n.depth - 1) / Math.max(1, maxD - 1), 0.4, 0.72) : 1;
+        pos[id] = { x: cx + Math.cos(a) * rx * f, y: cy + Math.sin(a) * ry * f }; });
+      ws.forEach((w, i) => { pos[`wan:${w.key}`] = { x: cx + (ws.length > 1 ? (i ? 1 : -1) * Math.min(230, W / 4) : 0), y: top + r0 + 4 }; });
+    } else if (v === "b") {
+      // rows: each layer wrapped to the card's width; a small layer joins the row above when there's room and its parents are higher up
+      const m = r0 + 8, avail = Math.max(1, W - 2 * m), y0 = top + r0 + 4, yEnd = () => Hh - bot - r0 - 34 * tx;
+      const rowsFor = (gap) => { const per = Math.max(1, Math.floor(avail / gap) + 1), rows = [], rowOf = {};
+        L.forEach((lay) => { const last = rows[rows.length - 1];
+          if (last && lay.length + last.length <= per && lay.every((id) => { const p = parentOf(id); return p && p !== "wan" && rowOf[p] < rows.length - 1; })) { lay.forEach((id) => { last.push(id); rowOf[id] = rows.length - 1; }); return; }
+          for (let i = 0; i < lay.length; i += per) { const R = lay.slice(i, i + per); rows.push(R); R.forEach((id) => (rowOf[id] = rows.length - 1)); } });
+        return rows; };
+      let rows = rowsFor(Math.max(2 * r0 + 16, nameW));
+      if (rows.length > 1 && (yEnd() - y0) / (rows.length - 1) < need) { const gap = Math.max(2 * r0 + 16, 74 * tx); rows = rowsFor(gap); nameMax = fitName(gap - 10); }
+      let dy = rows.length > 1 ? (yEnd() - y0) / (rows.length - 1) : 0;
+      if (rows.length > 1 && dy < need) { dy = need; Hh = y0 + dy * (rows.length - 1) + r0 + 34 * tx + bot; }
+      tight = rows.length > 1 && dy < need + 12 * tx;
+      rows.forEach((R, ri) => R.forEach((id, i) => { pos[id] = { x: m + ((i + 0.5) * avail) / R.length, y: rows.length > 1 ? y0 + ri * dy : (y0 + yEnd()) / 2 }; }));
+    } else {
+      // columns: each layer one column (wrapped onto more when it's taller than the card), left to right
+      const m = r0 + 8, y0 = top + r0 + 4, yEnd = () => Hh - bot - r0 - 34 * tx, per = Math.max(1, Math.floor((yEnd() - y0 + need) / need)), cols = [];
+      L.forEach((lay) => { for (let i = 0; i < lay.length; i += per) cols.push(lay.slice(i, i + per)); });
+      let dx = cols.length > 1 ? (W - 2 * m) / (cols.length - 1) : 0;
+      if (cols.length > 1 && dx < nameW) { if (dx < 70 * tx) { dx = 70 * tx; W = 2 * m + dx * (cols.length - 1); } nameMax = fitName(dx - 10); }
+      const tallest = Math.max(...cols.map((x) => x.length));
+      if ((yEnd() - y0 + need) / tallest < need) Hh = y0 + need * tallest - need + r0 + 34 * tx + bot;
+      const span = yEnd() - y0 + need;   // (each part gets an equal share of the height, centered in it)
+      tight = span / tallest < need + 12 * tx;
+      cols.forEach((C, ci) => C.forEach((id, i) => { pos[id] = { x: cols.length > 1 ? m + ci * dx : W / 2, y: y0 - need / 2 + ((i + 0.5) * span) / C.length }; }));
     }
-    const ids = Object.keys(pos), fixed = (id) => id === root || id.startsWith("wan:"), BW = 130, BH = 84;
-    for (let it = 0; it < 120; it++) {
+    // what still touches is nudged apart (the gateway and the internet lines stay put): each pair by its own sizes
+    const ids = Object.keys(pos), fixed = (id) => id === root || id.startsWith("wan:"), rad = (id) => (id === root ? 26 * ic : r0);
+    // (v3.0.5) a whole name's width and a little between (was 0.92 of a guessed width: neighbors' names overlapped)
+    const nameBox = Math.max(2 * r0 + 12, Math.min(nameW, widest(nameMax) + 10 * tx)), below = (tight ? 20 : 34) * tx;
+    const yMin = top + r0 + 2, yMax = Hh - bot - r0 - 30 * tx;
+    left = false;
+    for (let it = 0; it < 150; it++) {
       let moved = false;
       for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
         const a = ids[i], b = ids[j]; if (fixed(a) && fixed(b)) continue;
-        const A = pos[a], B = pos[b], ox = BW - Math.abs(A.x - B.x), oy = BH - Math.abs(A.y - B.y);
+        const A = pos[a], B = pos[b], BW = Math.max(rad(a) + rad(b) + 12, nameBox), BH = rad(a) + rad(b) + below + 4;
+        const ox = BW - Math.abs(A.x - B.x), oy = BH - Math.abs(A.y - B.y);
         if (ox <= 0 || oy <= 0) continue;
         moved = true;
-        const k = ox / BW < oy / BH ? "x" : "y", d = (k === "x" ? ox : oy) / 2 + 1, sg = Math.sign(B[k] - A[k]) || 1, fa = fixed(a) ? 0 : fixed(b) ? 2 : 1;
-        A[k] -= sg * d * fa; B[k] += sg * d * (2 - fa);
+        const kk = ox / BW < oy / BH ? "x" : "y", d = (kk === "x" ? ox : oy) / 2 + 1, sg = Math.sign(B[kk] - A[kk]) || 1, fa = fixed(a) ? 0 : fixed(b) ? 2 : 1;
+        A[kk] -= sg * d * fa; B[kk] += sg * d * (2 - fa);
       }
-      ids.forEach((id) => { pos[id].x = cl(pos[id].x, 50, W - 50); pos[id].y = cl(pos[id].y, 30, Hh - 50); });
+      ids.forEach((id) => { if (fixed(id)) return; pos[id].x = cl(pos[id].x, r0 + 3, W - r0 - 3); pos[id].y = cl(pos[id].y, yMin, Math.max(yMin, yMax)); });
       if (!moved) break;
+      if (it === 149) left = true;
     }
-    return { W, H: Hh, pos };
+    }
+    return { W, H: Hh, pos, tight, nameMax };
+  }
+  // (v3.0.5) the automatic places kept per card: laid out again only when its parts (ids, kinds, who hangs under whom),
+  // the look, the space (W / H) or the sizes change — not on every redraw (a read every 30 s, a tap on a part …)
+  const layCache = {};
+  function layoutFor(c, G, v, sp, ws, k) {
+    const key = JSON.stringify([[...G.N.values()].map((n) => `${n.id}|${n.kind || ""}|${n.parent || ""}`), G.root, ws.map((w) => w.key), v, sp.W, sp.H, k.ic, k.tx, k.top, k.bot]);
+    const hit = layCache[c.i];
+    if (hit && hit.key === key) return hit.out;
+    let out = layout(G, v, sp, ws, k);
+    // (v3.0.5) a space made bigger is drawn smaller (its viewBox): the title's room (k.top, from the title size slider)
+    // and the legend's are made bigger in step, so on the screen they still clear the title and the legend
+    const scaleOf = (x) => Math.min(1, sp.W / x.W, sp.H / x.H);
+    for (let i = 0, cur = k; i < 3; i++) {
+      const kk = scaleOf(out), gap = (sp.H - out.H * kk) / 2;
+      if (kk >= 0.999 || (cur.top * kk + gap >= k.top - 1 && cur.bot * kk + gap >= k.bot - 1)) break;
+      cur = { ...k, top: Math.max(k.top, (k.top - gap) / kk), bot: Math.max(k.bot, (k.bot - gap) / kk) };
+      const next = layout(G, v, sp, ws, cur);
+      if (scaleOf(next) < kk * 0.7) break;   // (a short, crowded card: more room above only made it all much smaller)
+      out = next;
+    }
+    layCache[c.i] = { key, out };
+    return out;
   }
   function mapEdges(G, pos, v, ws, o) {
     const { N, root } = G, a = active(), cur = CURVE[v] || CURVE.a, out = [];
@@ -345,71 +450,127 @@
     walk(root);
     return out;
   }
-  const eAttr = (e) => { const col = e.k === "on" ? (e.wl ? "--c-wifi" : "--c-line") : e.k === "bad" ? "--c-bad" : "--c-idle";
-    const dash = e.wl ? ' stroke-dasharray="1 7" stroke-linecap="round"' : e.k === "on" ? "" : ' stroke-dasharray="5 6"';
-    return `style="stroke:var(${col})" stroke-width="${e.wl ? 3 : e.k === "on" ? 2.4 : 1.7}" opacity="${e.k === "on" ? 0.8 : e.k === "idle" ? 0.45 : e.k === "off" ? 0.25 : 0.85}"${dash}`; };
+  const eAttr = (e, ic) => { const col = e.k === "on" ? (e.wl ? "--c-wifi" : "--c-line") : e.k === "bad" ? "--c-bad" : "--c-idle";
+    const dash = e.wl ? ' stroke-dasharray="1 7" stroke-linecap="round"' : e.k === "on" ? "" : ' stroke-dasharray="5 6"', w = Math.max(0.8, ic);
+    return `style="stroke:var(${col})" stroke-width="${((e.wl ? 3 : e.k === "on" ? 2.4 : 1.7) * w).toFixed(1)}" opacity="${e.k === "on" ? 0.8 : e.k === "idle" ? 0.45 : e.k === "off" ? 0.25 : 0.85}"${dash}`; };
   const calm = () => !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
-  // the orbs' layer drawn in the map's own space, scaled to where the drawing sits in its box (as "meet" places it);
-  // fitted after each drawing and on a resize, paused when it can't be seen
+  // the orbs' layer drawn in the map's own space, scaled to where the drawing sits in its box (as "meet" places it),
+  // paused when it can't be seen. (v3.0.5) A ResizeObserver on each map's box measures it (when it's first shown and on
+  // every size change): a card drawn at another size than it was guessed at is drawn again at its real size — only that
+  // card (U.px). A size change while a part is dragged waits for the drag's end (pxLater), then is tried again
   const ORBS_MAX = 10;
-  let fitT = 0;
-  const seenIO = window.IntersectionObserver ? new IntersectionObserver((es) => es.forEach((e) => e.target.classList.toggle("still", !e.isIntersecting))) : null;
-  function fitOrbs() {
-    fitT = 0;
-    document.querySelectorAll(".un-mapbox .um-orbs").forEach((o) => {
-      const box = o.parentNode, svg = box.querySelector("svg.um"), W = +box.dataset.w, Hh = +box.dataset.h;
-      if (!svg || !W || !Hh) return;
-      const r = svg.getBoundingClientRect(), b = box.getBoundingClientRect(), z = box.offsetWidth ? b.width / box.offsetWidth : 1;   // (z: a scaled canvas)
-      const w = r.width / z, h = r.height / z, k = Math.min(w / W, h / Hh);
-      if (!(k > 0)) return;
-      o.style.transform = `translate(${((r.left - b.left) / z + (w - W * k) / 2).toFixed(1)}px,${((r.top - b.top) / z + (h - Hh * k) / 2).toFixed(1)}px) scale(${k.toFixed(4)})`;
-      if (seenIO && !box._io) { box._io = 1; seenIO.observe(box); }
+  const seenIO = window.IntersectionObserver ? new IntersectionObserver((es) => es.forEach((e) => e.target.classList.toggle("um-still", !e.isIntersecting))) : null;
+  const pxLater = new Set(), watched = new Set();
+  function fitOrbs(box) {
+    const W = +box.dataset.w, Hh = +box.dataset.h, bw = box.offsetWidth, o = box.querySelector(".um-orbs"), svg = box.querySelector("svg.um");
+    if (!o || !svg || !W || !Hh) return;
+    const r = svg.getBoundingClientRect(), b = box.getBoundingClientRect(), z = bw ? b.width / bw : 1;   // (z: a scaled canvas)
+    const w = r.width / z, h = r.height / z, k = Math.min(w / W, h / Hh);
+    if (!(k > 0)) return;
+    o.style.transform = `translate(${((r.left - b.left) / z + (w - W * k) / 2).toFixed(1)}px,${((r.top - b.top) / z + (h - Hh * k) / 2).toFixed(1)}px) scale(${k.toFixed(4)})`;
+  }
+  const mapBoxes = (id) => document.querySelectorAll(`.un-mapbox[data-map="${CSS.escape(id)}"]`);
+  // only that card drawn again (its .un replaced); not found: the usual redraw
+  function redrawMap(id) {
+    const c = card(id); let done = false;
+    if (c) mapBoxes(id).forEach((box) => { const el = box.closest(".un"); if (el && el.parentNode) { el.outerHTML = U.card(c).html; done = true; } });
+    if (!done) H.refresh();
+    watchMaps();
+  }
+  function measure(box) {
+    if (!box.isConnected) return;
+    const id = box.dataset.map, bw = box.offsetWidth, bh = box.offsetHeight;
+    if (bw > 40 && bh > 40 && (Math.abs(bw - +box.dataset.sw) > 2 || Math.abs(bh - +box.dataset.sh) > 2)) {
+      if (drag) { pxLater.add(id); return; }
+      const was = U.px[id];
+      if (!was || Math.abs(was.w - bw) > 2 || Math.abs(was.h - bh) > 2) { U.px[id] = { w: bw, h: bh }; redrawMap(id); return; }
+    }
+    fitOrbs(box);
+  }
+  const ro = window.ResizeObserver ? new ResizeObserver((es) => es.forEach((e) => measure(e.target))) : null;
+  // the boxes just drawn are watched (each once); the ones gone from the page are let go
+  function watchMaps() {
+    for (const box of watched) if (!box.isConnected) { watched.delete(box); if (ro) ro.unobserve(box); if (seenIO) seenIO.unobserve(box); }
+    document.querySelectorAll(".un-mapbox[data-map]").forEach((box) => {
+      if (watched.has(box)) return;
+      watched.add(box);
+      if (seenIO) seenIO.observe(box);
+      if (ro) ro.observe(box);
+      measure(box);   // (its first size now — the observer's own first call may wait for a frame)
     });
   }
-  const fitSoon = () => { if (!fitT) fitT = setTimeout(fitOrbs, 0); };
-  window.addEventListener("resize", fitSoon);
+  let watchT = 0;
+  const watchSoon = () => { if (!watchT) watchT = setTimeout(() => { watchT = 0; watchMaps(); }, 0); };
+  const retryPx = () => { const ids = [...pxLater]; pxLater.clear(); ids.forEach((id) => mapBoxes(id).forEach(measure)); };
+  // (a scaled canvas changes where the drawing sits without changing the box's size)
+  window.addEventListener("resize", () => document.querySelectorAll(".un-mapbox[data-map]").forEach(fitOrbs));
   document.addEventListener("visibilitychange", () => document.documentElement.classList.toggle("un-hidden", document.hidden));
+  // (v3.0.5) the card's own title: its own size (Card title size / Card icon size), over the map
+  function mapHead(o, k, ov) {
+    return `<div class="un-hd un-mhd" style="zoom:${k.hs.toFixed(2)}"><span class="un-hl">${ic("globe", Math.round((18 * k.hi) / k.hs))}<span class="un-lbl">${esc(o.title || T("net.mapTitle"))}</span></span>`
+      + `<span class="un-hr">${ov.act ? `<small class="un-mut">${esc(T("net.map.on", { name: ov.act.name, n: mb(ov.act.down) }))}</small>` : ""}${pill(ov.cls, ov.text)}</span></div>`;
+  }
   R.netmap = (c, v) => {
-    const o = c.o || {}, ws = wans(), ov = overall(), G = mapGraph(o);
-    const hd = head(o, "globe", T("net.mapTitle"), `<span class="un-hr">${ov.act ? `<small class="un-mut">${esc(T("net.map.on", { name: ov.act.name, n: mb(ov.act.down) }))}</small>` : ""}${pill(ov.cls, ov.text)}</span>`);
-    if (!G) return hd + empty("globe", T("net.noDevices"));
-    const { W, H: Hh, pos: auto } = layout(G, v, space(c), ws), pos = {}, saved = o.pos && typeof o.pos === "object" ? o.pos : {};
+    const o = c.o || {}, ws = wans(), ov = overall(), G = mapGraph(o), k = mapSizes(c);
+    if (!G) return head(o, "globe", T("net.mapTitle"), pill(ov.cls, ov.text)) + empty("globe", T("net.noDevices"));
+    const sp = space(c), hd = mapHead(o, k, ov);
+    k.top = 34 * k.hs + 14; k.bot = 22 + 8 * k.tx;
+    const { W, H: Hh, pos: auto, tight, nameMax } = layoutFor(c, G, v, sp, ws, k), pos = {}, saved = o.pos && typeof o.pos === "object" ? o.pos : {};
     for (const [id, p] of Object.entries(auto)) { const q = saved[id]; pos[id] = Array.isArray(q) && q.length === 2 && isN(q[0]) && isN(q[1]) ? { x: (q[0] * W) / 1000, y: (q[1] * Hh) / 1000 } : p; }
-    const E = mapEdges(G, pos, v, ws, o), moving = !calm(), arr = U.arranging === c.i;
-    const lines = E.map((e) => `<path class="um-ln" data-a="${esc(e.a)}" data-b="${esc(e.b)}" d="${dpath(e.pts)}" fill="none" ${eAttr(e)}/>`).join("");
+    const E = mapEdges(G, pos, v, ws, o), moving = !calm(), arr = U.arranging === c.i, ic_ = k.ic, tx = k.tx;
+    const lines = E.map((e) => `<path class="um-ln" data-a="${esc(e.a)}" data-b="${esc(e.b)}" d="${dpath(e.pts)}" fill="none" ${eAttr(e, ic_)}/>`).join("");
     // (v3.0.4) the orbs: a few small HTML dots over the drawing, each moved by a CSS transform along its line (points on
     // the curve as keyframes) — the compositor moves them, nothing is laid out per frame (SMIL animateMotion was ~130
     // layouts a second). One per line in use, the busiest lines first; none while stale, calm or arranging; paused
-    // while the card is off screen or the page is hidden (fitOrbs)
+    // while the card is off screen or the page is hidden (um-still, un-hidden)
     const kid = `umk${String(c.i).replace(/[^\w-]/g, "_")}`;
     const run = !moving || arr || U.m.stale ? [] : E.filter((e) => e.k === "on").sort((a, b) => a.dur - b.dur).slice(0, ORBS_MAX);
-    const orbs = !run.length ? "" : `<div class="um-orbs" style="width:${W}px;height:${Hh.toFixed(1)}px"><style>${run.map((e, i) => `@keyframes ${kid}-${i}{`
+    // (v3.0.5) placed and scaled into the card's own size from the start (fitOrbs corrects it once measured): at the
+    // drawing's own W × H it stuck out of a crowded card and made the whole card's box bigger
+    const ok_ = Math.min(1, sp.W / W, sp.H / Hh), otr = `translate(${((sp.W - W * ok_) / 2).toFixed(1)}px,${((sp.H - Hh * ok_) / 2).toFixed(1)}px) scale(${ok_.toFixed(4)})`;
+    const orbs = !run.length ? "" : `<div class="um-orbs" style="width:${W}px;height:${Hh.toFixed(1)}px;transform:${otr};--oz:${Math.max(0.8, ic_).toFixed(2)}"><style>${run.map((e, i) => `@keyframes ${kid}-${i}{`
       + Array.from({ length: 17 }, (_, j) => { const q = bez(e.pts, j / 16); return `${(j * 6.25).toFixed(2)}%{transform:translate(${q.x.toFixed(1)}px,${q.y.toFixed(1)}px)}`; }).join("") + "}").join("")}</style>`
       + run.map((e, i) => `<i class="um-o${e.wl ? " w" : ""}" style="animation:${kid}-${i} ${e.dur.toFixed(2)}s linear -${((i * 0.37) % 1 * e.dur).toFixed(2)}s infinite"></i>`).join("") + "</div>";
-    if (orbs) fitSoon();
-    const ports = o.ports ? E.filter((e) => e.port).map((e) => { const q = tagAt(e.pts), w = Math.round(e.port.length * 6.4 + 14);
-      return `<g class="um-plab" transform="translate(${q.x.toFixed(1)} ${q.y.toFixed(1)})"><rect x="${-w / 2}" y="-9" width="${w}" height="18" rx="9"/><text text-anchor="middle" y="4">${esc(e.port)}</text></g>`; }).join("") : "";
-    const portOf = new Map(E.map((e) => [e.b, e.port]));
-    const node = (id, r, iconName, label, sub, st, load, off) => {
-      const p = pos[id], circ = 2 * Math.PI * (r + 5), tip = portOf.get(id);
-      return `<g class="um-nd${off ? " off" : ""}" data-node="${esc(id)}" transform="translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})"${Acts.on("net.pop", c.i, id)}>${tip ? `<title>${esc(tip)}</title>` : ""}`
-        + `<circle r="${r + 14}" fill="transparent"/><circle r="${r + 9}" class="um-halo"/><circle r="${r + 5}" class="um-track"/>`
-        + `<circle r="${r + 5}" class="um-load" stroke-dasharray="${(cl(load, 0, 1) * circ).toFixed(1)} ${circ.toFixed(1)}" transform="rotate(-90)"/><circle class="um-core" r="${r}"/>`
-        + `<g transform="translate(${-r * 0.55} ${-r * 0.55})">${ic(iconName, Math.round(r * 1.1))}</g>`
-        + (st && st !== "idle" ? `<circle cx="${(r * 0.72).toFixed(1)}" cy="${(-r * 0.72).toFixed(1)}" r="5" class="um-st ${st}"/>` : "")
-        + `<text class="um-n" y="${r + 19}" text-anchor="middle">${esc(trunc(String(label), 20))}</text><text class="um-s" y="${r + 34}" text-anchor="middle">${esc(trunc(String(sub || ""), 22))}</text></g>`;
-    };
-    let nodes = "";
-    ws.forEach((w) => { nodes += node(`wan:${w.key}`, 22, wIcon(w), w.name, w.active && w.up !== false ? T("net.map.rates", { d: mb(w.down), u: mb(w.upload) }) : stWord(w),
-      w.up === false ? "bad" : w.active ? (w.state === "slow" ? "warn" : "ok") : "idle", w.active ? cl((w.down || 0) / 300, 0.05, 1) : 0, !w.active && w.up !== false); });
+    watchSoon();   // (v3.0.5 the new box is measured by its ResizeObserver)
+    // each part and its name: the names at the card's edges line up to the edge (not cut off)
+    const parts = [];
+    ws.forEach((w) => parts.push({ id: `wan:${w.key}`, r: 19 * ic_, icon: wIcon(w), label: w.name, sub: w.active && w.up !== false ? T("net.map.rates", { d: mb(w.down), u: mb(w.upload) }) : stWord(w),
+      st: w.up === false ? "bad" : w.active ? (w.state === "slow" ? "warn" : "ok") : "idle", load: w.active ? cl((w.down || 0) / 300, 0.05, 1) : 0, off: !w.active && w.up !== false }));
     G.N.forEach((n) => { const inf = nodeInfo(n), root = n.id === G.root;
-      nodes += node(n.id, root ? 28 : n.protect && n.kind !== "nvr" ? 15 : 20, KIND_IC[n.kind] || "chip", n.kind === "cams" ? T("net.map.cams", { n: n.members.length }) : n.name, inf.sub, inf.st, inf.load, n.online === false); });
-    const grid = arr && o.snap ? `<defs><pattern id="umg-${esc(c.i)}" width="25" height="25" patternUnits="userSpaceOnUse"><circle cx="12.5" cy="12.5" r="1.2" fill="rgba(222,212,255,.25)"/></pattern></defs><rect width="${W}" height="${Hh}" fill="url(#umg-${esc(c.i)})"/>` : "";
+      parts.push({ id: n.id, r: nodeR(n, root, ic_), icon: KIND_IC[n.kind] || "chip", label: n.kind === "cams" ? T("net.map.cams", { n: n.members.length }) : n.name, sub: inf.sub, st: inf.st, load: inf.load, off: n.online === false }); });
+    // (v3.0.5) each name's half-width first (nw): lined up to the card's edge only when centered it would cross it
+    // (v3.0.5: measured — textW)
+    const NW = new Map(parts.map((x) => [x.id, Math.max(textW(trunc(String(x.label), nameMax), 13.5 * tx), tight ? 0 : textW(trunc(String(x.sub || ""), nameMax + 2), 11.5 * tx, 400)) / 2 + 4]));
+    const anchor = (p, r, nw) => (p.x - nw < 4 ? ["start", -r] : p.x + nw > W - 4 ? ["end", r] : ["middle", 0]);
+    const busy = parts.map((x) => { const p = pos[x.id], r = x.r + 6;
+      const nw = NW.get(x.id), [an] = anchor(p, x.r, nw), l = an === "start" ? p.x - r : an === "end" ? p.x + r - 2 * nw : p.x - nw;
+      return [Math.min(p.x - r, l), p.y - r, Math.max(p.x + r, l + 2 * nw), p.y + r + (tight ? 22 : 36) * tx]; });
+    let ports = "";
+    if (o.ports) for (const e of E) {
+      if (!e.port) continue;
+      const w = Math.round(e.port.length * 6.4 + 14), q = tagAt(e.pts, busy, w);
+      if (!q) continue;
+      busy.push([q.x - w / 2, q.y - 9, q.x + w / 2, q.y + 9]);
+      ports += `<g class="um-plab" transform="translate(${q.x.toFixed(1)} ${q.y.toFixed(1)})"><rect x="${-w / 2}" y="-9" width="${w}" height="18" rx="9"/><text text-anchor="middle" y="4">${esc(e.port)}</text></g>`;
+    }
+    const portOf = new Map(E.map((e) => [e.b, e.port]));
+    const nodes = parts.map((x) => {
+      const p = pos[x.id], r = x.r, circ = 2 * Math.PI * (r + 5), tip = portOf.get(x.id), [an, ax] = anchor(p, r, NW.get(x.id)), s = Math.round(r * 1.1);
+      return `<g class="um-nd${x.off ? " off" : ""}" data-node="${esc(x.id)}" data-r="${r.toFixed(1)}" transform="translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})"${Acts.on("net.pop", c.i, x.id)}>${tip ? `<title>${esc(tip)}</title>` : ""}`
+        + `<circle r="${(r + 14).toFixed(1)}" fill="transparent"/><circle r="${(r + 9).toFixed(1)}" class="um-halo"/><circle r="${(r + 5).toFixed(1)}" class="um-track"/>`
+        + `<circle r="${(r + 5).toFixed(1)}" class="um-load" stroke-dasharray="${(cl(x.load, 0, 1) * circ).toFixed(1)} ${circ.toFixed(1)}" transform="rotate(-90)"/><circle class="um-core" r="${r.toFixed(1)}"/>`
+        + `<g transform="translate(${(-s / 2).toFixed(1)} ${(-s / 2).toFixed(1)})">${ic(x.icon, s)}</g>`
+        + (x.st && x.st !== "idle" ? `<circle cx="${(r * 0.72).toFixed(1)}" cy="${(-r * 0.72).toFixed(1)}" r="${(5 * Math.max(0.8, ic_)).toFixed(1)}" class="um-st ${x.st}"/>` : "")
+        + `<text class="um-n" x="${ax.toFixed(1)}" y="${(r + 17 * tx).toFixed(1)}" font-size="${(13.5 * tx).toFixed(1)}" text-anchor="${an}">${esc(trunc(String(x.label), nameMax))}</text>`
+        + (tight ? "" : `<text class="um-s" x="${ax.toFixed(1)}" y="${(r + 31 * tx).toFixed(1)}" font-size="${(11.5 * tx).toFixed(1)}" text-anchor="${an}">${esc(trunc(String(x.sub || ""), nameMax + 2))}</text>`) + `</g>`;
+    }).join("");
+    // (v3.0.5) snapping is on unless switched off; its dots cover the whole card while you arrange
+    const grid = arr && o.snap !== false ? `<defs><pattern id="umg-${esc(c.i)}" width="25" height="25" patternUnits="userSpaceOnUse"><circle cx="12.5" cy="12.5" r="1.2" fill="rgba(222,212,255,.3)"/></pattern></defs><rect width="${W}" height="${Hh.toFixed(1)}" fill="url(#umg-${esc(c.i)})"/>` : "";
     const glow = cl(isN(o.glow) ? o.glow : 60, 0, 100) / 100;
-    const leg = `<div class="un-mleg"><span><i style="background:var(--c-line)"></i>${esc(T("net.map.traffic"))}</span><span><i class="dw"></i>${esc(T("net.map.wifiMesh"))}</span>`
+    const leg = `<div class="un-mleg" style="font-size:${(11 * tx).toFixed(1)}px"><span><i style="background:var(--c-line)"></i>${esc(T("net.map.traffic"))}</span><span><i class="dw"></i>${esc(T("net.map.wifiMesh"))}</span>`
       + `<span><i class="di"></i>${esc(T("net.map.standby"))}</span><span><i class="db"></i>${esc(T("net.st.down"))}</span>${arr ? `<span class="un-arr">${esc(T("net.map.dragHint"))}</span>` : ""}</div>`;
-    return hd + `<div class="un-mapbox${arr ? " arr" : ""}" data-map="${esc(c.i)}" data-w="${W}" data-h="${Hh.toFixed(1)}" data-look="${v}" style="--glow:${glow}">`
-      + `<svg class="um" viewBox="0 0 ${W} ${Hh.toFixed(1)}" preserveAspectRatio="xMidYMid meet">${grid}${lines}${nodes}${ports}</svg>${orbs}${pop(c, G)}</div>${leg}`;
+    return `<div class="un-mapbox${arr ? " arr" : ""}" data-map="${esc(c.i)}" data-w="${W}" data-h="${Hh.toFixed(1)}" data-look="${v}" data-tx="${tx.toFixed(2)}" data-sw="${sp.W}" data-sh="${sp.H}" style="--glow:${glow}">`
+      + `<svg class="um" viewBox="0 0 ${W} ${Hh.toFixed(1)}" preserveAspectRatio="xMidYMid meet">${grid}${lines}${nodes}${ports}</svg>${orbs}${pop(c, G)}</div>${hd}${leg}`;
   };
   // a part's details (a tap on it)
   function pop(c, G) {
@@ -567,10 +728,160 @@
     return (o.title ? `<div class="gc-t">${esc(o.title)}</div>` : "") + `<div class="un-vals ${v}">${list.map(it).join("")}</div>`;
   };
 
+  // ---------- (v3.0.5) UPS / battery backup (unifi-v2.html "UPS"; read only — Skypane never sends a UPS a command) ----------
+  // From GET /api/panel/<id>/ups (U.ups): a UniFi UPS (UniFi Network's own device list) and a NUT server's UPSes
+  // (service/nut_ups.py, Manager → Integrations → UPS). A: the battery; B: the readings; C: every UPS as a row.
+  const UPS_ST = { mains: ["mains", "net.ups.st.mains"], battery: ["batt", "net.ups.st.batt"], low: ["low", "net.ups.st.low"], off: ["low", "net.ups.st.off"] };
+  const upsSt = (u) => UPS_ST[!u.online ? "off" : UPS_ST[u.state] ? u.state : "mains"];
+  const runW = (s) => (!isN(s) ? D : s >= 3600 ? T("net.ups.runH", { h: Math.floor(s / 3600), m: Math.round((s % 3600) / 60) }) : T("net.ups.runM", { m: Math.max(1, Math.round(s / 60)) }));
+  const volts = (v) => (isN(v) ? `${Math.round(v)} V` : D);   // i18n-ok (unit)
+  const UPS_EV = { battery: "net.ups.ev.battery", low: "net.ups.ev.low", mains: "net.ups.ev.mains" };
+  const upsLast = (u) => (u.last && UPS_EV[u.last.kind] ? T(UPS_EV[u.last.kind], { t: when(u.last.at) }) : T("net.ups.ev.none"));
+  const upsTag = (u) => { const [k, w] = upsSt(u); return `<span class="un-ups-st ${k}"><span class="un-dot"></span>${esc(T(w))}</span>`; };
+  const upsSrc = (u) => `<span class="un-pill">${esc(T(u.src === "nut" ? "net.ups.srcNut" : "net.ups.srcUnifi"))}</span>`;
+  // (v3.0.5) a UPS that isn't answering: its last charge, runtime and load are old — grayed (the API's "stale" when it
+  // says, else the row's own state: not online). old(u, html): the value wrapped in .un-old when it's old
+  const upsOld = (u) => (u.stale != null ? !!u.stale : !u.online);
+  const old = (u, h) => (upsOld(u) ? `<span class="un-old">${h}</span>` : h);
+  const upsRow = (u) => `<div class="un-upsrow${upsOld(u) ? " un-stale" : ""}"><span class="un-rn"><b>${esc(u.name)}</b>${upsSrc(u)}</span><b class="un-num">${old(u, esc(pct(u.charge)))}</b>${upsTag(u)}`
+    + `<span class="un-mut un-num">${old(u, esc(T("net.ups.left", { t: runW(u.runtime) })))}</span><div class="un-bar"><i style="width:${isN(u.charge) ? cl(u.charge, 0, 100) : 0}%;background:var(${upsSt(u)[0] === "low" ? "--c-low" : "--c-fill"})"></i></div></div>`;
+  R.netups = (c, v) => {
+    const o = c.o || {}, L = (U.ups && U.ups.upses) || [], one = L.find((u) => u.id === o.ups) || L[0];
+    const foot = (u) => `<div class="un-foot">${ic("bolt", 15)}<span>${esc(upsLast(u))}</span></div>`;
+    if (v === "c") {
+      const worst = L.some((u) => upsSt(u)[0] === "low") ? "bad" : L.some((u) => upsSt(u)[0] === "batt") ? "warn" : "ok";
+      return head(o, "ups", T("net.upsTitle"), pill(worst, T(L.length === 1 ? "net.ups.one" : "net.ups.n", { n: L.length }))) + `<div class="un-scroll">${L.map(upsRow).join("")}</div>`;
+    }
+    const hd = head(o, "ups", T("net.upsTitle"), upsSrc(one));
+    const name = `${esc(one.name)}${one.model ? ` · ${esc(one.model)}` : ""}`;
+    if (v === "b") return hd + `<div class="un-upsb"><div><div class="un-mut">${esc(T("net.ups.loadNow"))}</div><span class="un-upsbig">${old(one, `${isN(one.load) ? Math.round(one.load) : D}<u>%</u>`)}</span></div>`
+      + `<div class="un-upsbr">${upsTag(one)}<small class="un-mut">${name}</small></div></div>`
+      + `<div class="un-scroll">${[[T("net.ups.charge"), pct(one.charge), 1], [T("net.ups.runtime"), runW(one.runtime), 1], [T("net.ups.input"), volts(one.vin)], [T("net.ups.output"), volts(one.vout)],
+        [T("net.ups.watts"), isN(one.watts) ? `${Math.round(one.watts)} W` : D]].map(([l, x, gr]) => kv(l, gr ? old(one, esc(x)) : esc(x))).join("")}</div>` + foot(one);   // i18n-ok (unit)
+    return hd + `<div class="un-upsa"><div class="un-batt${upsSt(one)[0] === "low" ? " low" : ""}${upsOld(one) ? " un-old" : ""}"><i style="width:${isN(one.charge) ? cl(one.charge, 0, 100) : 0}%"></i><span>${esc(pct(one.charge))}</span></div>`
+      + `<div class="un-upsn">${upsTag(one)}<small class="un-mut">${name}</small></div></div>`
+      + `<div class="un-upst">${[[T("net.ups.runtime"), runW(one.runtime), 1], [T("net.ups.load"), pct(one.load), 1], [T("net.ups.input"), volts(one.vin)], [T("net.ups.output"), volts(one.vout)]]
+        .map(([l, x, gr]) => `<div class="un-tile"><span class="un-tl">${esc(l)}</span><span class="un-tv">${gr ? old(one, esc(x)) : esc(x)}</span></div>`).join("")}</div>` + foot(one);
+  };
+
+  // ---------- (v3.0.5) Doorbell (unifi-v2.html "Doorbell": three looks) ----------
+  // What the Protect integration already has: the doorbell camera (house/protect-cameras.js, its picture through the
+  // panel's go2rtc — a still every 10 s while it's seen, a tap opens the live view), and the Hubitat doorbell device's
+  // rings ("pushed" — GET /api/panel/<id>/doorbell: the last ring and today's count the server heard, U.bell) and its
+  // screen's message (notificationText). The message buttons send that device "deviceNotification" (the panel's own
+  // checks — as any command). Protect's own ring history isn't open to the integration's key.
+  const doorbells = () => ((window.HUBITAT && HUBITAT.cameras) || []).filter((x) => x && x.doorbell);
+  const BELL_MSGS = ["net.bell.msg1", "net.bell.msg2", "net.bell.msg3"];
+  const bellOf = (cam) => ((U.bell && U.bell.bells) || []).find((b) => b.id === cam.id) || {};
+  const ringAt = (cam) => bellOf(cam).lastRing || null;
+  const ringing = (cam) => { const t = ringAt(cam); return !!t && Date.now() / 1000 - t < 90; };
+  const snapUrl = (cam) => (window.Cameras && Cameras.snapshot ? Cameras.snapshot(cam) : null);
+  // (v3.0.5) the last still loaded per camera (U.snap): a redraw shows that one, never asks for a new picture; a camera
+  // that is offline gets none (no picture asked of it)
+  U.snap = {};
+  const snapNow = (u) => `${u}&t=${Math.floor(Date.now() / 10000)}`;
+  function bellPic(c, cam, cls, act) {
+    const u = cam.online === false ? null : snapUrl(cam), src = u ? U.snap[cam.id] || (U.snap[cam.id] = snapNow(u)) : null;
+    return `<button class="un-bpic ${cls || ""}"${act || Acts.on("net.bellOpen", cam.id)} aria-label="${esc(T("net.bell.open", { name: cam.name }))}">${src ? `<img src="${esc(src)}" data-snap="${esc(u)}" data-cam="${esc(cam.id)}" alt="" loading="lazy">` : ""}`
+      + `${src || cam.online === false ? "" : `<span class="un-bnone">${ic("doorbell", 34)}<small>${esc(T("net.bell.noPic"))}</small></span>`}${cam.online === false ? `<span class="un-pill bad un-blive">${esc(T("net.offline"))}</span>` : ""}</button>`;
+  }
+  // (S7 as the server: a camera's id saved as a number or a string)
+  const bellCam = (o) => { const bells = doorbells(); return bells.find((b) => o.cam != null && String(b.id) === String(o.cam)) || bells[0]; };
+  // the message buttons (the doorbell's own Hubitat device; none without one or with "msgs": false)
+  function bellMsgs(o, cam) {
+    const info = bellOf(cam), dev = Number.isInteger(cam.doorbellDevice) ? cam.doorbellDevice : null;
+    const msgs = o.msgs !== false && dev != null ? BELL_MSGS.map((k) => T(k)) : [];
+    const lcd = typeof info.text === "string" && info.text.trim() ? info.text : null;
+    const btns = (chip) => (msgs.length ? `<div class="un-bmsgs${chip ? " chips" : ""}">${msgs.map((m) => `<button class="${lcd && lcd.toLowerCase() === m.toLowerCase() ? "on" : ""}"${Acts.on("net.bellMsg", dev, m)}>${chip ? "" : ic("msg", 15)}${esc(m)}</button>`).join("")}</div>` : "");
+    return { msgs, lcd, btns };
+  }
+  // (v3.0.5) "Last ring": the server says since when it has listened (U.bell.since) — nothing heard since a restart is
+  // "unknown", never "no ring"; a failed read keeps the last answer and shows its own pill
+  const lastWord = (cam) => { const t = ringAt(cam); return ringing(cam) ? T("net.bell.ringing") : t ? T("net.bell.rang", { t: when(t) }) : U.bell && isN(U.bell.since) ? T("net.bell.noRingSince") : T("net.bell.noRing"); };
+  const errPill = () => (U.bellErr ? `<span class="un-pill bad un-berr">${esc(T("net.bell.err"))}</span>` : "");
+  R.netbell = (c, v) => {
+    const o = c.o || {}, cam = bellCam(o);
+    if (!cam) return head(o, "doorbell", T("net.bellTitle")) + empty("doorbell", T("net.bell.none"));
+    const info = bellOf(cam), t = ringAt(cam), ring = ringing(cam);
+    if (ring && U.bellEnd !== t) { U.bellEnd = t; setTimeout(() => H.refresh(), Math.max(1000, (t + 91 - Date.now() / 1000) * 1000)); }   // ("Ringing" goes after 90 s)
+    const last = lastWord(cam), { msgs, lcd, btns } = bellMsgs(o, cam);
+    const hd = head(o, "doorbell", cam.name || T("net.bellTitle"), `<span class="un-hr">${errPill()}<span class="un-pill${ring ? " warn un-ringing" : ""}">${ring ? window.icon("bell", 13) : ""}${esc(last)}</span></span>`);
+    if (v === "b") return hd + `<div class="un-bb">${bellPic(c, cam, "sm")}<div><b>${esc(T(ring ? "net.bell.someone" : "net.bell.nobody"))}</b>`
+      + `<small class="un-mut">${esc(isN(info.today) ? T(info.today === 1 ? "net.bell.today1" : "net.bell.todayN", { n: info.today }) : T("net.bell.todayNone"))}</small></div></div>`
+      + (msgs.length ? `<div class="un-sec">${esc(T("net.bell.show"))}</div>${btns(true)}` : "") + `<div class="un-foot">${window.icon("bell", 15)}<span>${esc(T("net.bell.ringOpens"))}</span></div>`;
+    // (v3.0.5 look C, as unifi-v2.html: a tap opens the big view with the message buttons — no buttons: the live view)
+    if (v === "c") return `<div class="un-bfull">${bellPic(c, cam, "full", msgs.length ? Acts.on("net.bellBig", c.i) : "")}<div class="un-bcap">${errPill()}<b>${esc(cam.name)}</b><small>${esc(`${last} · ${T(msgs.length ? "net.bell.tapMsgs" : "net.bell.tapLive")}`)}</small></div>`
+      + `<span class="un-pill un-bpill${ring ? " warn un-ringing" : ""}">${ic("doorbell", 13)}${esc(ring ? T("net.bell.ringing") : T("net.bellTitle"))}</span></div>`;
+    return hd + bellPic(c, cam, "big") + (lcd ? `<div class="un-mut un-blcd">${esc(T("net.bell.onScreen", { text: lcd }))}</div>` : "") + btns(false);
+  };
+  // (v3.0.5) the big view (look C's tap): the picture (a tap: live), what the doorbell shows now and the message
+  // buttons; closes by itself after 60 s
+  let bigT = 0;
+  function bellBig(i) {
+    const c0 = card(i); if (!c0 || !window.UI || !UI.popup) return;
+    U.bigBell = i;
+    UI.popup(() => {
+      const c = card(i) || c0, o = c.o || {}, cam = bellCam(o);
+      if (!cam) return { title: T("net.bellTitle"), body: empty("doorbell", T("net.bell.none")) };
+      const { lcd, btns } = bellMsgs(o, cam);
+      return { title: cam.name || T("net.bellTitle"), cls: "un-bellpop", body: `<div class="un-bpop" style="${colVars("netbell", o.col)}">${bellPic(c, cam, "pop")}`
+        + `<div class="un-mut">${errPill()}${esc(`${lastWord(cam)} · ${T("net.bell.bigNow", { text: lcd || D })}`)}</div>${btns(false)}</div>` };
+    }, () => { U.bigBell = null; clearTimeout(bigT); });
+    clearTimeout(bigT); bigT = setTimeout(() => { if (U.bigBell === i && UI.isOpen && UI.isOpen()) UI.close(); }, 60000);
+  }
+  // the pictures: a fresh still every 10 s, only the ones on screen, only while the page is shown (no redraw)
+  // (v3.0.5: on screen across too — a card swiped off to the side, a room page beside, is left alone)
+  setInterval(() => {
+    if (document.hidden) return;
+    document.querySelectorAll(".un-bpic img[data-snap]").forEach((im) => { const r = im.getBoundingClientRect(); if (r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth && r.width) { im.src = snapNow(im.dataset.snap); U.snap[im.dataset.cam] = im.src; } });
+  }, 10000);
+
+  // ---------- (v3.0.5) Activity feed (unifi-v2.html "Activity", the feed look): the network's recent events ----------
+  // From what unifi_net already reads: the client log (joins and leaves, guests, new devices) and its alerts (a UniFi
+  // device offline / back, an internet line down / back, a UniFi UPS on battery / back on mains). Names only (every
+  // client and device goes by a salted hash, never a MAC). Newest first; today's counts on top.
+  const FEED = { join: ["plus", "join", "net.feed.join"], leave: ["minus", "leave", "net.feed.leave"], new: ["plus", "join", "net.feed.new"], devOff: ["warning", "alert", "net.feed.devOff"],
+    devOn: ["check", "ok", "net.feed.devOn"], wanDown: ["warning", "alert", "net.feed.wanDown"], wanUp: ["check", "ok", "net.feed.wanUp"], battery: ["bolt", "alert", "net.feed.battery"],
+    low: ["warning", "alert", "net.feed.low"], mains: ["plug", "ok", "net.feed.mains"] };
+  function feedItems(o) {
+    const out = [];
+    for (const e of (U.m && U.m.log) || []) {
+      if (!e || (e.kind !== "join" && e.kind !== "leave") || (o.guests === false && e.guest)) continue;
+      out.push({ at: e.at, kind: e.kind === "join" && e.new ? "new" : e.kind, name: e.name, guest: !!e.guest, where: [e.wired ? T("net.wired") : e.ssid, e.to].filter(Boolean).join(" · ") });
+    }
+    if (o.alerts !== false) for (const e of (U.m && U.m.alerts) || []) {
+      if (!e || !FEED[e.kind]) continue;
+      const w = e.wan ? wans().find((x) => x.key === e.wan) : null;
+      out.push({ at: e.at, kind: e.kind, name: w ? w.name : e.name, alert: true, where: e.dev ? kindWord(e.dev) : e.ups ? T("net.ups.short") : e.wan ? T("net.internet") : "" });
+    }
+    return out.filter((e) => isN(e.at) && typeof e.name === "string").sort((a, b) => b.at - a.at);
+  }
+  R.netfeed = (c, v) => {
+    const o = c.o || {}, E = feedItems(o), day = new Date(), dense = o.dense === true;
+    day.setHours(0, 0, 0, 0);
+    const today = E.filter((e) => e.at * 1000 >= +day), n = (f) => today.filter(f).length;
+    const hd = head(o, "clock", T("net.feedTitle"), `<span class="un-hr"><small class="un-mut">${esc(T("net.feed.since"))}</small></span>`);
+    const chips = [["plus", "join", T("net.feed.cJoin", { n: n((e) => e.kind === "join" || e.kind === "new") })], ["minus", "leave", T("net.feed.cLeave", { n: n((e) => e.kind === "leave") })],
+      o.guests !== false ? ["user", "join", ((g) => T(g === 1 ? "net.feed.cGuest1" : "net.feed.cGuest", { n: g }))(n((e) => e.guest))] : null,
+      o.alerts !== false ? ["warning", "alert", ((a) => T(a === 1 ? "net.feed.cAlert1" : "net.feed.cAlert", { n: a }))(n((e) => e.alert && FEED[e.kind][1] === "alert"))] : null].filter(Boolean);
+    const counts = o.counts === false ? "" : `<div class="un-fcnt">${chips.map(([i, k, w]) => `<span class="un-chip"><span class="un-fi ${k}">${ic(i, 14)}</span>${esc(w)}</span>`).join("")}</div>`;
+    if (!E.length) return hd + counts + empty("clock", T("net.feed.empty"));
+    const row = (e, i) => `<div class="un-ev"><span class="un-eic un-fi ${FEED[e.kind][1]}">${ic(FEED[e.kind][0], 16)}</span><span class="un-et"><b>${esc(T(FEED[e.kind][2], { name: e.name }))}${e.guest ? ` ${pill("warn", T("net.guestW"))}` : ""}</b>`
+      + `${dense || !e.where ? "" : `<small>${esc(e.where)}</small>`}</span><time>${esc(i < 3 ? when(e.at) : T.time(new Date(e.at * 1000)))}</time></div>`;
+    return hd + counts + `<div class="un-scroll${dense ? " dense" : ""}">${E.slice(0, dense ? 60 : 30).map(row).join("")}</div>`;
+  };
+
   // ---------- the card (grid.js DRAW) ----------
   U.card = (c) => {
     const o = c.o || {}, v = ["a", "b", "c"].includes(o.look) ? o.look : "a";
     if (!R[c.t]) return { html: "" };
+    if (OWN[c.t]) {   // (v3.0.5: the UPS and the Doorbell — nothing on the wall without one; the builder's canvas says how)
+      const has = c.t === "netups" ? !!(U.ups && (U.ups.upses || []).length) : doorbells().length > 0;
+      if (c.t === "netups" && !U.ups && !firstOwn.ups) { firstOwn.ups = true; setTimeout(() => loadOwn("ups"), 0); }
+      // (v3.0.5 a failed /ups read: said so — never "Looking for a UPS…" for ever)
+      if (!has) return { html: DESIGN ? `<div class="un un-off"><div class="gc-empty">${esc(T(c.t === "netups" ? (U.ups ? "net.hidden.noUps" : U.upsErr ? "net.hidden.upsError" : "net.hidden.waitUps") : "net.hidden.noBell"))}</div></div>` : "" };
+      return { html: `<div class="un un-t-${c.t.slice(3)} un-${v}" style="${colVars(c.t, o.col)}">${R[c.t](c, v)}</div>` };
+    }
     if (!ok()) {   // (on the wall: nothing; in the builder's canvas: why)
       if (!U.m && PC.unifiNet && !first) { first = true; setTimeout(load, 0); }   // (the first card just added: read now, not in 30 s)
       if (!DESIGN) return { html: "" };
@@ -583,33 +894,49 @@
 
   // ---------- the map's parts moved by hand (only while the builder's "Arrange the parts" is on for that card) ----------
   let drag = null;
-  const svgPt = (svg, e) => { const m = svg.getScreenCTM(); if (!m) return null; const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; return p.matrixTransform(m.inverse()); };
+  const TR = /translate\(([-\d.]+) ([-\d.]+)\)/;
+  // (v3.0.5) everything a drag needs is worked out when it starts (the screen-to-map matrix, every part's place, the
+  // lines touching the part, the card's size and snapping); a move only notes the pointer, drawn at most once a frame
   document.addEventListener("pointerdown", (e) => {
     const g = e.target.closest && e.target.closest(".un-mapbox.arr .um-nd"); if (!g) return;
-    const box = g.closest(".un-mapbox"), svg = box.querySelector("svg.um"), p = svgPt(svg, e); if (!p) return;
-    const t = /translate\(([-\d.]+) ([-\d.]+)\)/.exec(g.getAttribute("transform") || "");
-    drag = { g, box, svg, id: g.dataset.node, i: box.dataset.map, x0: +t[1], y0: +t[2], px: p.x, py: p.y, moved: false };
+    const box = g.closest(".un-mapbox"), svg = box.querySelector("svg.um"), m = svg && svg.getScreenCTM(); if (!m) return;
+    const inv = m.inverse(), toMap = (x, y) => { const p = svg.createSVGPoint(); p.x = x; p.y = y; return p.matrixTransform(inv); };
+    const t = TR.exec(g.getAttribute("transform") || ""); if (!t) return;
+    const id = g.dataset.node, i = box.dataset.map, c = card(i), at = {}, p = toMap(e.clientX, e.clientY);
+    box.querySelectorAll(".um-nd").forEach((n) => { const q = TR.exec(n.getAttribute("transform") || ""); if (q) at[n.dataset.node] = { x: +q[1], y: +q[2] }; });
+    drag = { g, box, id, i, toMap, at, x0: +t[1], y0: +t[2], px: p.x, py: p.y, moved: false, ev: null, raf: 0,
+      lines: [...box.querySelectorAll(".um-ln")].filter((l) => l.dataset.a === id || l.dataset.b === id), cur: CURVE[box.dataset.look] || CURVE.a,
+      W: +box.dataset.w, Hh: +box.dataset.h, snap: !(c && c.o && c.o.snap === false), r: +g.dataset.r || 19, tx: +box.dataset.tx || 1 };
     e.preventDefault();
   }, true);
+  function dragStep(d) {
+    d.raf = 0;
+    if (!d.ev) return;
+    const p = d.toMap(d.ev.x, d.ev.y), dx = p.x - d.px, dy = p.y - d.py;
+    if (!d.moved && Math.hypot(dx, dy) < 6) return;
+    if (!d.moved) { d.moved = true; d.box.classList.add("um-drag"); }   // (the port tags hidden while a part moves)
+    // (v3.0.5) to every edge of the card (a part and its name stay inside it); snapping (on unless switched off) to
+    // the dots' 25 px grid
+    const step = (n) => (d.snap ? Math.round((n - 12.5) / 25) * 25 + 12.5 : n);
+    d.x = cl(step(d.x0 + dx), d.r + 3, d.W - d.r - 3); d.y = cl(step(d.y0 + dy), d.r + 3, d.Hh - d.r - 34 * d.tx);
+    d.g.setAttribute("transform", `translate(${d.x.toFixed(1)} ${d.y.toFixed(1)})`);
+    d.at[d.id] = { x: d.x, y: d.y };
+    // (the lines follow: each one's ends are its two parts' places now)
+    d.lines.forEach((l) => { const a = d.at[l.dataset.a], b = d.at[l.dataset.b]; if (a && b) l.setAttribute("d", dpath(d.cur(a, b))); });
+  }
   document.addEventListener("pointermove", (e) => {
     if (!drag) return;
-    const p = svgPt(drag.svg, e); if (!p) return;
-    const dx = p.x - drag.px, dy = p.y - drag.py;
-    if (!drag.moved && Math.hypot(dx, dy) < 6) return;
-    drag.moved = true;
-    const W = +drag.box.dataset.w, Hh = +drag.box.dataset.h, c = card(drag.i), snap = c && c.o && c.o.snap, step = (n, size) => (snap ? Math.round(n / (size / 40)) * (size / 40) : n);
-    drag.x = cl(step(drag.x0 + dx, W), 20, W - 20); drag.y = cl(step(drag.y0 + dy, Hh), 20, Hh - 20);
-    drag.g.setAttribute("transform", `translate(${drag.x.toFixed(1)} ${drag.y.toFixed(1)})`);
-    // (the lines follow: each one's ends are its two parts' places now)
-    const at = (id) => { const n = drag.svg.querySelector(`.um-nd[data-node="${CSS.escape(id)}"]`), m = /translate\(([-\d.]+) ([-\d.]+)\)/.exec((n && n.getAttribute("transform")) || ""); return m ? { x: +m[1], y: +m[2] } : null; };
-    const cur = CURVE[drag.box.dataset.look] || CURVE.a;
-    drag.svg.querySelectorAll(".um-ln").forEach((l) => { if (l.dataset.a !== drag.id && l.dataset.b !== drag.id) return; const a = at(l.dataset.a), b = at(l.dataset.b); if (a && b) l.setAttribute("d", dpath(cur(a, b))); });
+    drag.ev = { x: e.clientX, y: e.clientY };
+    if (!drag.raf) { const d = drag; d.raf = requestAnimationFrame(() => dragStep(d)); }
   });
   const endDrag = () => {
     const d = drag; drag = null;
-    if (!d || !d.moved) return;
+    if (!d) return;
+    if (d.raf) { cancelAnimationFrame(d.raf); dragStep(d); }   // (the last move, not yet drawn)
+    setTimeout(retryPx, 0);   // (v3.0.5 a size change skipped during the drag: measured again now)
+    if (!d.moved) return;
     U.dragged = Date.now();
-    const W = +d.box.dataset.w, Hh = +d.box.dataset.h, c = card(d.i); if (!c) return;
+    const W = d.W, Hh = d.Hh, c = card(d.i); if (!c) { d.box.classList.remove("um-drag"); return; }
     const pos = { ...((c.o && c.o.pos) || {}), [d.id]: [Math.round((d.x / W) * 1000), Math.round((d.y / Hh) * 1000)] };
     c.o = { ...(c.o || {}), pos };
     U.savePos(d.i, pos);
@@ -642,7 +969,18 @@
   }
 
   // ---------- reading: every 30 s while a UniFi card is on one of this panel's layouts ----------
-  const wanted = () => { const v = (window.Settings && Settings.v) || {}; return [v.homeGrid, ...Object.values(v.roomGrids || {})].some((g) => g && Array.isArray(g.cards) && g.cards.some((c) => c && TYPES.includes(c.t))); };
+  // (v3.0.5: a blank card's Value piece showing a UniFi value counts too — its "net")
+  const netPiece = (c) => c && c.t === "blank" && c.o && Array.isArray(c.o.parts) && c.o.parts.some((p) => p && p.t === "value" && p.net);
+  const grids = () => { const v = (window.Settings && Settings.v) || {}; return [v.homeGrid, ...Object.values(v.roomGrids || {})].filter((g) => g && Array.isArray(g.cards)); };
+  const wanted = () => grids().some((g) => g.cards.some((c) => c && ((TYPES.includes(c.t) && !OWN[c.t]) || netPiece(c))));
+  // (v3.0.5) one UniFi value for a blank card's Value piece: {icon, label, val, dot} — null while UniFi isn't there
+  // (v3.0.5) no data yet: read now (as the first card does), not in 30 s
+  U.value = (k) => {
+    if (!ok() && !U.m && PC.unifiNet && !first) { first = true; setTimeout(load, 0); }
+    if (!ok() || !VALS.includes(k)) return null;
+    try { return valItems()[k] || null; } catch { return null; }
+  };
+  U.dot = dot;   // (v3.0.5: a Value piece shows the value's dot as the Network values card does)
   let busy = false;
   async function load() {
     if (!PC.unifiNet || busy || !wanted() || !window.PANEL) return;
@@ -654,6 +992,33 @@
     busy = false;
   }
   U.load = load;
+  // (v3.0.5) the UPS and Doorbell cards' own reads: every 30 s while one is on this panel's layouts (none without one)
+  const firstOwn = {};
+  const ownWanted = (what) => grids().some((g) => g.cards.some((c) => c && OWN[c.t] === what));
+  const ownBusy = {};
+  // (v3.0.5) a failed read is kept (U.upsErr / U.bellErr: the builder says so, the Doorbell shows its own pill); the
+  // last good answer stays
+  async function loadOwn(what) {
+    if (ownBusy[what] || !window.PANEL || !ownWanted(what)) return;
+    ownBusy[what] = true;
+    const key = what === "ups" ? "ups" : "bell", errKey = `${key}Err`, was = JSON.stringify([U[key], U[errKey]]);
+    try {
+      const r = await fetch(`/api/panel/${encodeURIComponent(window.PANEL)}/${what}`, { cache: "no-store" });
+      if (r.ok) { const m = await r.json(); if (m && typeof m === "object") { U[key] = m; U[errKey] = null; } else U[errKey] = "bad answer"; }
+      else U[errKey] = `HTTP ${r.status}`;
+    } catch { U[errKey] = "no answer"; }
+    ownBusy[what] = false;
+    if (JSON.stringify([U[key], U[errKey]]) !== was && !drag) H.refresh();
+  }
+  U.loadOwn = loadOwn;
+  setTimeout(() => { loadOwn("ups"); loadOwn("doorbell"); }, 1600);
+  setInterval(() => { loadOwn("ups"); loadOwn("doorbell"); }, POLL);
+  // a ring: the doorbell device said something (Hubitat's "pushed") — read its rings now, not in 30 s
+  if (H && typeof H.onHubSaid === "function") H.onHubSaid((id) => {
+    const cam = id != null && doorbells().find((x) => x.doorbellDevice === id);
+    if (!cam) return;
+    setTimeout(() => loadOwn("doorbell"), 400);
+  });
   U.set = (m) => { U.m = m; notices(m && m.notices); };   // (the tests)
   Acts.add({
     "net.gm": (i) => { const s = S(i), o = (card(i) || {}).o || {}; s.gm = GM[(GM.indexOf(s.gm || (GM.includes(o.gm) ? o.gm : "both")) + 1) % 3]; H.refresh(); },
@@ -663,6 +1028,9 @@
     "net.f": (i, f) => { S(i).f = f; H.refresh(); },
     "net.sort": (i, k) => { const s = S(i), cur = s.sort || ((card(i) || {}).o || {}).sort || "name"; s.dir = cur === k ? -(s.dir || 1) : 1; s.sort = k; H.refresh(); },
     "net.go": (what) => go(what),
+    "net.bellOpen": (id) => { if (DESIGN || !window.Cameras || !Cameras.full) return; if (U.bigBell != null && window.UI) UI.close(); Cameras.full(+id, 60); },
+    "net.bellBig": (i) => { if (!DESIGN) bellBig(i); },   // (v3.0.5 look C)
+    "net.bellMsg": (dev, text) => { if (DESIGN || !Number.isInteger(+dev) || typeof text !== "string") return; H.send(+dev, "deviceNotification", text); },
     "net.noticeGo": () => { const el = document.getElementById("net-note"); if (el) el.classList.remove("show"); go("clients"); },
   });
   if (PC.unifiNet) { setTimeout(load, 1500); setInterval(load, POLL); }

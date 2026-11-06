@@ -1,0 +1,32 @@
+{
+  "packageName": "Skypane",
+  "author": "Skypane",
+  "version": "3.0.5",
+  "minimumHEVersion": "2.3.0",
+  "dateReleased": "2026-11-06",
+  "documentationLink": "https://github.com/almulder/Skypane",
+  "licenseFile": "",
+  "releaseNotes": "The Skypane Helper app and the Skypane Notifier driver. Your own Skypane serves the same manifest at http://<your Skypane>/hubitat/packageManifest.json.",
+  "apps": [
+    {
+      "id": "6d1c2f7e-5b8a-4f3e-9a51-3c0b2e7d9a11",
+      "name": "Skypane Helper",
+      "namespace": "skypane",
+      "location": "https://raw.githubusercontent.com/almulder/Skypane/main/hubitat/SkypaneHelper.groovy",
+      "required": false,
+      "oauth": false,
+      "primary": true,
+      "version": "3.0.5"
+    }
+  ],
+  "drivers": [
+    {
+      "id": "0b9e4c3a-2d71-4e8f-b6a5-7f1d0c9e8b22",
+      "name": "Skypane Notifier",
+      "namespace": "skypane",
+      "location": "https://raw.githubusercontent.com/almulder/Skypane/main/hubitat/SkypaneNotifier.groovy",
+      "required": true,
+      "version": "3.0.5"
+    }
+  ]
+}

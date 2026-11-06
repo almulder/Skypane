@@ -178,6 +178,20 @@ button.bld-dmv:hover:not(:disabled) { background: var(--hover); color: var(--tex
 .dve-pvit.on { box-shadow: inset 0 0 0 1px var(--dc, var(--acc)); }
 .dve-pvit.on .dve-pvic { background: var(--dc, var(--acc)); color: #fff; }
 .dve-pvit.bg-none .dve-pvic { background: none; } .dve-pvit.bg-none.on .dve-pvic { color: var(--dc, var(--acc)); filter: drop-shadow(0 0 6px var(--dc, var(--acc))); }
+/* (v3.0.5) a blank card's device piece: the preview as the panel draws it (theme.css .dv-pc — the same classes and
+   variables): no box, the icon background's shape / color / transparency sized by --disc, the icon white unless set */
+.dve-pvit.dv-pc, .dve-pvit.dv-pc.on { background: none; box-shadow: none; }
+.dv-pc .dve-pvic { position: relative; isolation: isolate; box-sizing: border-box; width: var(--disc, 52px); height: var(--disc, 52px); padding: 0; background: none; color: var(--t3); }
+.dv-pc .dve-pvic::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--dvb, rgba(255, 255, 255, .1)); opacity: var(--dva, 1); }
+.dv-pc.on .dve-pvic { background: none; color: #fff; }
+.dv-pc.on .dve-pvic::before { background: var(--dvb, var(--dc, var(--acc))); }
+.dv-pc.icc .dve-pvic, .dv-pc.icc.on .dve-pvic { color: var(--dvi); }
+.dv-pc.sh-circle .dve-pvic { border-radius: 50%; }
+.dv-pc.sh-rounded .dve-pvic { border-radius: 26%; }
+.dv-pc.sh-none .dve-pvic::before { display: none; }
+.dv-pc.sh-none.on .dve-pvic { filter: drop-shadow(0 0 6px var(--dc, var(--acc))); }
+.dv-pc .dve-pvtx b { color: var(--dvn, inherit); }
+.dv-pc .dve-pvtx small { color: var(--dvn, var(--t3)); }
 .dve-pvtx { display: flex; flex-direction: column; min-width: 0; font-size: calc(14px * var(--tz, 1)); }
 .dve-pvtx small { color: var(--t3); font-size: .85em; }
 .dve-tabs { display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: rgba(0, 0, 0, .18); }

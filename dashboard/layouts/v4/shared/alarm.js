@@ -250,7 +250,7 @@
   // Android phone opening the panel's page counts as the panel). What it was is kept in localStorage until the
   // restore has really gone out, so a reload or a hub / MQTT drop mid-alert still puts it back (within an hour).
   // A light that needs the panel PIN to switch on (Manager → Devices) can't be used: it's left alone.
-  const NL_KEY = () => `notifylight.${(window.PanelStore && PanelStore.id) || "main"}`;
+  const NL_KEY = () => `notifylight.${(window.PanelStore && PanelStore.id) || "none"}`;   // (v3.0.5: no "main" — this browser's own, with no panel)
   let nl = null, nlTimer = null;   // nl = { id, was: {on, level, hue, sat, ct, mode, unknown}, rgb, dim, group, started }
   let nlPending = null;            // a restore still to send (the hub was away when the alerts ended)
   const nlFind = (id) => { for (const r of S.rooms) for (const d of r.devices) if (d.id === id) return d; return null; };

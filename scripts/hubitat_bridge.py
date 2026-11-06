@@ -55,25 +55,12 @@ import house_model  # noqa: E402  (service/house_model.py: rooms, devices, locks
 import panel_pin  # noqa: E402  (service/panel_pin.py: the house's panel PIN, kept as a hash in the house dir)
 import weather_device  # noqa: E402  (service/weather_device.py, v3.0.0: a Hubitat weather device's warnings and weather)
 import timers  # noqa: E402  (service/timers.py, v3.0.4: a Hubitat rule's "Timer: <name>, <length>")
+import lists  # noqa: E402  (service/lists.py, v3.0.5: a Hubitat rule's "add to list: Shopping, milk" / "pin note: …")
+import notifier_driver  # noqa: E402  (service/notifier_driver.py, v3.0.5: the Notifier driver's version, for the Manager)
 
-# attributes the panel cares about (everything else is left out of hubitat/state and hubitat/event)
-KEEP = {
-    "switch", "level", "speed", "position", "windowShade", "contact", "motion", "temperature", "humidity",
-    "illuminance", "lock", "presence", "battery", "water", "smoke", "carbonMonoxide", "power", "powerSource", "valve",
-    "door", "thermostatMode", "thermostatOperatingState", "thermostatFanMode", "heatingSetpoint",
-    "coolingSetpoint", "thermostatSetpoint", "status", "volume", "mute", "trackDescription",
-    # appliances, speakers, purifier, air quality, garage door, sensors ("things" in service/house_model.py)
-    "naturalGas", "acceleration", "moving", "energy", "machineState", "operatingState", "running", "progressPercent",
-    "progress", "timeRemaining", "remainingTime", "completionTime", "cycle", "washerJobState", "dryerJobState",
-    "jobState", "ovenTemperature", "ovenSetpoint", "ovenMode", "activeBurners", "cookingMode", "hoodFanSpeed",
-    "coolerTemperature", "freezerTemperature", "doorFreezerOpen", "fanSpeed", "fanState", "fanMode", "oscillation",
-    "airQualityIndex", "pm25", "sensirionVOCindex", "voc", "co2", "alarm", "nightlight", "outlet1", "outlet2",
-    "healthStatus",
-    # light colour: hue/saturation (0–100), colour temperature (K), colorMode CT/RGB
-    "hue", "saturation", "colorTemperature", "colorMode", "colorName",
-    # a media player card (Sonos …): trackData is the driver's JSON text — passed on as text (capped), never parsed
-    "trackData",
-}
+# attributes the panel cares about (everything else is left out of hubitat/state and hubitat/event) — (v3.0.5) one copy
+# in service/house_model.py (PANEL_ATTRS), so the layout builder's attribute list always keeps these first
+KEEP = house_model.PANEL_ATTRS
 TEXT_CAP = {"trackData": 2000}   # longer text caps than compact()'s 200 characters
 NUMERIC = {"level", "position", "temperature", "humidity", "illuminance", "battery", "power", "heatingSetpoint",
            "coolingSetpoint", "thermostatSetpoint", "volume", "energy", "progressPercent", "progress", "remainingTime",
@@ -92,6 +79,7 @@ T_STATE, T_EVENT, T_CMD, T_RESULT, T_STATUS = "hubitat/state", "hubitat/event", 
 # the Skypane Notifier (hubitat/SkypaneNotifier.groovy, release 2): its alerts (retained, checked field by field),
 # its camera pop-ups (one-shot), the hub's mode (retained; quiet hours), and every dismissal on a panel (any level)
 T_ALERTS, T_SHOW, T_MODE, T_ACK = "hubitat/alerts", "hubitat/show", "hubitat/mode", "hubitat/alerts/ack"
+ALERTS_SENT = 120   # (v3.0.5) the alerts on hubitat/alerts at most (the panel's Notifications card: 100, then "+ N more"; was 40)
 EVERYWHERE = 3   # a dismissed alert of this level or higher is gone on every panel (levels 3–5)
 # the admin acknowledged an alert in the Manager (v2.3.1): the server sends {"id", "by": "manager-<login>", "level"} on
 # its own topic — only the internal broker login may write it (service/broker.py), so a panel page can't fake it. Gone
@@ -139,6 +127,18 @@ SAY_RATE = 10          # spoken messages per minute, all notifiers together
 # (v3.0.4) a notify text "Timer: <name>, <preset | d HH:MM>" (timers.parse_command) starts timers instead of showing
 # an alert: on T_TIMER for the server (only the internal login reads it), the alert dismissed on the hub at once
 T_TIMER, TIMER_RATE = timers.TOPIC, 20   # (Hubitat timers a minute, all notifiers together)
+# (v3.0.5) a notify text "add to list: <list>, <item>" | "remove from list: …" | "tick: …" | "pin note: <text>"
+# (lists.parse_command: strict, at most 320 characters) changes the shared lists instead of showing an alert — on T_LIST
+# {"v": 1, "op", "list"?, "text"} for the server (only the internal login writes hubitat/#), the alert dismissed on the hub
+T_LIST, LIST_RATE = lists.TOPIC, 20   # (Hubitat list commands a minute, all notifiers together)
+# (v3.0.5, review) only a notify at level 1–2 (a quiet one) can be a list command — a warning or an alert that happens
+# to start "tick:" is always shown. The alert is held back (never shown) until the server answers on T_LIST_RESULT
+# {"v": 1, "id", "ok"}: ok — dismissed on the hub; refused (no such list…), no answer within LIST_WAIT seconds, too
+# many, or no broker — shown as the alert it was
+T_LIST_RESULT, LIST_LEVEL, LIST_WAIT = lists.RESULT_TOPIC, 2, 5.0
+# (v3.0.5) the Notifier driver's version (its driverVersion attribute; none: older than 3.0.5) — retained on T_NOTIFIER
+# {"v": 1, "notifiers": [{"id", "version"}]}: the Manager says "Up to date" or how to update (notifier_driver.py)
+T_NOTIFIER = notifier_driver.TOPIC
 # (v3.0.4) "Timer up" on a house speaker: the server's signed {"id", "text", "vol"?, "rid", "exp", "sig"} (key: the
 # house ticket key, timers.SPEAK_LABEL) under manager/ (only the internal login). The only way "speak" is ever sent:
 # never from a panel or the Manager, only to a device with SpeechSynthesis and "speak" in its own command list
@@ -146,6 +146,12 @@ T_TIMER, TIMER_RATE = timers.TOPIC, 20   # (Hubitat timers a minute, all notifie
 # the never list). "vol": setVolume first, only for a device whose own list has it.
 T_TIMER_SPEAK, SPEAK_RATE, SPEAK_MAX_BYTES = timers.SPEAK_TOPIC, 12, 600
 SPEAK_TEXT = re.compile(r"[^\x00-\x1f\x7f,]{1,80}")   # (no commas: the Maker API splits a value there)
+# (v3.0.5) the Doorbell card's message buttons: "deviceNotification" (the doorbell's screen text) — never in COMMANDS:
+# only for a house model doorbell device (cameras[].doorbellDevice), never a Skypane Notifier, a short text like
+# SPEAK_TEXT's (60 characters at most, no commas), and DOORBELL_RATE a minute, all doorbells together
+DOORBELL_CMD = "deviceNotification"
+DOORBELL_TEXT = re.compile(r"[^\x00-\x1f\x7f,]{1,60}")
+DOORBELL_RATE = 6
 T_OWM = weather_device.OWM_TOPIC   # (v3.0.4) retained, from the server: the OpenWeatherMap warnings (they join the weather device's)
 # the server's health heartbeat (service/health.py, written by the internal login only): {"v": 1, "n", "lvl", "text"};
 # passed on to every notifier (serverHeartbeat) so Hubitat knows the server is alive and what's wrong
@@ -261,6 +267,11 @@ def _short(v, n):
         return ""
     v = re.sub(r"[\x00-\x1f\x7f]", " ", v).strip()
     return v[:n]
+
+
+def driver_version(v):
+    """(v3.0.5) A notifier's driverVersion attribute → "3.0.5", or None (missing — an older driver — or not a version)."""
+    return v if isinstance(v, str) and notifier_driver.VERSION.fullmatch(v) else None
 
 
 def clean_alert(m):
@@ -700,7 +711,11 @@ class Bridge:
         self.ticket_acks = []               # (PIN-checked level 4–5 dismissals: TICKET_ACK_RATE)
         self.mgr_acks = []   # (the Manager's acknowledgements: their own budget)
         self.says = []                      # recent spoken messages (rate limit)
+        self.bell_notes = []                # (v3.0.5) recent doorbell screen messages (DOORBELL_RATE)
         self.timer_cmds, self.timer_ids = [], set()   # (v3.0.4) recent Hubitat "Timer:" commands (rate limit); their alert ids (never shown)
+        self.list_cmds = []   # (v3.0.5) recent Hubitat list commands (rate limit; a done one's alert id goes in timer_ids: never shown)
+        self.list_wait = {}   # (v3.0.5) alert id → notifier id: a list command the server hasn't answered yet (held back)
+        self.driver_versions, self.driver_sent = {}, None   # (v3.0.5) notifier id → its driverVersion (None: doesn't say); the last T_NOTIFIER
         self.health_sent = (None, 0.0)      # the last heartbeat passed on to the hub, and when
         # the hub's modes (name → id, hub order; the last good list kept), recent mode changes (rate limit)
         self.modes, self.mode_lock, self.mode_sets, self._mode_thread = {}, threading.Lock(), [], None
@@ -769,15 +784,18 @@ class Bridge:
 
     # --- the Skypane Notifier (release 2) ---
     def resync_notifiers(self, devices):
-        found = {int(d["id"]): (d.get("attributes") or {}).get("activeAlerts") for d in devices or []
-                 if isinstance(d, dict) and d.get("type") in NOTIFIER_TYPES and str(d.get("id", "")).isdigit()}
+        notes = [d for d in devices or [] if isinstance(d, dict) and d.get("type") in NOTIFIER_TYPES and str(d.get("id", "")).isdigit()]
+        found = {int(d["id"]): (d.get("attributes") or {}).get("activeAlerts") for d in notes}
         with self.note_lock:
             if set(found) != self.notifiers:
                 log.info("notifier devices: %s", sorted(found) or "none")
             self.notifiers = set(found)
             self.active = {nid: active_ids(v) for nid, v in found.items()}
             missing = [nid for nid, ids in self.active.items() if any(i not in self.alert_text for i in ids)]
+            # (v3.0.5) each one's driverVersion (the Maker API's list gives the attributes)
+            self.driver_versions = {int(d["id"]): driver_version((d.get("attributes") or {}).get("driverVersion")) for d in notes}
         self.pub_alerts()
+        self.pub_driver()
         for nid in missing:   # (texts not known — e.g. after a restart: the driver sends them again)
             if time.time() - self.replayed.get(nid, 0) > 300:
                 self.replayed[nid] = time.time()
@@ -1010,6 +1028,75 @@ class Bridge:
         if self.mqtt:
             self.mqtt.publish(T_TIMER, json.dumps({"v": 1, "name": cmd["name"], "len": cmd["len"]}), qos=1)
 
+    def on_list(self, nid, m):
+        """(v3.0.5) A Hubitat rule's notify "add to list: Shopping, milk" / "pin note: …" (level 1–2): the server changes
+        the lists (T_LIST, with the alert's id). The alert is held back until the server answers (on_list_result): done
+        — dismissed on the hub, as a "Timer:" (on_timer); refused, or no answer within LIST_WAIT — shown after all.
+        Too many in a minute, or no broker: shown at once, as any alert."""
+        cmd = lists.parse_command(m.get("text"))
+        a = clean_alert(m)
+        now = time.time()
+        with self.note_lock:
+            self.list_cmds = [t for t in self.list_cmds if now - t < 60]
+            busy = len(self.list_cmds) >= LIST_RATE
+            if not busy:
+                self.list_cmds.append(now)
+            if a:
+                self.alert_text[a["id"]] = {**a, "nid": nid}
+                if not busy and self.mqtt:
+                    self.list_wait[a["id"]] = nid
+                shown = a["id"] in self.active.get(nid, {})
+            else:
+                shown = False
+        if busy or not self.mqtt:
+            log.warning("notifier %s: a list command — %s, shown as an alert", nid, "too many" if busy else "no broker")
+            if shown:
+                self.pub_alerts()
+            return
+        log.info("notifier %s: list %s", nid, cmd["op"])   # (never the words: they may be private)
+        if shown:   # (its id may be up already, from the hub's activeAlerts: off the panels while the server answers)
+            self.pub_alerts()
+        self.mqtt.publish(T_LIST, json.dumps({"v": 1, **cmd, **({"id": a["id"]} if a else {})}), qos=1)
+        if a:
+            t = threading.Timer(LIST_WAIT, self.list_answer, args=(a["id"], False, "no answer"))
+            t.daemon = True
+            t.start()
+
+    def on_list_result(self, payload):
+        """(v3.0.5) The server's answer to a list command (T_LIST_RESULT {"v": 1, "id", "ok"})."""
+        try:
+            m = json.loads(payload)
+        except (ValueError, UnicodeDecodeError):
+            return
+        if isinstance(m, dict) and m.get("v") == 1 and isinstance(m.get("id"), str) and ALERT_ID.fullmatch(m["id"]) and isinstance(m.get("ok"), bool):
+            self.list_answer(m["id"], m["ok"], "refused")
+
+    def list_answer(self, aid, ok, why=""):
+        """(v3.0.5) A held-back list command's alert: done (ok) — never shown, dismissed on the hub (the driver's quiet
+        dismiss); refused / no answer — shown now, as the alert it was. Only once: a late answer finds nothing."""
+        with self.note_lock:
+            nid = self.list_wait.pop(aid, None)
+            if nid is None:
+                return
+            if ok:
+                self.timer_ids = {*list(self.timer_ids)[-50:], aid}
+        if ok:
+            threading.Thread(target=self._maker_quiet, args=(f"devices/{int(nid)}/dismiss/{aid}", "list"), daemon=True).start()
+        else:
+            log.info("notifier %s: a list command not done (%s) — shown as an alert", nid, why)
+        self.pub_alerts()
+
+    def pub_driver(self, force=False):
+        """(v3.0.5) The notifiers' driver versions on T_NOTIFIER (retained) — when they changed, or force (a reconnect)."""
+        with self.note_lock:
+            body = json.dumps({"v": 1, "notifiers": [{"id": nid, "version": self.driver_versions.get(nid)} for nid in sorted(self.notifiers)][:10]},
+                              separators=(",", ":"))
+            if body == self.driver_sent and not force:
+                return
+            self.driver_sent = body
+        if self.mqtt:
+            self.mqtt.publish(T_NOTIFIER, body, qos=1, retain=True)
+
     def on_owm(self, payload):
         """(v3.0.4) The server's OpenWeatherMap warnings (T_OWM): into the weather device's list; published when the
         warnings changed (wx_flush)."""
@@ -1022,7 +1109,7 @@ class Bridge:
             out = []
             for nid, ids in self.active.items():
                 for i, (lvl, exp) in ids.items():
-                    if (exp and exp <= now) or i in self.timer_ids:
+                    if (exp and exp <= now) or i in self.timer_ids or i in self.list_wait:   # (v3.0.5: a list command waiting)
                         continue
                     a = self.alert_text.get(i)
                     out.append({k: v for k, v in a.items() if k != "nid"} if a else
@@ -1035,9 +1122,14 @@ class Bridge:
         out.extend(wx)
         out.sort(key=lambda a: (-a["lvl"], -a["at"]))
         if self.mqtt:
-            self.mqtt.publish(T_ALERTS, json.dumps({"v": 1, "alerts": out[:40]}, separators=(",", ":")), qos=1, retain=True)
+            # (v3.0.5: up to ALERTS_SENT — the Notifications card lists 100, then "+ N more")
+            self.mqtt.publish(T_ALERTS, json.dumps({"v": 1, "alerts": out[:ALERTS_SENT]}, separators=(",", ":")), qos=1, retain=True)
 
     def on_notifier(self, nid, name, value):
+        if name == "driverVersion":   # (v3.0.5: new driver code saved on the hub — its heartbeat says the new version)
+            with self.note_lock:
+                self.driver_versions[nid] = driver_version(value)
+            return self.pub_driver()
         if name == "activeAlerts":
             with self.note_lock:
                 self.active[nid] = active_ids(value)
@@ -1053,6 +1145,10 @@ class Bridge:
         op = m.get("op")
         if op == "notify" and timers.parse_command(m.get("text")):
             return self.on_timer(nid, m)
+        lvl = m.get("lvl")
+        quiet = isinstance(lvl, int) and not isinstance(lvl, bool) and lvl <= LIST_LEVEL   # (v3.0.5: only a quiet notify)
+        if op == "notify" and quiet and lists.parse_command(m.get("text")):   # (v3.0.5)
+            return self.on_list(nid, m)
         if op == "notify":
             a = clean_alert(m)
             if not a:
@@ -1705,7 +1801,7 @@ class Bridge:
             elif isinstance(v, str) and v in HSM_ALERTS:
                 self.update_hsm(alert=v)
             return
-        if isinstance(m, dict) and m.get("source") == "DEVICE" and m.get("name") in ("activeAlerts", "panelCommand"):
+        if isinstance(m, dict) and m.get("source") == "DEVICE" and m.get("name") in ("activeAlerts", "panelCommand", "driverVersion"):
             try:
                 nid = int(m.get("deviceId"))
             except (TypeError, ValueError):
@@ -1782,6 +1878,12 @@ class Bridge:
                 log.warning("periodic resync failed: %s", safe_err(e))
 
     # --- commands ---
+    def doorbell_ids(self):
+        """(v3.0.5) the house model's doorbell devices (cameras[].doorbellDevice): the only ones "deviceNotification" reaches."""
+        model = self.model or {}
+        return {c["doorbellDevice"] for c in model.get("cameras") or [] if isinstance(c, dict)
+                and isinstance(c.get("doorbellDevice"), int) and not isinstance(c.get("doorbellDevice"), bool)}
+
     def result(self, cid, command, ok, reason=None):
         msg = {"id": cid, "command": command, "ok": ok}
         if reason:
@@ -1804,17 +1906,34 @@ class Bridge:
             self.check_owner()  # the "never switch" list / overrides may just have been changed in Settings
         except Exception as e:  # never stop command handling over it: the current allowlist stays
             log.warning("allowlist not refreshed: %s", safe_err(e))
-        if cid not in self.allow:
+        bell = command == DOORBELL_CMD   # (v3.0.5) a doorbell's screen message: its own checks, never the allowlist's
+        if bell:
+            if speech or cid in self.notifiers or cid not in self.doorbell_ids() or cid in set(self.never or ()):
+                log.warning("REJECTED command %r for device %s: not a doorbell", command, cid)
+                reply(cid, command, False, "command not allowed")
+                return
+            if not (isinstance(value, str) and DOORBELL_TEXT.fullmatch(value)):
+                log.warning("REJECTED command %r for device %s: bad value", command, cid)
+                reply(cid, command, False, "bad value")
+                return
+            now = time.monotonic()
+            self.bell_notes = [t for t in self.bell_notes if now - t < 60]
+            if len(self.bell_notes) >= DOORBELL_RATE:
+                log.warning("REJECTED command %r for device %s: too often", command, cid)
+                reply(cid, command, False, "busy")
+                return
+            self.bell_notes.append(now)
+        elif cid not in self.allow:
             log.warning("REJECTED command %r for device %s: not in allowlist", command, cid)
             reply(cid, command, False, "not allowed")
             return
-        if (speech and command not in ("speak", "setVolume")) or (command == "speak" and (not speech or cid not in self.speakers)) or \
+        if not bell and ((speech and command not in ("speak", "setVolume")) or (command == "speak" and (not speech or cid not in self.speakers)) or \
                 (command not in COMMANDS and command != "speak") or (cid in self.kind_cmds and command not in self.kind_cmds[cid]) or                 (command in ONLY_LISTED and command not in self.kind_cmds.get(cid, ())) or \
-                (command in MEDIA and command not in self.media.get(cid, ())):
+                (command in MEDIA and command not in self.media.get(cid, ()))):
             log.warning("REJECTED command %r for device %s: command not supported", command, cid)
             reply(cid, command, False, "command not allowed")
             return
-        if not speech and self.needs_pin(cid, command):   # (speak / setVolume: a speaker's own, never a PIN — as MEDIA)
+        if not speech and not bell and self.needs_pin(cid, command):   # (speak / setVolume: a speaker's own, never a PIN — as MEDIA; v3.0.5 a doorbell message too)
             # a valve, garage opener or a device the owner marked: opening / turning on needs the panel PIN. The page
             # gets a one-time ticket for exactly this command from the dashboard service (which checks the PIN over
             # HTTP); only the ticket comes over MQTT, and it's never logged.
@@ -1827,7 +1946,8 @@ class Bridge:
                 reply(cid, command, False, "pin-" + res)
                 return
         # (setColor: "hue,saturation[,level]" → the map Hubitat wants, built in device_rules — never passed through)
-        ok, arg = (isinstance(value, str) and bool(SPEAK_TEXT.fullmatch(value)), value) if command == "speak" else command_arg(command, value)
+        ok, arg = (isinstance(value, str) and bool(SPEAK_TEXT.fullmatch(value)), value) if command == "speak" else \
+            (True, value) if bell else command_arg(command, value)   # (v3.0.5 bell: DOORBELL_TEXT checked above)
         if not ok:
             log.warning("REJECTED command %r for device %s: bad value", command, cid)
             reply(cid, command, False, "bad value")
@@ -2054,10 +2174,13 @@ class Bridge:
             client.subscribe(T_HSM_SET, qos=1)
             client.subscribe(T_HEALTH, qos=0)
             client.subscribe(T_OWM, qos=1)   # (v3.0.4: retained — the warnings as last fetched)
+            client.subscribe(T_LIST_RESULT, qos=1)   # (v3.0.5: the server's answer to a Hubitat list command)
             if self.state:
                 self.pub_state()
             if self.notifiers or self._wx("device_id") is not None:
                 self.pub_alerts()
+            if self.driver_sent is not None:   # (v3.0.5: once the hub's list was read)
+                self.pub_driver(force=True)
             self.pub_weather(force=True)   # (v3.0.0; retained: the panels know at once whether to use it)
             if self.mode:
                 client.publish(T_MODE, json.dumps({"mode": self.mode}), qos=1, retain=True)
@@ -2109,6 +2232,11 @@ class Bridge:
                     self.on_owm(msg.payload)
                 except Exception as e:
                     log.warning("OpenWeatherMap warnings handling failed: %s", type(e).__name__)
+            elif msg.topic == T_LIST_RESULT and not msg.retain and msg.payload:   # (v3.0.5)
+                try:
+                    self.on_list_result(bytes(msg.payload[:512]))
+                except Exception as e:
+                    log.warning("list command answer handling failed: %s", type(e).__name__)
             elif msg.topic == T_HSM_SET and not msg.retain and msg.payload:
                 try:
                     self.on_hsm_set(bytes(msg.payload[:HSM_SET_MAX_BYTES + 1]))   # (parse_hsm_set refuses anything longer)

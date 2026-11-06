@@ -44,7 +44,10 @@ Then: [connect Hubitat](docs/hubitat.md) and follow the [first-run walkthrough](
 house, your first panel on the tablet. Something not working? [Troubleshooting](docs/troubleshooting.md). Updating
 later: [docs/upgrade.md](docs/upgrade.md).
 
-For Docker users: the image is `ghcr.io/almulder/skypane:latest` (or a fixed version such as `:3.0.0`).
+For Docker users: the image is `ghcr.io/almulder/skypane:latest` (or a fixed version such as `:3.0.0`). Its volumes:
+`/data` (everything Skypane keeps — required) and, optionally, `/pictures` (3.0.5: folders of your photos for slide
+shows, backgrounds and the screensaver, mapped read only, with `PICTURES_DIR=/pictures` —
+[docs/install-docker.md](docs/install-docker.md#good-to-know)).
 
 What's new and what's known not to work yet: [CHANGELOG.md](CHANGELOG.md).
 

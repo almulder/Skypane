@@ -493,10 +493,11 @@
   }
 
   // ---------- the page in the shell ----------
-  // ---------- (v3.0.4) "What changed in 3.0.4": what the one-time moves did to the saved layouts (GET / PATCH
-  // /api/manage/upgrade — the record the moves wrote, read generically: panel → where → card → from → to → title; the
-  // saved cards; what could not move). The panels show nothing new (only their version glows); the admin sees this here
-  // once ("Got it": per admin, on the server), and again from Quick links → "What changed in 3.0.4". ----------
+  // ---------- (v3.0.4) "What changed in 3.0.5" (v3.0.5: was 3.0.4 — the server sends 3.0.5's record, with 3.0.4's
+  // rows joined in, at their final card, after an upgrade straight from 3.0.3): what the one-time moves did to the saved
+  // layouts (GET / PATCH /api/manage/upgrade — the record the moves wrote, read generically: panel → where → card → from
+  // → to → title; the saved cards; what could not move). The panels show nothing new (only their version glows); the
+  // admin sees this here once ("Got it": per admin, on the server), and again from Quick links → "What changed in 3.0.5". ----------
   let UP = null, upOpen = false;
   async function loadUpgrade() {
     if (!M.isAdmin()) { UP = null; return; }
@@ -504,6 +505,7 @@
   }
   const hasUp = () => !!(UP.cards || (UP.saved || []).length || (UP.failed || []).length);
   // what an old card became when the record doesn't say ("to"): devices_card.py's and time_cards.py's moves
+  // (v3.0.5: 3.0.5's rows always say; 3.0.4's joined in say where they ended up — a blank card)
   const TO = { device: "devices", group: "devices", value: "devices", button: "devices", lock: "devices", fan: "devices", scenes: "devices",
     bins: "trash", countdown: "timers", timer: "timers" };   // i18n-ok (card types)
   const typeName = (t) => (t ? K.tOr(`builder.type.${t}.name`, t) : "");

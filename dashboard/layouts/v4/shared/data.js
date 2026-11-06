@@ -580,8 +580,10 @@
       }
       return list;
     },
-    rooms: () => state.rooms.filter((r) => !(window.Settings && Settings.v.hiddenRooms[r.id]) &&
-      (api.devices(r).length || state.things.some((t) => t.room === r.name) || hasPlaced(r.name))),
+    rooms: () => api.allRooms().filter((r) => !(window.Settings && Settings.v.hiddenRooms[r.id])),
+    // (v3.0.5) every room with something in it — a room hidden from the room bar too (Panels → Room bar → "Rooms on this
+    // panel" hides it from the bar only): a Rooms card, a button's "open a room" and Hubitat's "open page" still reach it
+    allRooms: () => state.rooms.filter((r) => api.devices(r).length || state.things.some((t) => t.room === r.name) || hasPlaced(r.name)),
     // Settings → People: chosen presence devices, with our own names / colours / pictures
     people: () => {
       const chosen = (window.Settings && Settings.v.people) || [];

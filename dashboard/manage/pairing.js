@@ -280,6 +280,11 @@
     // (server: ownLight = ledStrip on, notifyLight 0) — or one answered on this tablet before (claim.agentSeen);
     // a plain tablet shows no LED agent line at all)
     const said = ["ok", "off", "none"].includes(p.status && p.status.agent) ? p.status.agent : null;
+    // (v3.0.5) "4 · up to date" / "3 · update available: 4" — versions are dotted numbers
+    const vkey = (v) => String(v).split(".").map((x) => +x || 0);
+    const older = (a, b) => { const x = vkey(a), y = vkey(b); for (let i = 0; i < Math.max(x.length, y.length); i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0); } return false; };
+    const agentVer = (have, want) => !want || !older(have, want) ? K.t("panels.dev.agentCurrent", { have })
+      : K.t(older(have, "4") ? "panels.dev.agentUpdateOld" : "panels.dev.agentUpdate", { have, want });
     const agent = said === "none" && !(p.ownLight === true || c.agentSeen === true) ? null : said;
     const others = (M.panelsKnown ? M.panelsKnown() : []).filter((x) => x.id !== p.id && x.claim && x.claim.state === "unclaimed");
     const btn = (icon, words, fn, extra) => el("button.btn.sm" + (extra || ""), { type: "button", "data-ro-ok": "", onclick: fn }, ic(icon, 14), words);
@@ -292,8 +297,12 @@
         ...kv(K.t("panels.dev.lastSeen"), c.lastSeen ? ago(c.lastSeen) : K.t("panels.shared.never")),
         ...kv(K.t("panels.dev.paired"), c.pairedAt ? K.when(sec(c.pairedAt), "date") : "—"),
         // (v3.0.2: the LED agent on the tablet, from its check-in — nothing until the panel reported it)
-        ...(claimed && agent ? kv(K.t("panels.dev.agent"), K.t(`panels.dev.agent.${agent}`)) : [])),
+        ...(claimed && agent ? kv(K.t("panels.dev.agent"), K.t(`panels.dev.agent.${agent}`)) : []),
+        // (v3.0.5) its version, against the one Skypane serves: "update available" (an agent before 4 can't update itself)
+        ...(claimed && agent && p.status.agentVersion ? kv(K.t("panels.dev.agentVersion"), agentVer(p.status.agentVersion, p.status.agentWant)) : [])),
       c.copyAt || c.locked ? el("p.pn-warn.pp-pad", {}, ic("alert", 15), c.locked ? K.t("panels.dev.lockedCopy", { ago: ago(c.copyAt) }) : K.t("panels.dev.copySeen", { ago: ago(c.copyAt) })) : null,
+      // (v3.0.5) the panel refused what answers on the LED agent's port: it couldn't prove this tablet's agent key
+      claimed && p.status && p.status.agentWarn === true ? el("p.pn-warn.pp-pad", {}, ic("alert", 15), K.t("panels.dev.agentImpostor")) : null,
       !claimed ? el("p.pn-info.pp-pad", {}, M.graceUntil(p) ? K.t("panels.dev.graceHint", { time: M.graceUntil(p) }) : K.t("panels.dev.unclaimedHint", { url: `${location.protocol}//${location.host}/` })) : null,
       admin ? el("div.pp-acts", {},
         claimed && (c.copyAt || c.locked) ? btn("check", K.t("panels.dev.retrust"), () => retrust(p), ".pri") : null,

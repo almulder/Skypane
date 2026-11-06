@@ -131,6 +131,7 @@
     if (u.kind === "person") return K.t("pictures.use.person", { name: u.name, panel: panelWords(u) });
     if (u.kind === "calendar") return K.t("pictures.use.calendar", { name: u.name, panel: panelWords(u) });
     if (u.kind === "savedCard") return K.t("pictures.use.savedCard", { name: u.name });
+    if (u.kind === "guestQr") return K.t("pictures.use.guestQr");   // (v3.0.5)
     return K.t("pictures.use.otherPanel");
   }
   const AFTER = { background: "pictures.afterDelete.background", device: "pictures.afterDelete.device", person: "pictures.afterDelete.colour",

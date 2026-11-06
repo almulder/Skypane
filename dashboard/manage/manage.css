@@ -380,10 +380,17 @@ body.bld-dragging, body.bld-dragging * { cursor: grabbing !important; }
 .bld-card:hover { border: 1px solid rgba(255, 255, 255, .7) !important; background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .bld-card.sel { border: 2px solid #fbbf24 !important; background: rgba(251, 191, 36, .06); }
 .bld-name { position: absolute; left: 6px; top: -11px; display: none; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 8px; font-size: 11px;
-  background: var(--pop); border: 1px solid rgba(255, 255, 255, .25); color: var(--text); white-space: nowrap; max-width: calc(100% - 12px); overflow: hidden; text-overflow: ellipsis; z-index: 2; }
+  background: var(--pop); border: 1px solid rgba(255, 255, 255, .25); color: var(--text); white-space: nowrap; max-width: calc(100% - 12px); overflow: hidden; text-overflow: clip; z-index: 2; }
+/* (v3.0.5: never "…" — builder.js item() picks the longest label that fits, the whole of it in the tooltip) */
 .bld-card:hover .bld-name, .bld-card.sel .bld-name { display: inline-flex; }
 .bld-card.sel .bld-name { background: #fbbf24; color: #1a1238; border-color: #fbbf24; }
 .bld-card.sel .bld-name .ic { color: #1a1238; }
+/* (v3.0.5) the move dots at a card's top-left corner, on mouse-over (the corner itself resizes) */
+.bld-grip { position: absolute; left: 5px; top: 11px; z-index: 3; width: 20px; height: 24px; padding: 0; display: grid; place-items: center; border-radius: 6px;
+  background: var(--pop); border: 1px solid rgba(255, 255, 255, .3); color: var(--text); cursor: grab; opacity: 0; transition: opacity .15s; touch-action: none; }
+.bld-item:hover .bld-grip, .bld-card.sel ~ .bld-grip { opacity: 1; }
+.bld-grip:active { cursor: grabbing; }
+body.bld-dragging .bld-grip { opacity: 0; }
 .bld-insp textarea { color: var(--text); font: inherit; resize: vertical; }
 .bld-insp h3 { margin: 0; }
 .bld-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -866,4 +873,130 @@ a.coffee:hover, a.coffee:focus-visible { text-decoration: underline; }
 a.mi { color: inherit; text-decoration: none; }
 a.ib.coffee-ib { text-decoration: none; color: var(--t2); }
 .hp-coffee { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* (v3.0.5) Help: the LED agent's download and guide buttons */
+.hp-dl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.hp-dl small { flex-basis: 100%; }
 .signin-wrap:has(.lg-coffee) { align-content: center; }
+
+/* (v3.0.5) "In use": the lists' badge with a count, the blocked delete's dialog (each use a link) — trash.js */
+.iu-b { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.badge.iu-on { background: var(--ok-soft); color: var(--ok); font-weight: 600; letter-spacing: 0; white-space: nowrap; }
+.badge.iu-off { background: var(--fill-2); color: var(--t3); letter-spacing: 0; white-space: nowrap; }
+.iu-n { color: var(--t3); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.iu-list { margin: 4px 0 14px; padding-left: 20px; display: grid; gap: 6px; max-height: 46vh; overflow-y: auto; }
+.iu-link { color: var(--acc-text); text-decoration: underline; text-underline-offset: 2px; }
+/* (v3.0.5) the Trash page */
+.tr-page { max-width: 1100px; }
+.tr-head, .tr-row { display: grid; grid-template-columns: 38px minmax(0, 1.4fr) minmax(0, 1.1fr) 120px auto; gap: 12px; align-items: center; padding: 10px 16px; }
+.tr-head { font-size: 12px; color: var(--t3); border-bottom: 1px solid var(--line); padding-block: 8px; }
+.tr-row + .tr-row { border-top: 1px solid var(--line); }
+.tr-ic { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: var(--fill-2); color: var(--t2); }
+.tr-nm { display: grid; min-width: 0; } .tr-nm b, .tr-nm small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .tr-nm small, .tr-by small { color: var(--t3); }
+.tr-days { font-size: 13px; color: var(--t2); white-space: nowrap; }
+.tr-acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.tr-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-top: 1px solid var(--line); }
+.tr-foot .sp { flex: 1; } .tr-keep { display: inline-flex; align-items: center; gap: 8px; }
+.tr-never { margin-top: 12px; font-size: 12.5px; }
+@media (max-width: 760px) { .tr-head { display: none; } .tr-row { grid-template-columns: 34px minmax(0, 1fr) auto; } .tr-by { display: none; } .tr-acts { grid-column: 1 / -1; justify-content: flex-start; } }
+/* (v3.0.5) the builder: a weather card's places, each with a grip */
+.bld-wxlist .bld-row > span:not(.grip) { flex: 1; min-width: 0; }
+/* (v3.0.5) the System card's rows (ticked first, the rest dimmed) and the Rooms card's rooms */
+.bld-sys .bld-row.off { opacity: .6; }
+.bld-sys .bld-sysl { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.bld-sys .bld-sysl span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bld-sys small, .bld-rooms small { white-space: nowrap; }
+
+/* (v3.0.5) Lists & notes (listsnotes.js; mockups/prototypes/settings-and-pages.html): the lists, the open list, the notes */
+.ln-page { max-width: 1240px; }
+.ln-grid { display: grid; grid-template-columns: 220px minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.ln-grid > *, .ln-col > * { min-width: 0; }
+.ln-col { display: flex; flex-direction: column; gap: 14px; }
+.ln-pad { padding: 10px 14px; }
+.ln-foot { border-top: 1px solid var(--line); }
+.ln-row { display: flex; gap: 8px; align-items: center; }
+.ln-row > input, .ln-row > textarea { flex: 1; min-width: 0; }
+.ln-gap { margin-top: 8px; }
+.ln-navl { display: flex; flex-direction: column; gap: 2px; padding: 6px; }
+.ln-navl button { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: var(--t2); text-align: left; cursor: pointer; font: inherit; }
+.ln-navl button:hover { background: var(--hover); }
+.ln-navl button.on { background: var(--acc-soft); color: var(--acc-text); }
+.ln-navl .ln-nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ln-navl .n { font-size: 11.5px; color: var(--t3); }
+.ln-item, .ln-note { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-top: 1px solid var(--line); }
+.ln-items > :first-child { border-top: 0; }
+.ln-item .tk { width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid var(--line-2); display: grid; place-items: center; background: none; padding: 0; color: transparent; flex: none; cursor: pointer; }
+.ln-item.done .tk { background: var(--acc); border-color: var(--acc); color: #1b1040; }
+.ln-item .tx, .ln-note .tx { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.ln-item.done .tx > span { color: var(--t3); text-decoration: line-through; }
+.ln-item .tx small, .ln-note .tx small { display: block; font-size: 11.5px; color: var(--t3); margin-top: 1px; }
+.ln-note { align-items: flex-start; }
+.ln-note .tx > span { white-space: pre-wrap; }
+.ln-note.pinned { background: rgba(251, 191, 36, .06); }
+.ln-note textarea { width: 100%; box-sizing: border-box; resize: vertical; }
+.ln-note .acts { display: flex; gap: 2px; flex: none; }
+.ln-page .ib { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 7px; border: 0; background: none; color: var(--t3); padding: 0; cursor: pointer; flex: none; }
+.ln-page .ib:hover, .ln-page .ib:focus-visible { background: var(--hover); color: var(--text); }
+.ln-page .ib.on { color: #fbbf24; }
+.ln-item .rm { opacity: .35; } .ln-item:hover .rm, .ln-item .rm:focus-visible { opacity: 1; }
+@media (hover: none) { .ln-item .rm { opacity: 1; } }   /* (v3.0.5: a touch screen has no hover — always shown) */
+.ln-lab { margin-bottom: 6px; } .ln-lab span { color: var(--t3); }
+.ln-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ln-chip { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 6px 0 11px; border-radius: 99px; border: 1px solid var(--line-2); background: var(--surface-2); color: var(--text); font-size: 12.5px; max-width: 100%; }
+.ln-chip button { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.ln-chip-add { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ln-chip button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 4px; }
+.ln-chip .x { color: var(--t3); padding: 2px; }
+.ln-chip.add { border-style: dashed; padding: 0 10px; }
+.ln-chip.add input { height: 22px; width: 90px; border: 0; background: none; padding: 0; box-shadow: none; color: var(--text); font-size: 12.5px; }
+.ln-cmd { font-family: var(--mono); font-size: 12px; background: rgba(0, 0, 0, .28); border-radius: 8px; padding: 8px 10px; color: var(--acc-text); line-height: 1.7; overflow-wrap: anywhere; }
+.ln-cmd span { display: block; color: var(--t3); font-family: inherit; }
+.ln-mono { font-family: var(--mono); font-size: 12px; }
+.ln-log { font-size: 12px; color: var(--ok); min-height: 18px; margin-top: 6px; }
+.ln-log.bad { color: var(--bad); }
+/* (v3.0.5) Lists & notes: rename / delete in the list's header, and "On the panel" — the List card and the pinned notes on
+   the panel's sky (mockups/prototypes/settings-and-pages.html .stage / .pc / .pitem / .pchip / .pnote) */
+.ln-list h3.ch .ln-hacts { margin-left: auto; display: inline-flex; gap: 2px; }
+.ln-page .ib:disabled { opacity: .35; cursor: default; }
+.ln-stage { position: relative; border-radius: 18px; padding: 16px; overflow: hidden; border: 1px solid var(--line-2); display: flex; flex-direction: column; gap: 10px;
+  background: radial-gradient(800px 380px at 82% -6%, rgba(253, 244, 220, .12), transparent 60%), linear-gradient(180deg, #0f0830 0%, #221459 46%, #4b2f9e 82%, #8a63c9 100%); }
+.ln-stage-h { display: flex; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: rgba(222, 212, 255, .7); }
+.ln-pc { background: rgba(255, 255, 255, .07); border: 1px solid rgba(255, 255, 255, .12); border-radius: 20px; padding: 14px 16px; color: #f3efff; min-width: 0; }
+.ln-pc-lb { display: flex; align-items: center; gap: 6px; font-size: 11px; letter-spacing: 1.3px; text-transform: uppercase; color: rgba(232, 224, 255, .66); font-weight: 600; }
+.ln-pc-lb > span:first-of-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ln-pc-n { margin-left: auto; text-transform: none; letter-spacing: 0; white-space: nowrap; }
+.ln-pc-items { margin-top: 6px; }
+.ln-pc-i { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 15px; border-top: 1px solid rgba(255, 255, 255, .06); overflow-wrap: anywhere; }
+.ln-pc-i:first-child { border-top: 0; }
+.ln-pc-i .tk { width: 24px; height: 24px; border-radius: 8px; border: 2px solid rgba(255, 255, 255, .25); display: grid; place-items: center; color: transparent; flex: none; box-sizing: border-box; }
+.ln-pc-i.done .tk { background: linear-gradient(135deg, #a78bfa, #7c4dff); border-color: transparent; color: #fff; }
+.ln-pc-i.done > span:last-child { color: rgba(232, 224, 255, .45); text-decoration: line-through; }
+.ln-pc-sub { color: rgba(232, 224, 255, .66); font-size: 13px; }
+.ln-pc-qa { margin: 10px 0 6px; font-size: 11.5px; }
+.ln-pc-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.ln-pc-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 12px; border-radius: 99px; background: rgba(255, 255, 255, .08); color: #f3efff; font-size: 13px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ln-pc-notes { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.ln-pc-note { padding: 8px 10px; border-radius: 12px; font-size: 13.5px; display: flex; gap: 8px; align-items: flex-start; overflow-wrap: anywhere; min-width: 0;
+  background: rgba(255, 211, 77, .12); border: 1px solid rgba(255, 211, 77, .25); color: #fff6d8; }
+.ln-pc-note > span { min-width: 0; white-space: pre-wrap; }
+.ln-pc-note svg { flex: none; margin-top: 1px; }
+.ln-pc-note.pink { background: rgba(244, 114, 182, .14); border-color: rgba(244, 114, 182, .3); color: #ffe4f1; }
+.ln-pc-note.blue { background: rgba(96, 165, 250, .14); border-color: rgba(96, 165, 250, .3); color: #e2efff; }
+.ln-pc-note.green { background: rgba(74, 222, 128, .13); border-color: rgba(74, 222, 128, .28); color: #e2fbe9; }
+.ln-pc-note.purple { background: rgba(167, 139, 250, .16); border-color: rgba(167, 139, 250, .32); color: #efe9ff; }
+@media (max-width: 1240px) { .ln-grid { grid-template-columns: 200px minmax(0, 1fr); } .ln-grid > .ln-ncol { grid-column: 1 / -1; } }
+@media (max-width: 760px) { .ln-grid { grid-template-columns: minmax(0, 1fr); } .ln-navl { flex-direction: row; overflow-x: auto; scrollbar-width: none; } .ln-navl button { white-space: nowrap; flex: none; } }
+
+/* (v3.0.5) Integrations → Hubitat: the Skypane Notifier driver's row, its steps and "Check again" */
+.in-nt { display: contents; }
+.in-nt-c { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.grp-row.in-nt-hot { background: rgba(251, 191, 36, .06); }
+.grp-row.in-nt-hot .rl small { overflow-wrap: anywhere; }
+.in-nt-steps ol { margin: 8px 0 6px; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; }
+.in-nt-steps li small { display: block; margin-top: 4px; }
+.in-nt-addr { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.in-nt-addr code { font-family: var(--mono); font-size: 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; overflow-wrap: anywhere; min-width: 0; }
+/* (v3.0.5) the Skypane Helper: its one-time link code, big enough to read off and type on the hub */
+.in-hp-code { font-family: var(--mono); font-size: 18px; font-weight: 700; letter-spacing: .12em; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 2px 10px; }
+.in-hp .in-nt-bar .sp { flex: 1; }
+.in-hp small.bad { color: var(--bad, #e5484d); }
+.grp-row.in-nt-bar { justify-content: flex-start; flex-wrap: wrap; gap: 10px; }   /* (v3.0.5: Check again, Last checked) */

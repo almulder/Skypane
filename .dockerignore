@@ -8,6 +8,11 @@
 !docker/
 !unraid/skypane.xml
 !hubitat/SkypaneNotifier.groovy
+# (v3.0.5) the Skypane Helper app and its Package Manager manifest, the LED agent (build + scripts), its public guide
+!hubitat/SkypaneHelper.groovy
+!hubitat/packageManifest.json
+!agent/
+!docs/guides/led-agent.html
 
 # house data is not in the image (placeholders from docker/placeholders/ are used; real files live in /data/house)
 dashboard/layouts/v4/shared/hubitat-data.js

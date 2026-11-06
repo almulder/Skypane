@@ -21,6 +21,8 @@
     ledBrightness: 0.8, childLock: false, autoLock: { on: false, minutes: 15 },
     ledStrip: false,         // this tablet has our LED strip (panel agent); false = never send it anything (round 2: a new
                              // panel starts without; v3.0.2: no "main" exception any more — it's set per panel)
+    // (v3.0.5) the LED agent runs without root: agentlink.js asks it on 127.0.0.1:8852 too (only when this is on)
+    agentNoRoot: false,
     insideSensor: "panel",   // inside temperature / humidity: "panel" (this tablet's sensors), a Hubitat device id, "none"
 
     alertBeeps: true, allowUnlock: false,

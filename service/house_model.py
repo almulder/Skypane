@@ -142,12 +142,34 @@ MODE_WORDS = {"off", "heat", "cool", "auto", "emergency heat", "on", "circulate"
 
 ATTR_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,39}")
 
+# (v3.0.5, moved here from scripts/hubitat_bridge.py's KEEP — the bridge uses this one) the attributes the panel cares
+# about: the bridge passes on only these; attr_list keeps them before its 60-attribute cap
+PANEL_ATTRS = frozenset({
+    "switch", "level", "speed", "position", "windowShade", "contact", "motion", "temperature", "humidity",
+    "illuminance", "lock", "presence", "battery", "water", "smoke", "carbonMonoxide", "power", "powerSource", "valve",
+    "door", "thermostatMode", "thermostatOperatingState", "thermostatFanMode", "heatingSetpoint",
+    "coolingSetpoint", "thermostatSetpoint", "status", "volume", "mute", "trackDescription",
+    # appliances, speakers, purifier, air quality, garage door, sensors ("things" below)
+    "naturalGas", "acceleration", "moving", "energy", "machineState", "operatingState", "running", "progressPercent",
+    "progress", "timeRemaining", "remainingTime", "completionTime", "cycle", "washerJobState", "dryerJobState",
+    "jobState", "ovenTemperature", "ovenSetpoint", "ovenMode", "activeBurners", "cookingMode", "hoodFanSpeed",
+    "coolerTemperature", "freezerTemperature", "doorFreezerOpen", "fanSpeed", "fanState", "fanMode", "oscillation",
+    "airQualityIndex", "pm25", "sensirionVOCindex", "voc", "co2", "alarm", "nightlight", "outlet1", "outlet2",
+    "healthStatus",
+    # light color: hue/saturation (0–100), color temperature (K), colorMode CT/RGB
+    "hue", "saturation", "colorTemperature", "colorMode", "colorName",
+    # a media player card (Sonos …): trackData is the driver's JSON text — passed on as text (capped), never parsed
+    "trackData",
+})
+
 
 def attr_list(d):
     """Every attribute Hubitat sends for the device, with its value as it was (short plain text) — the layout
-    builder lists them for a picture card's values; the panel shows the live ones."""
+    builder lists them for a picture card's values; the panel shows the live ones. (v3.0.5) At most 60: the panel's
+    own (PANEL_ATTRS — power, battery…) first, so a device with many never loses them."""
     out = {}
-    for k, v in (d.get("attributes") or {}).items():
+    a = d.get("attributes") or {}
+    for k, v in sorted(a.items(), key=lambda kv: kv[0] not in PANEL_ATTRS) if isinstance(a, dict) else ():
         if len(out) >= 60 or not isinstance(k, str) or not ATTR_NAME.fullmatch(k) or isinstance(v, (dict, list)):
             continue
         out[k] = re.sub(r"[\x00-\x1f\x7f<>]", " ", "" if v is None else str(v)).strip()[:40]

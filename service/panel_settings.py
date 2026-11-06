@@ -234,6 +234,45 @@ def _calendars(v):
     return out
 
 
+def _bg_show(v):
+    """(v3.0.5) Rotating background pictures (slideshow.js): layouts.show_opts with at least two pictures or a folder;
+    "" = off (the background is look.background again)."""
+    if v in ("", None):
+        return ""
+    try:
+        o = layouts.show_opts(v)
+    except layouts.Invalid as e:
+        raise Invalid(str(e)) from None
+    if not o.get("src") and len(o.get("pics") or []) < 2:
+        raise Invalid("pick at least two pictures, or a picture folder")
+    if isinstance(v, dict) and v.get("dim") is not None:   # (a veil over the pictures, 0–70 %, so the cards stay readable)
+        o["dim"] = _int(0, 70)(v["dim"])   # (v3.0.5: 0–70, the same as the Manager's slider and the panel)
+    return o
+
+
+SAVER_CLOCKS = ("none", "corner", "big")
+
+
+def _saver(v):
+    """(v3.0.5) The screensaver on the slide-show engine: {"on": true, "after": s untouched (60–3600), "clock": "none" |
+    "corner" | "big", the show's options (layouts.show_opts — one picture or more, or a folder)}; "" = off."""
+    if v in ("", None):
+        return ""
+    if not isinstance(v, dict):
+        raise Invalid("screensaver")
+    try:
+        o = layouts.show_opts(v)
+    except layouts.Invalid as e:
+        raise Invalid(str(e)) from None
+    o["on"] = v.get("on") is True
+    o["after"] = _int(60, 3600)(v.get("after", 300))
+    if v.get("clock") is not None:
+        o["clock"] = _one_of(*SAVER_CLOCKS)(v["clock"])
+    if o["on"] and not o.get("src") and not o.get("pics"):
+        raise Invalid("pick at least one picture, or a picture folder")
+    return o
+
+
 # (v3.0.0) the languages a panel can be set to (BCP 47; a translation adds its code here and its file
 # dashboard/layouts/v4/shared/strings/<code>.js) — English only in 3.0
 PANEL_LANGS = ("en",)
@@ -249,11 +288,16 @@ PATHS = {
 
     "roomOrder": _room_order,                     # the room buttons' order (room ids)
     "ledStrip": _bool,                            # the tablet has our LED strip (panel agent)
+    # (v3.0.5) the LED agent runs without root (port 8852, shared/agentlink.js); unset = off
+    "agentNoRoot": _bool,
     "pinSound": _bool,                            # (v3.0.3) a soft tick on each PIN pad key (unset = on; the same for every key)
     "showVersion": _bool,                         # (v3.0.3) the version tag in the panel's corner (unset = shown)
     "look.theme": _one_of(*THEMES, "custom"),
     "look.hue": _int(0, 359),                     # (v3.0.2) theme "custom"'s colour on the colour wheel
     "look.background": _pattern(r"mountains|lake|desert|forest|coast|city|hills|peaks|canyon|tropical|dunes|up:[0-9a-f]{16}", "a background"),
+    "look.bgShow": _bg_show,                      # (v3.0.5) rotating background pictures ("" = off)
+    "look.gentle": _one_of("auto", "yes", "no"),  # (v3.0.5) "Old & slow": every transition plays as Cross dissolve (auto: measured)
+    "saver": _saver,                              # (v3.0.5) the screensaver: the slide-show engine after N s untouched
     "look.sky": _one_of("on", "still", "off"),
     "look.skyColors": _one_of("theme", "real"),
     "effects.place": _one_of("front", "behind"),
@@ -331,6 +375,7 @@ LABELS = {"panelName": "Name", "language": "Language", "kioskName": "FreeKiosk d
           "extraDevices": "Devices from other rooms", "deviceOrder": "Device order", "roomOrder": "Room order",
           "ledStrip": "LED strip", "pinSound": "PIN pad sound",
           "showVersion": "Show the version on this panel", "look.theme": "Theme", "look.hue": "Custom color", "look.background": "Background",
+          "look.bgShow": "Background pictures", "look.gentle": "Old & slow tablet", "saver": "Screensaver",
           "look.sky": "Animated sky", "look.skyColors": "Sky colors", "effects.place": "Weather effects", "homeLayout": "Home layout",
           "homeGrid": "Home layout", "roomLayout": "Room layout", "roomGrids": "Room layouts", "roomLayouts": "Room layouts",
           "dockAt": "Room bar", "dockOff": "Room bar hidden", "dockStyle": "Room bar style",

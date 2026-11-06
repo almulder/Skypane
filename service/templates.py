@@ -71,6 +71,29 @@ class Templates:
         with self.lock:
             return self._load()["templates"]
 
+    def get(self, tid):
+        return next((t for t in self.all() if t.get("id") == tid), None) if isinstance(tid, str) else None
+
+    def put_back(self, t):
+        """(v3.0.5) A saved card back from the Trash (checked again; a taken id gets a new one, a taken name
+        " (restored)"). Returns it."""
+        if not isinstance(t, dict):
+            raise Invalid("a saved card")
+        with self.lock:
+            d = self._load()
+            tpls = d["templates"]
+            if len(tpls) >= MAX_TEMPLATES:
+                raise Invalid(f"at most {MAX_TEMPLATES} saved cards — remove one first")
+            name = _name(t.get("name"))
+            if any(str(x.get("name", "")).lower() == name.lower() for x in tpls):
+                name = (name[:NAME_LEN - 11] + " (restored)")[:NAME_LEN]
+            tid = t.get("id") if isinstance(t.get("id"), str) and TPL_ID.fullmatch(t["id"]) and not any(x.get("id") == t["id"] for x in tpls) else secrets.token_hex(4)
+            back = {"id": tid, "name": name, "card": _card(t.get("card")), "at": t.get("at") if isinstance(t.get("at"), int) else int(time.time()),
+                    **({"fine": t["fine"]} if t.get("fine") in (96, 192) and not isinstance(t.get("fine"), bool) else {})}
+            tpls.append(back)
+            self._save(d)
+            return back
+
     def change(self, req):
         """{action: "add", name, card} | "rename" {id, name} | "remove" {id}. Returns every saved card."""
         if not isinstance(req, dict):

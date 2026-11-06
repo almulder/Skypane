@@ -118,6 +118,8 @@
     // a blank card's pieces: a light / switch / a picture on a device switches (hold: its wheel), a lock slides, a
     // garage's doors open and close; a value, a door, text or a picture on its own only show (the card's own tap)
     if (c.t === "blank") return (Array.isArray(o.parts) ? o.parts : []).map((p) => {
+      // (v3.0.5) a device piece: a Devices item where it was put — its own tap / hold / double-tap (dvTap, dvHold)
+      if (p && p.t === "dev") return { ...p, dv: true, passive: !dvTap(p) && !dvHold(p) && !p.dbl };
       const as = p.t === "lock" ? "lock" : p.t === "garage" ? "garage" : ["light", "switch"].includes(p.t) || (p.t === "icon" && p.id && switches(p.id)) ? "switch" : "value";
       return { id: p.id, as, passive: as === "value" || (as === "garage" && !(p.doors || []).length), wheel: p.wheel, icon: p.icon, doors: p.doors };
     });
@@ -173,6 +175,31 @@
     }
   }
   const head = (title) => (title ? `<div class="gc-t">${esc(title)}</div>` : "");
+  // (v3.0.5) the Notifications list: this many, then "+ N more"
+  const NOTES_MAX = 100;
+  // (v3.0.5) a room's chips: its temperature, how many doors / windows are open, locks unlocked
+  const roomChips = (r) => {
+    const p = H.placed(r.name), open = [...p.doors, ...p.windows].filter((x) => x.open).length, unl = p.locks.filter((l) => l.lock !== "locked").length;
+    const temp = roomTemp(r.name);
+    return [Number.isFinite(temp) ? `<i>${ic("thermo", 14)}${degs(temp)}°</i>` : "", open ? `<i class="w">${ic("doorOpen", 14)}${open}</i>` : "",
+      unl ? `<i class="w">${ic("unlock", 14)}${unl}</i>` : ""].join("");
+  };
+  // (v3.0.5) a room that is a page on this panel (H.allRooms: something in it — app.js drops any other to Home), so a
+  // tile or a tap never opens one only to bounce back
+  const roomPage = (id) => H.allRooms().find((r) => r.id === id) || null;
+  // (v3.0.5) a Rooms card of several rooms (mockups/prototypes/settings-and-pages.html, the Rooms tab): a tile each
+  function roomTiles(c, ids) {
+    const hidden = (window.Settings && Settings.v.hiddenRooms) || {};
+    const tiles = ids.filter((id) => id !== (window.App && App.view)).map((id) => {
+      const r = roomPage(id), was = r ? null : H.room(id);
+      // (a room with nothing in it: its name and "not here", not a tap; one gone from the house: the builder's canvas only)
+      if (!r) return was || H.design ? `<button type="button" disabled>${ic((was && was.icon) || "home", 28)}<span>${esc(was ? was.name : T("g.room"))}</span><small>${esc(T("g.notHere"))}</small></button>` : "";
+      const n = H.lightsOn(r), chips = roomChips(r);
+      return `<button type="button" class="${n ? "on" : ""}"${Acts.on("gr.room", id)} aria-label="${esc(T("g.openRoom", { name: r.name }))}">${hidden[id] ? `<span class="gc-rhid" title="${esc(T("g.offBar"))}">${ic("eyeOff", 14)}</span>` : ""}`
+        + `${ic(r.icon || "home", 30, n > 0)}<span>${esc(r.name)}</span><small>${esc(n ? T("g.lightsOn", { n }) : T("g.allOff"))}</small>${chips ? `<div class="gc-rchips">${chips}</div>` : ""}</button>`;
+    }).join("");
+    return { html: `${head(c.o.title || T("g.rooms"))}<div class="gc-rooms">${tiles}</div>` };
+  }
   // a card's picture: a line icon, an animated drawing ("art:washer" — it moves only while the device is on) or one of
   // the owner's pictures ("up:<id>")
   // id: the device it shows — a window covering's drawing then stands where the shade is (covers(), above)
@@ -380,7 +407,12 @@
       case "switch": return [spotRow({ id: p.id, as: "switch", label: p.label }, n), devState(p.id)[1]];
       case "lock": return [spotRow({ id: p.id, as: "lock", label: p.label }, n), false];
       // (its name: the device's — "Outdoor Temperature" — with the reading added when it isn't the temperature)
-      case "value": { const dn = H.devName(p.id), nm = dn ? (p.at === "temperature" ? dn : `${dn} · ${plainName(p.at)}`) : plainName(p.at);
+      case "value": if (p.net) {   // (v3.0.5) a UniFi value: its words as the Network values card has them; a tap opens its room
+        const u = window.UniFi && UniFi.value ? UniFi.value(p.net) : null;
+        // (v3.0.5: with its dot — idle, warn, bad — as on the Network values card)
+        const dt = u && u.dot != null && UniFi.dot ? UniFi.dot(u.dot) : "";
+        return [`<div class="bk-v"${u ? Acts.on("net.go", p.net) : ""}><span>${lab(u ? u.label : T("g.netValue"))}${dt}</span><b class="num">${esc(u ? String(u.val) : "—")}</b></div>`, false];
+      } else { const dn = H.devName(p.id), nm = dn ? (p.at === "temperature" ? dn : `${dn} · ${plainName(p.at)}`) : plainName(p.at);
         return [`<div class="bk-v"><span>${lab(nm)}</span><b class="num">${valText(p)}</b></div>`, false]; }
       case "door": {
         const ct = doorOpen(p.id);
@@ -391,8 +423,15 @@
         return [`<div class="bk-gar">${st.length ? garageDoors(st, 64) : ic("garage", 48)}${p.label || sub ? `<small>${p.label ? `${lab("")} · ` : ""}${esc(sub || "")}</small>` : ""}</div>`, st.some((x) => x.phase !== "closed")];
       }
       case "text": {
-        const sz = TXT[p.size] || TXT.m, al = ["center", "right"].includes(p.align) ? p.align : "left";
-        return [`<div class="bk-tx" style="font-size:${sz}px;text-align:${al}${p.bold ? ";font-weight:700" : ""}"><div>${fill(p.text || "")}</div></div>`, false];
+        // (v3.0.5: its own size in px and color; a Text card moved over: its heading and icon, as the card drew them)
+        const sz = int(p.fs, 9, 80, 0) || TXT[p.size] || TXT.m, al = ["center", "right"].includes(p.align) ? p.align : "left";
+        const top = `${p.icon ? ic(p.icon, 28) : ""}${p.head ? `<b class="bk-th">${esc(p.head)}</b>` : ""}`;
+        return [`<div class="bk-tx" style="font-size:${sz}px;text-align:${al}${p.bold ? ";font-weight:700" : ""}${col(p.nc) ? `;color:${col(p.nc)}` : ""}">${top}${p.text ? `<div>${fill(p.text)}</div>` : ""}</div>`, false];
+      }
+      // (v3.0.5) a device piece: everything a Devices item does, drawn where the owner put it (no box, no border)
+      case "dev": {
+        if (ST_OF[p.st] && (p.id || p.st === "button")) { const b = dvOld(c, p); return [`<div class="bk-old ${b.cls}">${b.html}</div>`, false]; }   // (an old card's look kept)
+        return dvItem(c, p, n, "free", true);
       }
     }
     return ["", false];
@@ -429,7 +468,10 @@
     const b = DRAW[t]({ ...c, t, o }) || { html: "" };
     return { ...b, cls: [`gc-${t}`, b.cls || ""].filter(Boolean).join(" ") };
   }
-  function dvItem(c, it, n, look) {
+  // (v3.0.5) bk: a blank card's device piece — no box, no border; the icon's background (Circle, Rounded square or None,
+  // its transparency and color) sized to the larger side of what's drawn, centered; the icon white unless set; the name's
+  // color; → [html, on] (the piece is the [data-gitem])
+  function dvItem(c, it, n, look, bk) {
     const k = kindOf(it), id = it.id || null, dv = id ? H.device(id) : null;
     let [st, on, i] = id ? devState(id) : ["", false, "power"];
     if (k === "scene") { st = ""; on = false; i = "sparkles"; }
@@ -447,6 +489,20 @@
     const mot = !gs && it.motion && window.Motion && !/^art:/.test(pic) ? Motion.pick(it.motion, pic, (dv || {}).kind) : "";
     const icx = gs ? garageIcon(gs, size) : mot ? Motion.wrap(ic(pic, Math.round(size * 0.8), on), mot, on, Math.round(size * 0.8)) : ic(pic, size, on, id);
     const tp = DV_TP.has(it.tp) ? it.tp : look === "list" ? "right" : "bottom";
+    if (bk) {
+      // (the drawing's own box: a line icon is square, a drawing 1.6 × 1.85 of it, an own picture 1.3 — the background a
+      // little bigger than its larger side; a line icon keeps 3.0.4's disc)
+      // (v3.0.5: a drawing only when it's one the panel has — an unknown "art:" name is drawn as the line icon, its disc too)
+      const art = /^art:/.test(pic) && !gs && !(window.RoomLayouts && RoomLayouts.G && !RoomLayouts.G.artKeys.includes(pic.slice(4))), up = /^up:/.test(pic), big = art ? size * 1.85 : up ? size * 1.3 : gs ? size * 1.2 : size;
+      const disc = Math.round(art || up || gs ? big * 1.14 : size * 1.74);
+      const shape = ["circle", "rounded", "none"].includes(it.shape) ? it.shape : "circle";
+      const ba = int(it.ba, 0, 100, 0), icc = it.icc === "auto" ? "" : col(it.icc) || "#ffffff";
+      const sty = [`--disc:${disc}px`, it.iz ? `--iz:${int(it.iz, 50, 250, 100) / 100}` : "", it.tz ? `--tz:${int(it.tz, 50, 250, 100) / 100}` : "",
+        col(it.col) ? `--dc:${col(it.col)}` : "", col(it.bc) ? `--dvb:${col(it.bc)}` : "", ba ? `--dva:${(100 - ba) / 100}` : "", icc ? `--dvi:${icc}` : "", col(it.nc) ? `--dvn:${col(it.nc)}` : ""].filter(Boolean).join(";");
+      const nm = esc(it.label || (id ? H.devName(id) : "") || T(k === "scene" ? "g.scene" : k === "button" ? "g.button" : "g.device"));
+      const kl = ["dv-it", "dv-pc", `tp-${tp}`, `k-${k}`, `sh-${shape}`, icc ? "icc" : "", mot ? "mv" : "", on ? "on" : ""].filter(Boolean).join(" ");
+      return [`<div class="${kl}" style="${sty}"><span class="dv-ic">${icx}</span><span class="dv-tx"><b class="dv-n">${nm}</b>${vals ? `<small class="dv-s">${vals}</small>` : ""}</span></div>`, on];
+    }
     const sty = [it.iz ? `--iz:${int(it.iz, 50, 250, 100) / 100}` : "", it.tz ? `--tz:${int(it.tz, 50, 250, 100) / 100}` : "", col(it.col) ? `--dc:${col(it.col)}` : ""];
     if (look === "free" && [it.x, it.y, it.w, it.h].every(Number.isInteger)) sty.push(`left:${it.x / 10}%;top:${it.y / 10}%;width:${it.w / 10}%;height:${it.h / 10}%`);
     if (look === "tiles") sty.push(it.sw > 1 ? `grid-column:span ${int(it.sw, 1, 4, 1)}` : "", it.sh > 1 ? `grid-row:span ${int(it.sh, 1, 4, 1)}` : "");
@@ -565,13 +621,16 @@
       return { cls: on ? "on" : "", html: `<div class="gc-btn">${ic(o.icon || "power", 38, on)}<span>${esc(o.title || T("g.button"))}</span></div>` };
     },
     // a room: its picture, name, lights on; its temperature and anything open / unlocked as chips (style "summary")
+    // (v3.0.5) "Rooms": several rooms (o.rooms) — a tile each, a tap opens that room (a room hidden from the room bar
+    // too: the eye mark); the page's own room is left out. One room: drawn as before
     room(c) {
-      const r = H.room(c.o.room), n = r ? H.lightsOn(r) : 0;
-      if (!r) return { html: `<div class="gc-btn">${ic(c.o.icon || "home", 38)}<span>${esc(c.o.title || T("g.room"))}</span><small>${esc(T("g.notHere"))}</small></div>` };
-      const p = H.placed(r.name), open = [...p.doors, ...p.windows].filter((x) => x.open).length, unl = p.locks.filter((l) => l.lock !== "locked").length;
-      const temp = roomTemp(r.name);
-      const chips = [Number.isFinite(temp) ? `<i>${ic("thermo", 14)}${degs(temp)}°</i>` : "", open ? `<i class="w">${ic("doorOpen", 14)}${open}</i>` : "",
-        unl ? `<i class="w">${ic("unlock", 14)}${unl}</i>` : ""].join("");
+      const many = Array.isArray(c.o.rooms) && c.o.rooms.length > 1 ? c.o.rooms.slice(0, 12) : null;
+      if (many) return roomTiles(c, many);
+      const r = roomPage(c.o.room), n = r ? H.lightsOn(r) : 0;   // (v3.0.5: an empty room — "not here", as a gone one)
+      // (v3.0.5) an empty room still has its own name and picture (H.room) — "Room" only for one gone from the house
+      const was = r ? null : H.room(c.o.room);
+      if (!r) return { html: `<div class="gc-btn">${ic(c.o.icon || (was && was.icon) || "home", 38)}<span>${esc(c.o.title || (was && was.name) || T("g.room"))}</span><small>${esc(T("g.notHere"))}</small></div>` };
+      const chips = roomChips(r);
       return { cls: n ? "on" : "", html: `<div class="gc-btn">${ic(c.o.icon || r.icon || "home", 38, n > 0)}<span>${esc(c.o.title || r.name)}</span><small>${esc(n ? T("g.lightsOn", { n }) : T("g.allOff"))}</small>${chips ? `<div class="gc-rchips">${chips}</div>` : ""}</div>` };
     },
     // a music player (Sonos…): what's playing, play / pause, next / previous, volume. Styles: row, big, volume.
@@ -627,39 +686,75 @@
         + `${node("b", "batteryCharging", T("g.battery"), bat, bat == null ? "" : bat >= 0 ? T("g.giving") : T("g.charging"))}${node("h", "home", T("g.home"), home)}</div>` };
     },
     // the panel's own health: Hubitat, the bridge, the weather service, this page's version
+    // (v3.0.5) the owner picks the rows and their order (o.rows, layouts.SYS_ROWS; mockups/prototypes/cards-editor.html,
+    // System): none = the four it always had, [] = none ("Pick rows"). A row for a part the house hasn't set up isn't
+    // drawn on the wall (the builder's canvas: gray, "not set up"); which parts are set up and which have trouble comes from the server as row
+    // names only (status.js: window.PanelSys) — the weather, the LED agent and the panel itself the panel knows
     status(c) {
-      const hub = H.hub.live, bridge = H.hub.bridge !== "offline";
+      const hub = H.hub.live, bridge = H.hub.bridge !== "offline", sys = window.PanelSys || null;
+      const on = (k) => (sys ? sys.set.includes(k) : null), bad = (k) => !!sys && sys.bad.includes(k);
       // (v3.0.3: the weather counts every place with data — the panel's or a card's — and says which in plain words)
       const st = window.Weather && Weather.status ? Weather.status() : { ok: false, places: 0, failing: 0, error: null };
       const wx = st.ok && !st.failing;
       const wxText = wx ? T("g.st.upToDate") : st.ok ? T("g.st.someMissing") : st.error || (st.places ? T("common.loading") : T("g.st.noPlaces"));
-      const row = (ok, name, text) => `<div class="st-row"><i class="${ok ? "ok" : "bad"}"></i><b>${name}</b><small>${esc(text)}</small></div>`;
       const ver = (window.PANEL_CONFIG && PANEL_CONFIG.version) || "dev";
-      return { html: `${head(c.o.title || T("g.system"))}<div class="gc-st">${row(hub, "Hubitat", hub ? T("g.st.live") : T("g.st.notConnected"))}${row(bridge && hub, T("g.bridge"), hub ? T("g.st.running") : T("g.st.waiting"))}`
-        + `${row(wx, T("wx.title"), wxText)}${row(true, T("g.panel"), ver)}</div>` };
+      const mqttOn = on("mqtt") ?? !!(window.PANEL_CONFIG && PANEL_CONFIG.mqttUrl), mqttOk = !bad("mqtt") && !(H.link && H.link.mqtt === false);
+      const ag = window.AgentLink && AgentLink.state;
+      // [set up (null: not known — the builder's canvas shows it), OK, its name, its words]
+      const NAMES = { protect: T("g.sys.protect"), cameras: T("g.sys.cameras"), unifi: T("g.sys.unifi"), calendars: T("g.sys.calendars"), music: T("g.sys.music") };
+      const part = (k) => [on(k), !bad(k), NAMES[k], bad(k) ? T("g.st.trouble") : T("g.st.working")];
+      const ROWS = {
+        hubitat: () => [true, hub && !bad("hubitat"), "Hubitat", hub ? (bad("hubitat") ? T("g.st.trouble") : T("g.st.live")) : T("g.st.notConnected")],
+        bridge: () => [true, bridge && hub && !bad("bridge"), T("g.bridge"), hub ? (bad("bridge") ? T("g.st.trouble") : T("g.st.running")) : T("g.st.waiting")],
+        // (v3.0.5) the Notifier driver: the server's word only (set up once the hub has one); words, never the steps
+        notifier: () => [on("notifier"), !bad("notifier"), T("g.sys.notifier"), bad("notifier") ? T("g.st.updateWaiting") : T("g.st.upToDate")],
+        mqtt: () => [mqttOn, mqttOk, T("g.sys.mqtt"), mqttOk ? T("g.st.connected") : T("g.st.notConnected")],
+        protect: () => part("protect"), cameras: () => part("cameras"), unifi: () => part("unifi"), calendars: () => part("calendars"), music: () => part("music"),
+        weather: () => [true, wx, T("wx.title"), wxText],
+        led: () => [ag === "ok" || ag === "off" ? true : ag === "none" ? false : null, ag === "ok", T("g.sys.led"), ag === "ok" ? T("g.st.running") : T("g.st.notAnswering")],
+        panel: () => [true, true, T("g.panel"), ver],
+      };
+      const pick = Array.isArray(c.o.rows) ? c.o.rows : ["hubitat", "bridge", "weather", "panel"];
+      const rows = pick.filter((k) => Object.hasOwn(ROWS, k)).map((k) => ROWS[k]()).filter(([set]) => set === true || H.design);   // (not known yet — the agent, the server's word: not drawn until it is)
+      // (v3.0.5: the approved look — its name over its words, an OK / Trouble pill on the right; not set up: grayed, no pill)
+      const row = ([set, ok, name, text]) => set === true
+        ? `<div class="st-row${ok ? "" : " bad"}"><span class="st-tx"><b>${esc(name)}</b><small>${esc(text)}</small></span><span class="st-pill ${ok ? "ok" : "bad"}">${esc(T(ok ? "g.st.ok" : "g.st.troublePill"))}</span></div>`
+        : `<div class="st-row na"><span class="st-tx"><b>${esc(name)}</b><small>${esc(set === false ? T("g.st.notSetUp") : T("g.st.unknown"))}</small></span></div>`;
+      if (!rows.length) return { html: `${head(c.o.title || T("g.system"))}<div class="gc-empty">${esc(T(pick.length ? "g.st.noneSetUp" : "g.st.pickRows"))}</div>` };
+      return { html: `${head(c.o.title || T("g.system"))}<div class="gc-st">${rows.map(row).join("")}</div>` };
     },
-    // a slideshow of your pictures (they cross-fade every few seconds; a ticker below — no redraw)
+    // (v3.0.5) Slide show / Picture (the Photo frame and the Picture card are one card — service/picture_card.py): one
+    // picture stays, drawn as the Picture card was (the picture over the whole card, nothing behind it); several, or a
+    // picture folder, play on the slide-show engine (slideshow.js mounts it on data-ss; no redraw while it plays)
     photos(c) {
-      const o = c.o, pics = (Array.isArray(o.pics) ? o.pics : []).map((p) => /^up:([0-9a-f]{16})$/.exec(p)).filter(Boolean).slice(0, 12);
-      if (!pics.length) return { html: `<div class="gc-empty">${esc(T("g.pickPictures"))}</div>` };
-      return { html: `<div class="gc-ph" data-every="${int(o.every, 3, 600, 10)}" style="--fit:${o.fit === "contain" ? "contain" : "cover"}">${pics.map((m, i) =>
-        `<img src="/pictures/${m[1]}" alt="" draggable="false" class="${i ? "" : "on"}" loading="lazy">`).join("")}</div>` };
+      const o = c.o, fit = o.fit === "contain" ? "contain" : "cover";
+      const pics = (Array.isArray(o.pics) ? o.pics : []).map((p) => /^up:([0-9a-f]{16})$/.exec(p)).filter(Boolean).slice(0, 50);
+      const folder = typeof o.src === "string" && /^fs:[0-9a-f]{12}$/.test(o.src);
+      if (!folder && !pics.length) return { html: `<div class="gc-empty">${esc(T("g.pickPictures"))}</div>` };
+      if (!folder && pics.length === 1) return { html: `<img class="gc-pic" src="/pictures/${pics[0][1]}" alt="" draggable="false" style="object-fit:${fit}">` };
+      const page = esc(String((window.App && App.view) || "home")), data = window.Slides ? Slides.opts(o) : "{}";
+      return { html: `<div class="gc-ph" data-ss="${page}:${esc(c.i)}" data-o="${esc(data)}" style="--ss-fit:${fit}"></div><span class="ss-note" hidden>${esc(T("ss.notReachable"))}</span>` };
     },
     // batteries running low (every device that reports one), lowest first
+    // (v3.0.5) "Custom" (o.mode): only the devices picked (o.ids), with their own low level (o.below); "Always show"
+    // (o.show "all"): every watched battery, the low ones marked — else only the low ones, and "All batteries fine"
     batteries(c) {
-      const below = int(c.o.below, 1, 100, 25), list = [];
-      for (const [id, a] of H.hub.attrs) { const b = parseFloat(a.battery); if (Number.isFinite(b) && b <= below) list.push([id, b]); }
+      const o = c.o, below = int(o.below, 1, 100, 25), pick = o.mode === "custom" && Array.isArray(o.ids) ? new Set(o.ids) : null, all = o.show === "all", list = [];
+      // (v3.0.5) "Custom" with no device picked yet: a note — never every battery
+      if (o.mode === "custom" && !(pick && pick.size)) return { html: `<div class="gc-empty">${esc(T("g.pickDevices"))}</div>` };
+      for (const [id, a] of H.hub.attrs) { const b = parseFloat(a.battery); if (Number.isFinite(b) && (!pick || pick.has(id)) && (all || b <= below)) list.push([id, b]); }
       list.sort((x, y) => x[1] - y[1]);
-      if (!list.length) return { html: `<div class="gc-safe ok">${ic("batteryFull", 32)}<div><b>${esc(c.o.title || T("g.batteries"))}</b><small>${esc(T("g.allAbove", { n: below }))}</small></div></div>` };
-      return { html: `${head(c.o.title || T("g.batteriesBelow", { n: below }))}<div class="gc-devs list">${list.slice(0, 20).map(([id, b]) =>
-        `<div class="gc-gi"><span class="gc-bat ${b <= 10 ? "bad" : "warn"}">${ic(b <= 10 ? "batteryLow" : "batteryHalf", 24)}</span><span class="gc-n">${esc(H.devName(id) || T("g.deviceN", { id }))}</span><span class="gc-s num">${Math.round(b)} %</span></div>`).join("")}</div>` };
+      const low = list.filter((x) => x[1] <= below).length;
+      if (!list.length || (!all && !low)) return { html: `<div class="gc-safe ok">${ic("batteryFull", 32)}<div><b>${esc(o.title || T("g.batteries"))}</b><small>${esc(pick ? T("g.batteriesFine") : T("g.allAbove", { n: below }))}</small></div></div>` };
+      return { html: `${head(o.title || (all ? T("g.batteries") : T("g.batteriesBelow", { n: below })))}<div class="gc-devs list gc-bats">${list.slice(0, all ? 100 : 40).map(([id, b]) =>
+        `<div class="gc-gi"><span class="gc-bat ${b <= below ? (b <= Math.min(10, below) ? "bad" : "warn") : "ok"}">${ic(b <= below ? (b <= 10 ? "batteryLow" : "batteryHalf") : "batteryFull", 24)}</span><span class="gc-n">${esc(H.devName(id) || T("g.deviceN", { id }))}</span><span class="gc-s num">${Math.round(b)} %</span></div>`).join("")}</div>` };
     },
     // what uses power now: devices reporting watts, biggest first, as bars; the total
     power(c) {
       const o = c.o, ids = Array.isArray(o.ids) && o.ids.length ? new Set(o.ids) : null, list = [];
       for (const [id, a] of H.hub.attrs) { const w = parseFloat(a.power); if (Number.isFinite(w) && (!ids || ids.has(id)) && (ids || w > 0.5)) list.push([id, w]); }
       list.sort((x, y) => y[1] - x[1]);
-      const top = list.slice(0, int(o.top, 3, 20, 8)), max = Math.max(1, ...top.map((x) => x[1])), total = list.reduce((n, x) => n + x[1], 0);
+      const top = o.top === 0 ? list : list.slice(0, int(o.top, 3, 20, 8)), max = Math.max(1, ...top.map((x) => x[1])), total = list.reduce((n, x) => n + x[1], 0);
       const fmtW = (w) => (w >= 1000 ? `${(w / 1000).toFixed(1)} kW` : `${Math.round(w)} W`);
       return { html: `${head(o.title || T("g.powerNow"))}<div class="gc-pw"><div class="gc-pwt num">${fmtW(total)}<small>${list.length} device${list.length === 1 ? "" : "s"}</small></div>${top.map(([id, w]) =>
         `<div class="gc-pwr"><span>${esc(H.devName(id) || T("g.deviceN", { id }))}</span><b class="num">${fmtW(w)}</b><i><i style="transform:scaleX(${(w / max).toFixed(3)})"></i></i></div>`).join("") || `<div class="gc-empty">${esc(T("g.noPower"))}</div>`}</div>` };
@@ -683,7 +778,8 @@
     // (v3.0.4) Bins / Trash (trash.js) and Countdown & timers (timers.js TimerCards): they replace bins, countdown, timer
     trash(c) { return window.Trash ? Trash.card(c) : { html: "" }; },
     // (v3.0.4) the UniFi cards (unifi.js): nothing on the wall while UniFi isn't connected
-    ...Object.fromEntries(["netwan", "netchips", "netstrip", "netmap", "netdevs", "netpoe", "netclients", "netlog", "netvals"].map((t) => [t, (c) => (window.UniFi ? UniFi.card(c) : { html: "" })])),
+    // (v3.0.5: and the UPS / battery backup, the Doorbell and the Activity feed)
+    ...Object.fromEntries(["netwan", "netchips", "netstrip", "netmap", "netdevs", "netpoe", "netclients", "netlog", "netvals", "netups", "netbell", "netfeed"].map((t) => [t, (c) => (window.UniFi ? UniFi.card(c) : { html: "" })])),
     timers(c) { return window.TimerCards ? TimerCards.card(c) : { html: "" }; },
     // a row of scene / routine buttons: each does its own action (a scene switch on, a Hubitat button pushed…)
     scenes(c) {
@@ -750,7 +846,7 @@
     },
     // the owner's own card: the pieces where they put them (later ones in front); nothing yet → a hint (the builder)
     blank(c) {
-      const parts = (Array.isArray(c.o.parts) ? c.o.parts : []).slice(0, 16);
+      const parts = (Array.isArray(c.o.parts) ? c.o.parts : []).slice(0, 25);   // (v3.0.5: 25 — layouts.MAX_PIECES)
       // (the hint: only in the builder's canvas, and not while the builder edits inside this very card — it sets
       // Grid.editingInside = the card's id then)
       if (!parts.length) return { html: `<div class="bk bk-none">${H.design && Grid.editingInside !== c.i ? `<div class="gc-empty">${ic("plus", 26)}<span>${esc(T("g.emptyBlock"))}</span></div>` : ""}</div>` };
@@ -759,9 +855,22 @@
       const html = parts.map((p, n) => {
         const [inner, on] = piece(c, p, n), x = int(p.x, 0, U - 1, 0), y = int(p.y, 0, U - 1, 0);
         const w = int(p.w, 1, U - x, 1), h = int(p.h, 1, U - y, 1);
-        return `<div class="bk-p bk-${String(p.t).replace(/[^a-z]/g, "")}${on ? " on" : ""}" data-gitem="${n}" style="left:${pos(x)};top:${pos(y)};width:${pos(w)};height:${pos(h)}">${inner}</div>`;
+        // (v3.0.5) "Grow and shrink with the card" (off by default: it keeps its own size): from the card's box when it
+        // was switched on, what's in it follows the card (bk-z, as a card's own grow); a piece over the whole card keeps
+        // the card's own padding (a Text card moved over). The card's own grow on: it scales the whole card already (Grid.fit)
+        // — a piece's own would compound it, so it's left out. "fit": "box" — a piece from before 3.0.5 still fills its box
+        // as it did (theme.css .bk-p.fit-box). "pz": a piece's own zoom (%: how much it had grown when
+        // "Grow and shrink" was switched off — builder.js setPieceGrow), on top
+        const box = p.fit === "box", gr = box || growRef(c.s) ? null : growRef(p), pz = box ? 1 : int(p.pz, 40, 400, 100) / 100;
+        const gk = Math.max(0.4, Math.min(4, (gr ? Math.min(int(c.w, 1, 256, 1) / gr.w, int(c.h, 1, 256, 1) / gr.h) : 1) * pz)), zm = gr || pz !== 1;
+        const full = U === FREE && x === 0 && y === 0 && w === FREE && h === FREE ? " bk-full" : "";
+        const body = zm ? `<div class="bk-z" style="--pg:${gk.toFixed(3)}">${inner}</div>` : inner;
+        return `<div class="bk-p bk-${String(p.t).replace(/[^a-z]/g, "")}${on ? " on" : ""}${zm ? " bk-g" : ""}${box ? " fit-box" : ""}${full}" data-gitem="${n}" style="left:${pos(x)};top:${pos(y)};width:${pos(w)};height:${pos(h)}">${body}</div>`;
       }).join("");
-      return { html: `<div class="bk">${html}</div>` };
+      // (v3.0.5) a long list moved over (rows marked "fit": "box"): on a phone the card gets the height its rows need
+      // (theme.css .bkh-*) — the stacked cards' 200 px squeezed 24 rows to 7 px each
+      const rows = parts.filter((p) => p && p.t === "dev" && p.fit === "box").length;
+      return { cls: rows >= 18 ? "bkh-xl" : rows >= 12 ? "bkh-l" : rows >= 7 ? "bkh-m" : "", html: `<div class="bk">${html}</div>` };
     },
     // Hubitat's mode (modes.js): change it with the panel PIN
     modes(c) { return { html: window.Modes ? `<div class="gc-modes">${Modes.card(c.o)}</div>` : "" }; },
@@ -775,12 +884,22 @@
       if (!bad.length) return { cls: "", html: `<div class="gc-safe ok">${ic("shield", 34)}<div><b>${head_}</b><small>${esc(all ? T("g.allClear", { n: all }) : T("g.noSafety"))}</small></div></div>` };
       return { cls: "alarm", html: `<div class="gc-safe bad">${ic("shieldAlert", 34)}<div><b>${esc(T("g.alertsN", { n: bad.length }))}</b><small>${bad.slice(0, 3).map((s) => esc(s.name || s.kind)).join(" · ")}</small></div></div>` };
     },
-    // alerts from Hubitat rules that are up on this panel (hubalerts.js): newest first; × dismisses one
+    // alerts from Hubitat rules that are up on this panel (hubalerts.js): level 5 first, newest first within a level;
+    // × dismisses one. (v3.0.5) One card for both (mockups/prototypes/cards-editor.html, Notifications): "List" (the
+    // default) — every open alert, scrolling (up to NOTES_MAX, then "+ N more"), "Nothing new" when none; "Compact" —
+    // the Alert note's button ("🔔 N notifications ›", red for a level 4–5; a tap opens the list), only while one waits
     notices(c) {
+      if (c.o.style === "compact") {
+        const b = window.HubAlerts ? HubAlerts.bannerHtml() : "";
+        // (gc-alerts: drawn as the Alert note was — theme.css; nothing waiting: nothing on the wall, a hint in the builder)
+        return { cls: "gc-alerts", html: b || (H.design ? `<div class="gc-empty">${esc(T("g.alertsHint"))}</div>` : "") };
+      }
       const list = window.HubAlerts ? HubAlerts.shown().slice().sort((x, y) => y.lvl - x.lvl || (y.at || 0) - (x.at || 0)) : [];
       if (!list.length) return { html: `${head(c.o.title || T("alert.notifications"))}<div class="gc-empty">${esc(T("g.nothingNew"))}</div>` };
-      return { html: `${head(c.o.title || T("alert.notifications"))}<div class="gc-devs list gc-notes">${list.slice(0, 12).map((a) =>
-        `<div class="gc-nt l${+a.lvl}"><i></i><span class="gc-n">${esc(a.title || a.text)}</span>${a.title ? `<small>${esc(a.text)}</small>` : ""}<button${Acts.on("hub.dismiss", String(a.id).replace(/[^0-9a-f]/g, ""))} aria-label="${esc(T("alert.dismissOne"))}">✕</button></div>`).join("")}</div>` };
+      const more = list.length - NOTES_MAX;
+      return { html: `${head(c.o.title || T("alert.notifications"))}<div class="gc-devs list gc-notes">${list.slice(0, NOTES_MAX).map((a) =>
+        `<div class="gc-nt l${int(a.lvl, 1, 5, 3)}"><i></i><span class="gc-n">${esc(a.title || a.text)}</span>${a.title ? `<small>${esc(a.text)}</small>` : ""}<button${Acts.on("hub.dismiss", String(a.id).replace(/[^0-9a-f]/g, ""))} aria-label="${esc(T("alert.dismissOne"))}">✕</button></div>`).join("")}`
+        + `${more > 0 ? `<div class="gc-more">${esc(T("g.moreN", { n: more }))}</div>` : ""}</div>` };
     },
     // days until a date ("12 days to the trip"), or "Today!"
     countdown(c) {
@@ -820,7 +939,8 @@
       const on = H.lightsOn(r), all = H.lightsTotal(r), p = H.placed(r.name);
       const open = [...p.doors, ...p.windows].filter((x) => x.open).length, unl = p.locks.filter((l) => l.lock !== "locked").length;
       const temp = roomTemp(r.name);
-      const chips = [all ? `<span class="chip">${ic("bulb", 16)}${esc(T("g.lightsOn", { on, n: all }))}</span>` : "", Number.isFinite(temp) ? `<span class="chip">${ic("thermo", 16)}${degs(temp)}°</span>` : "",
+      // (v3.0.5) "g.lightsOnOf" ({on} of {n}): "g.lightsOn" is the tiles' "{n} lights on" — one key each, never "{on}"
+      const chips = [all ? `<span class="chip">${ic("bulb", 16)}${esc(T("g.lightsOnOf", { on, n: all }))}</span>` : "", Number.isFinite(temp) ? `<span class="chip">${ic("thermo", 16)}${degs(temp)}°</span>` : "",
         open ? `<span class="chip warn">${ic("doorOpen", 16)}${esc(T("g.openN", { n: open }))}</span>` : "", unl ? `<span class="chip warn">${ic("unlock", 16)}${esc(T("g.unlockedN", { n: unl }))}</span>` : ""].join("");
       // (the room id is [a-z0-9-] only: safe in the attribute)
       const rid = String(r.id).replace(/[^a-z0-9-]/g, "");
@@ -927,7 +1047,7 @@
       [o.id, o.contact, ...(c.show || []).map((r) => r.id), ...(c.hi || []).map((r) => r.id), ...ids(o.text), ...(o.items || []).map((it) => it.id)].forEach((x) => x && watch.add(x));
       Object.values(o.bind || {}).forEach((x) => watch.add(x));
       if (c.t === "spot") [o.aid, o.tid, ...(o.rows || []).map((r) => r.id), ...(o.doors || []).flatMap((d) => [d.id, d.contact])].forEach((x) => x && watch.add(x));
-      if (c.t === "blank") (o.parts || []).forEach((p) => [p.id, ...ids(p.text), ...(p.doors || []).flatMap((d) => [d.id, d.contact])].forEach((x) => x && watch.add(x)));
+      if (c.t === "blank") (o.parts || []).forEach((p) => [p.id, p.contact, p.tap && p.tap.id, ...ids(p.text), ...(p.doors || []).flatMap((d) => [d.id, d.contact])].forEach((x) => x && watch.add(x)));   // (v3.0.5: a device piece's contact, its tap's device)
       if (c.t === "temps") [o.inside, o.outside].forEach((x) => Number.isInteger(x) && watch.add(x));   // (its own sensors)
       if (c.t === "scenes") (o.items || []).forEach((it) => it && it.a && it.a.id && watch.add(it.a.id));
       if (c.t === "devices") (o.items || []).forEach((it) => it && [it.contact, it.tap && it.tap.id].forEach((x) => x && watch.add(x)));
@@ -959,7 +1079,8 @@
       const jv = jn ? Object.entries(jn).filter(([, d]) => d > 0).map(([k, d]) => `--j${k}:${d}`).join(";") : "";
       // (the Guest Wi-Fi card with nothing to show — no network, off for this panel: no empty glass box on the wall; v3.0.4:
       // nor a UniFi card while UniFi isn't connected)
-      const gone = !shown || ((c.t === "guest" || /^net[a-z]+$/.test(c.t)) && !body.html && !marked);
+      // (v3.0.5: nor a Compact Notifications card with nothing waiting)
+      const gone = !shown || ((c.t === "guest" || (c.t === "notices" && o.style === "compact") || /^net[a-z]+$/.test(c.t)) && !body.html && !marked);
       const cls = [base, jc, body.cls || "", hi ? "hi" : "", !gone ? "" : marked ? "gc-cond" : "gc-hide"].filter(Boolean).join(" "), ghi = hi && col(c.hic) ? col(c.hic) : "";
       // (the place is kept apart from the key: moving a card — the builder's live canvas while dragging — only moves it)
       const area = `${int(c.y, 0, 255, 0) + 1}/${int(c.x, 0, 255, 0) + 1}/span ${int(c.h, 1, 256, 1)}/span ${int(c.w, 1, 256, 1)}`;   // (the fine grid: up to 192 × 128)
@@ -1007,6 +1128,14 @@
     }
     for (const cell of main.querySelectorAll(".gc.fit")) {
       const inn = cell.firstElementChild; if (!inn) continue;
+      // (v3.0.5) a network map lays itself out at the card's own size (unifi.js: its drawing scales in its own viewBox):
+      // never fitted — measuring it forced 55-70 ms of layout a redraw, and a shrunk inner box made the map measure
+      // itself bigger, lay out bigger, and shrink again
+      if (cell.classList.contains("gc-netmap") && inn.querySelector(".un-mapbox")) {
+        if (cell.dataset.lscroll) delete cell.dataset.lscroll;
+        cell.style.setProperty("--gfit", "1"); cell.classList.remove("g-small");
+        continue;
+      }
       // (v3.0.3: a Guest Wi-Fi card taller than wide — or about square: the code, as tall as the card, would leave the
       // words no room beside it — puts its code above the words, guestwifi.js .gw-tall)
       if (cell.classList.contains("gc-guest")) cell.classList.toggle("gw-tall", cs.display !== "flex" && cell.clientWidth < cell.clientHeight * 1.6);
@@ -1061,10 +1190,55 @@
         cell.style.setProperty("--gfit", s.toFixed(3));
       }
     }
+    fitLabels(main);   // (v3.0.5)
     covers(main);
   };
+  // (v3.0.5) the owner's rule: a piece's name is never cut off. Two lines first (theme.css), then its letters smaller —
+  // 88 % a round, down to 9 px — until it fits its piece; the state under a device's name gets smaller with it. A few
+  // rounds of reading all of them, then writing all of them (no layout forced per name). Done once per piece size
+  // (data-lf): a redraw that keeps the card keeps its sizes, a new size fits them again
+  const LBL = ".bk-p .dv-n, .bk-p .bk-lt b, .bk-p > .sp-r > span, .bk-p .bk-v > span";
+  function fitLabels(root) {
+    const todo = [];
+    for (const el of root.querySelectorAll(LBL)) {
+      const p = el.closest(".bk-p"); if (!p) continue;
+      const key = `${p.clientWidth}x${p.clientHeight}`;
+      if (el.dataset.lf === key) continue;
+      const dv = el.matches(".dv-n") ? el.closest(".dv-pc") : null;
+      todo.push({ el, p, key, sub: dv ? el.nextElementSibling : null, ic: dv ? dv.querySelector(".dv-ic") : null, k: 1 });
+    }
+    if (!todo.length) return;
+    for (const t of todo) { t.el.style.removeProperty("font-size"); t.el.style.removeProperty("-webkit-line-clamp"); if (t.sub) t.sub.style.removeProperty("font-size"); if (t.ic) t.ic.style.removeProperty("--fk"); }
+    for (const t of todo) { t.f = parseFloat(getComputedStyle(t.el).fontSize) || 16; t.sf = t.sub ? parseFloat(getComputedStyle(t.sub).fontSize) || 13 : 0; }
+    let left = todo;
+    for (let round = 0; round < 10 && left.length; round++) {
+      // (a device's icon disc too: it gets smaller with the name when together they're bigger than the piece — --fk)
+      left = left.filter(({ el, p, ic }) => {
+        if (!el.clientWidth && !el.clientHeight) return false;   // (hidden)
+        const r = el.getBoundingClientRect(), q = p.getBoundingClientRect(), d = ic ? ic.getBoundingClientRect() : null;
+        return el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1 || r.bottom > q.bottom + 1 || r.top < q.top - 1 || r.right > q.right + 1
+          || (d && (d.top < q.top - 1 || d.bottom > q.bottom + 1));
+      }).filter((t) => t.f > 9 || (t.ic && t.k > 0.45));
+      for (const t of left) {
+        // (a tall, narrow piece with room under and over the name: one more line first — up to 4 — before smaller letters)
+        const r = t.el.getBoundingClientRect(), q = t.p.getBoundingClientRect(), lh = t.f * 1.15, n = t.lines || 2;
+        if (n < 4 && t.el.scrollHeight > t.el.clientHeight + 1 && q.bottom - r.bottom > lh / 2 + 2 && r.top - q.top > lh / 2 + 2) {
+          t.lines = n + 1; t.el.style.webkitLineClamp = String(t.lines); continue;
+        }
+        t.f = Math.max(9, t.f * 0.88); t.el.style.fontSize = `${t.f.toFixed(1)}px`;
+        if (t.sub) { t.sf = Math.max(8, t.sf * 0.88); t.sub.style.fontSize = `${t.sf.toFixed(1)}px`; }
+        if (t.ic) { t.k = Math.max(0.45, t.k * 0.88); t.ic.style.setProperty("--fk", t.k.toFixed(3)); }
+      }
+    }
+    for (const t of todo) t.el.dataset.lf = t.key;
+  }
+  Grid.fitLabels = fitLabels;
   Grid.frame = (main, g) => {
     const st = main.style;
+    // (v3.0.5) the Edge margin (0 / 8 / 16 / 24 px around the cards; none: as before — theme.css main.lay-custom.edge)
+    const edge = g ? int(g.edge, 0, 24, -1) : -1;
+    main.classList.toggle("edge", edge >= 0);
+    if (edge >= 0) st.setProperty("--g-edge", `${edge}px`); else st.removeProperty("--g-edge");
     if (!g) { ["--g-cols", "--g-rows", "--g-gap"].forEach((k) => st.removeProperty(k)); return; }
     st.setProperty("--g-cols", g.cols); st.setProperty("--g-rows", g.rows); st.setProperty("--g-gap", `${g.gap}px`);
   };
@@ -1127,7 +1301,7 @@
         const cur = parseFloat(H.attr(id, { setHeatingSetpoint: "heatingSetpoint", setCoolingSetpoint: "coolingSetpoint", setLevel: "level" }[a.c]));
         return Number.isFinite(cur) ? H.send(id, a.c, Math.round(cur + a.v)) : null;
       }
-      case "room": return H.room(a.room) ? App.go(a.room) : null;
+      case "room": return roomPage(a.room) ? App.go(a.room) : null;   // (v3.0.5: only a room that is a page)
       case "page": return App.go(a.page);
       case "camera": return window.Cameras && Cameras.full(a.cam);
       case "spotpop": if (spotPop.has(c.i)) spotPop.delete(c.i); else spotPop.add(c.i); return H.refresh();
@@ -1161,7 +1335,7 @@
   // (a group card: no default — its devices are tapped one by one)
   const defTap = (c) => (c.t === "spot" && c.o ? (c.o.tapdo === "toggle" && c.o.tid ? { do: "toggle", id: c.o.tid } : c.o.tapdo === "values" || (c.o.vpos === "tap" && c.o.tapdo !== "none") ? { do: "spotpop" } : null)
     : c.t === "garage" && c.o && c.o.id ? { do: "toggle", id: c.o.id, gd: { contact: c.o.contact, travel: c.o.travel } } : c.t === "lock" && c.o && c.o.id ? { do: "toggle", id: c.o.id, dflt: true }
-    : c.t === "device" && c.o && switches(c.o.id) ? { do: "toggle", id: c.o.id, dflt: true, ...((H.device(c.o.id) || {}).kind === "garage" ? { gd: { contact: c.o.contact, travel: c.o.travel } } : {}) } : c.t === "room" ? { do: "room", room: c.o.room }
+    : c.t === "device" && c.o && switches(c.o.id) ? { do: "toggle", id: c.o.id, dflt: true, ...((H.device(c.o.id) || {}).kind === "garage" ? { gd: { contact: c.o.contact, travel: c.o.travel } } : {}) } : c.t === "room" && !(Array.isArray(c.o.rooms) && c.o.rooms.length > 1) ? { do: "room", room: c.o.room }
     : c.t === "camera" ? { do: "camera", cam: c.o.cam } : null);
   const act = (c, k) => {
     let a = c[k] || (k === "tap" ? defTap(c) : null);
@@ -1194,7 +1368,9 @@
     if (blank) { if (!srow || srow.as !== "garage") dn = null; else if (dn == null && (srow.doors || []).length === 1) dn = 0; else if (dn == null) return; }
     press = { id: e.pointerId, el: (item && !one) || srow ? gi : el, c, item: item || srow, x: e.clientX, y: e.clientY, held: false, door: dn, at: Date.now() };
     // a lock card's "slide to unlock": the thumb follows the finger (pointermove), let go near the end → unlock
-    const thumb = (c.t === "lock" || (srow && srow.as === "lock") || (dvc && item)) && e.target.closest(".lk-thumb");
+    // (v3.0.5: a blank card's device piece is a Devices item — dvp)
+    const dvp = !!(srow && srow.dv);
+    const thumb = (c.t === "lock" || (srow && srow.as === "lock") || (dvc && item) || dvp) && e.target.closest(".lk-thumb");
     if (thumb) { press.unlock = { track: thumb.parentElement, thumb, id: srow ? srow.id : item ? item.id : c.o.id }; App.dragging = true; return; }
     if (press.door != null) { press.el.classList.add("pressed"); return; }
     // a slider tile on a light that dims: dragging across it sets the level (a Device card, or one moved over: its "st")
@@ -1210,7 +1386,7 @@
     const it2 = press.item, auto = (x) => (x && x.id && !H.state.locks.some((l) => l.id === x.id) && (H.device(x.id) || {}).kind !== "garage" ? (lightPopOk(x.id) ? [{ pop: x.id }] : Grid.autoWheel(x.id)) : null);
     let wh = it2 ? it2.wheel || (c.t === "roomdevs" || c.t === "group" || (spot && it2.as === "switch") ? auto(it2) : null)
       : (c.o || {}).wheel || (c.t === "device" && !c.hold ? auto(c.o) : null);
-    if (dvc && it2) {   // (a Devices item: its wheel, its hold action, else what it is — dvHold)
+    if ((dvc || dvp) && it2) {   // (a Devices item: its wheel, its hold action, else what it is — dvHold)
       const h = dvHold(it2);
       if (h && h.act) { press.fire = () => { if (!press) return; press.held = true; press.el.classList.remove("pressed"); asked(it2, h.act, c); }; press.timer = setTimeout(press.fire, 550); return; }
       wh = h ? (h.pop != null ? [{ pop: h.pop }] : h.wheel) : null;
@@ -1220,7 +1396,7 @@
       at.classList.add("holding");   // (a ring fills while the finger stays: the wheel is coming)
       press.fire = () => {
         if (!press) return; press.held = true; at.classList.remove("pressed", "holding");
-        if (wh[0].pop != null) { eatAfter(press.id); Grid.lightPop(wh[0].pop); } else Grid.openWheel(at, wh, c, it2 ? it2.icon || (dvc && it2.id ? devState(it2.id)[2] : null) : (c.o || {}).icon);   // (the lift's click: not on the pop-up's backdrop)
+        if (wh[0].pop != null) { eatAfter(press.id); Grid.lightPop(wh[0].pop); } else Grid.openWheel(at, wh, c, it2 ? it2.icon || ((dvc || dvp) && it2.id ? devState(it2.id)[2] : null) : (c.o || {}).icon);   // (the lift's click: not on the pop-up's backdrop)
       };
       press.timer = setTimeout(press.fire, 550);
       return;
@@ -1266,6 +1442,8 @@
     if (p.door != null) { const dr = ((p.c.t === "blank" ? (p.item || {}).doors : (p.c.o || {}).doors) || [])[p.door]; return dr && dr.id ? run({ do: "toggle", id: dr.id, gd: { contact: dr.contact, travel: dr.travel, tclose: dr.tclose } }, p.c) : null; }   // (the PIN: data.js)
     if (p.item && p.c.t === "scenes") return run(p.item.a, p.c);
     if (p.item && p.c.t === "devices") return tapOrDbl(p.item, dvTap(p.item), p.item.dbl, p.c, (a, c) => asked(p.item, a, c));
+    // (v3.0.5) a blank card's device piece: as a Devices item (its key: the card and the piece — a double-tap is on the same one)
+    if (p.item && p.item.dv) return tapOrDbl(`${p.c.i}#${p.el.dataset.gitem}`, dvTap(p.item), p.item.dbl, p.c, (a, c) => asked(p.item, a, c));
     if (p.item) {   // (like a device card's own tap: a lock only locks)
       const id = p.item.id, lock = H.state.locks.find((l) => l.id === id);
       return lock ? (lock.lock === "locked" ? null : H.lock(id)) : switches(id) ? run({ do: "toggle", id }, p.c) : null;
@@ -1426,8 +1604,13 @@
     wheelEl = document.createElement("div");
     wheelEl.className = "gwheel";
     wheelEl.innerHTML = `<div class="gw-c" style="left:${cx}px;top:${cy}px">${btns}<button class="gw-mid" aria-label="${esc(T("common.close"))}">${ic(picture || mid, 34, true)}</button></div>`;   // (v3.0.2: was the literal text T("shade.close"))
+    // (v3.0.5) only a fresh tap picks: the lift of the finger that held (the wheel opened under it, any time later and
+    // wherever the wheel sits) is never one — a pointerdown on the wheel first (a key's click, detail 0, still counts)
+    let fresh = false;
+    wheelEl.addEventListener("pointerdown", () => { fresh = true; });
     wheelEl.addEventListener("click", (e) => {
       e.preventDefault(); e.stopPropagation();
+      if (!fresh && e.detail !== 0) return;
       if (Date.now() - opened < 350) return;   // (the hold's own finger lifting)
       const b = e.target.closest(".gw-it");
       const a = b ? items[+b.dataset.wi] : null;
@@ -1441,19 +1624,7 @@
   // (a redraw of Home, another page or a camera pop-up: the wheel goes)
   document.addEventListener("visibilitychange", () => { if (document.hidden) Grid.closeWheel(); });
 
-  // the photo cards: the next picture every few seconds (only the classes change — the grid isn't redrawn)
-  setInterval(() => {
-    if (document.hidden || document.documentElement.classList.contains("pin-open")) return;   // (v3.0.3: held while a PIN pad is open)
-    const now = Date.now();
-    for (const box of document.querySelectorAll(".gc-ph")) {
-      const every = (+box.dataset.every || 10) * 1000;
-      if (now - (+box.dataset.at || 0) < every) continue;
-      box.dataset.at = String(now);
-      const imgs = box.children; if (imgs.length < 2) continue;
-      const i = [...imgs].findIndex((x) => x.classList.contains("on"));
-      imgs[i < 0 ? 0 : i].classList.remove("on"); imgs[(i + 1) % imgs.length].classList.add("on");
-    }
-  }, 1000);
+  // (v3.0.5: the photo cards' ticker went — slideshow.js plays them)
 
   // the cards' own buttons (acts.js; the Alarm and Notifications cards use alarm.js's and hubalerts.js's)
   Acts.add({
@@ -1462,6 +1633,8 @@
     "gr.purifier": (id, act, v) => (v == null ? H.purifier(id, act) : H.purifier(id, act, v)),
     "gr.setFan": (id, s) => H.setFan(id, s), "gr.roomAll": (rid, on) => H.roomAll(rid, on),
     "gr.dropImg": (el) => el.remove(),   // (an album cover that won't load: the card without it)
+    // (v3.0.5) a Rooms card's tile: that room (remembered in the room history — Back returns here)
+    "gr.room": (id) => (roomPage(id) && window.App ? App.go(id) : null),
   });
   window.Grid = Grid;
 })();

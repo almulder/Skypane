@@ -2,6 +2,10 @@
  *  Skypane Notifier — lets Hubitat rules (Rule Machine, webCoRE, Basic Rules, HSM, Notifications, Switchboard…)
  *  put alerts on the Skypane wall panels, and hear back when someone dismisses them.
  *
+ *  Version 3.0.5 (Skypane 3.0.5): the driver says its version — the `driverVersion` attribute (DRIVER_VERSION), set when
+ *  the device starts and with the server's heartbeat, so it's right within a minute of saving new driver code. The
+ *  Skypane bridge reads it, and the Manager (Integrations → Hubitat) says "Up to date" or how to update. Nothing else
+ *  changed: Hubitat list commands ("add to list: Shopping, milk", "pin note: …") go through notify(), like "Timer:".
  *  Version 3.0.0 (Skypane 3.0.0, the tester release): installs fresh under the namespace `skypane`; Skypane serves this
  *  file itself (http://<your Skypane>/hubitat/SkypaneNotifier.groovy). History of the earlier versions:
  *
@@ -100,7 +104,11 @@ metadata {
         attribute "healthAlert", "string"      // what the server says is wrong ("none" = all fine), or that it's offline
         attribute "healthCount", "number"      // how many problems the server has now
         attribute "healthLevel", "number"      // the worst one's level (0 none, 2 notice, 3 warning, 4 alert)
+        attribute "driverVersion", "string"    // (v3.0.5) this driver's version — read by the Skypane bridge
+        attribute "driverStatus", "string"     // (v3.0.5) "Up to date (3.0.5)" or "Update required (3.0.5 → 3.0.6)" — set by the Skypane Helper app
 
+        // (v3.0.5) declared, so the Skypane Helper app may call it (an undeclared method isn't callable from an app)
+        command "helperDriverStatus", [[name: "Latest*", type: "STRING", description: "set by the Skypane Helper app: the newest driver version Skypane has"]]
         command "notify", [[name: "Text*", type: "STRING"], [name: "Level", type: "NUMBER", description: "5 Life safety, 4 Damage, 3 Action needed, 2 Finished, 1 Reminder"],
                            [name: "Panels", type: "STRING", description: "all | main,k_office"],
                            [name: "Title", type: "STRING"], [name: "Seconds", type: "NUMBER", description: "expiry; 0 = the level's default"],
@@ -139,6 +147,7 @@ metadata {
 
 // the level's own expiry when a rule gives none or 0 (seconds; 0 = until dismissed —)
 private Integer defaultSeconds(Integer lvl) { [1: 60, 2: 60, 3: 0, 4: 0, 5: 0][lvl] ?: 0 }
+@Field static final String DRIVER_VERSION = "3.0.5"   // (v3.0.5) Skypane reads it from here, the bridge from driverVersion
 @Field static final Integer MAX_ALERTS = 20
 @Field static final Integer BUTTONS = 7          // 1–5: an alert of that level dismissed on a panel; 6: Dismiss all; 7: silenced
 @Field static final Integer DISMISS_ALL = 6
@@ -153,6 +162,7 @@ def updated() {
 }
 def initialize() {
     if (state.alerts == null) state.alerts = []
+    stampVersion()
     sendEvent(name: "numberOfButtons", value: BUTTONS)
     publishAlerts()
     if (device.currentValue("serverStatus") == null) sendEvent(name: "serverStatus", value: "unknown")
@@ -169,6 +179,7 @@ def deviceNotification(text) {
 }
 def refresh() {
     // (the Skypane bridge asks for this after it (re)started: it has the ids, this sends the texts again)
+    stampVersion()
     (state.alerts ?: []).each { a -> command([op: "notify", id: a.id, lvl: a.lvl, to: a.to, tag: a.tag, title: a.title, text: a.text, exp: a.exp, count: a.count, replay: true]) }
     publishAlerts()
     if (state.vol != null || state.muted != null) {   // (and the volume the panels were last given)
@@ -299,6 +310,7 @@ def serverHeartbeat(n, level = null, text = null) {
     String txt = clean(parts.size() > 2 ? parts[2] : "", 120)
     Long ms = now()
     state.hbAt = ms
+    stampVersion()   // (v3.0.5: new driver code saved — the next heartbeat says so)
     boolean back = device.currentValue("serverStatus") != "online"
     sendEvent(name: "serverStatus", value: "online", descriptionText: "the Skypane server is online")
     if (back || !state.hbShownAt || ms - (state.hbShownAt as Long) >= 300000) {   // (not every 30 s: the event list stays readable)
@@ -441,7 +453,30 @@ private void scheduleExpiry() {
     else unschedule("expireCheck")
 }
 
+// (v3.0.5) The Skypane Helper app (hubitat/SkypaneHelper.groovy) tells this device the newest driver Skypane serves;
+// the device page then shows driverStatus under Current States. (v3.0.5) A declared command (metadata above), so the
+// app's call works; a value that isn't a version is said on the hub's log, not dropped silently.
+def helperDriverStatus(String latest) {
+    String want = latest ? latest.trim() : ""
+    if (!(want ==~ /\d{1,3}(\.\d{1,4}){1,3}/)) { log.warn "Skypane Notifier: helperDriverStatus needs a version like 3.0.5"; return }
+    String now = want == DRIVER_VERSION || !newer(want, DRIVER_VERSION) ? "Up to date (${DRIVER_VERSION})" : "Update required (${DRIVER_VERSION} → ${want})"
+    if (device.currentValue("driverStatus") != now) sendEvent(name: "driverStatus", value: now)
+}
+private boolean newer(String a, String b) {
+    List x = a.tokenize(".").collect { it as Integer }, y = b.tokenize(".").collect { it as Integer }
+    for (int i = 0; i < Math.max(x.size(), y.size()); i++) {
+        int p = i < x.size() ? x[i] : 0, q = i < y.size() ? y[i] : 0
+        if (p != q) return p > q
+    }
+    return false
+}
+
 // ---------- helpers ----------
+// (v3.0.5) driverVersion = DRIVER_VERSION, only when it isn't already (saving driver code calls neither installed() nor
+// updated(): the heartbeat and refresh() call this too)
+private void stampVersion() {
+    if (device.currentValue("driverVersion") != DRIVER_VERSION) sendEvent(name: "driverVersion", value: DRIVER_VERSION, descriptionText: "Skypane Notifier ${DRIVER_VERSION}")
+}
 private void publishAlerts() {
     List alerts = state.alerts ?: []
     // [[id, level, expiry]] — the texts go with panelCommand (an event value should stay short)

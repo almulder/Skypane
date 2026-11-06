@@ -39,6 +39,12 @@ FIELDS = {
                            "A pattern on Protect's camera type; default: older G3 cameras"),
     # (v3.0.4) optional: One Call 3.0 — fetched by the server once for the house (service/weather_sources.py)
     "OWM_API_KEY": ("Weather", "OpenWeatherMap key", r"[A-Za-z0-9]{16,64}", True, "Optional: 8 days, 48 hours and alerts in one call"),
+    # (v3.0.5) the UPS / battery backup card from a NUT server (service/nut_ups.py: read-only questions only)
+    "NUT_HOST": ("UPS", "NUT server address", HOST, False, "The machine running NUT, e.g. your Unraid server (Settings → UPS Settings)"),
+    "NUT_PORT": ("UPS", "NUT server port", r"\d{1,5}", False, "3493"),
+    "NUT_USER": ("UPS", "NUT user", NAME, False, "Empty = no login (most NUT servers let anyone read)"),
+    # (v3.0.5) printable ASCII only, never " or \ (the NUT line can't carry them; a non-ASCII one crashed the child)
+    "NUT_PASSWORD": ("UPS", "NUT password", r"[!#-\[\]-~]{1,128}", True, "Only if your NUT server needs a login"),
     "SONOS_PANEL_URL": ("Music", "Music page (Sonos Panel)", URL, False, "The page the Music button opens"),
     "TZ": ("General", "Time zone", r"[A-Za-z_]{1,32}(/[A-Za-z0-9_+-]{1,32}){0,2}", False,
            "UTC — the default; set yours, e.g. America/New_York"),
@@ -56,7 +62,7 @@ HIDDEN = {"ALLOWED_HOSTS", "BRIDGE_ALLOW"}
 IMAGE_DEFAULTS = {"MQTT_PORT": "1883", "TZ": "UTC"}
 # an address and the secret that is sent to it
 HOST_SECRET = {"HUBITAT_HOST": "HUBITAT_TOKEN", "PROTECT_HOST": "PROTECT_API_KEY", "UNIFI_HOST": "UNIFI_API_KEY",
-               "MQTT_HOST": "MQTT_PASSWORD"}
+               "MQTT_HOST": "MQTT_PASSWORD", "NUT_HOST": "NUT_PASSWORD"}
 
 
 class Invalid(ValueError):
@@ -91,7 +97,7 @@ def check(key, value):
     host = value if FIELDS[key][2] == HOST else re.sub(r"^[A-Za-z]+://([^/:?#]*).*$", r"\1", value) if FIELDS[key][2] == URL else ""
     if host and not ip_ok(host.split(":")[0] if host.count(":") == 1 else host):
         raise Invalid(f"{FIELDS[key][1]}: not a valid IP address (four numbers 0–255, e.g. 192.168.1.10)")
-    if key in ("MQTT_PORT", "MQTT_WS_PORT") and value and not 1 <= int(value) <= 65535:
+    if key in ("MQTT_PORT", "MQTT_WS_PORT", "NUT_PORT") and value and not 1 <= int(value) <= 65535:
         raise Invalid(f"{FIELDS[key][1]}: 1-65535")
     if key == "TILE_MEDIUM_MODELS" and value:   # compiled by protect_sync.py: must be a valid pattern
         try:

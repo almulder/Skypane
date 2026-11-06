@@ -62,6 +62,9 @@
   const viewNow = () => (S.isPhone() ? "basic" : S.view("devices") || "basic");
 
   // ================================================================== one device, worked out (for the rows, filters, table)
+  // (v3.0.5) the protocols the Skypane Helper app reports (service/hubitat_helper.py PROTOCOLS)
+  const PROTOS = ["zigbee", "zwave", "matter", "lan", "app", "virtual"];   // i18n-ok (the server's values)
+  const protoWord = (p) => K.t(`devices.proto.${p || "none"}`);
   const ago = (t) => K.ago(t, "short");   // (kit.js: one "time ago" for every page)
   const when = (t) => {
     const d = new Date(t * 1000), now = new Date();
@@ -126,7 +129,9 @@
     if (Object.keys(o).length) rules.push("changed");
     const isNew = ctx ? ctx.isNew.has(c.id) : (d.newIds || []).includes(c.id);
     return { c, o, id: c.id, name: c.label || K.t("devices.unnamed", { id: c.id }), role, type: TYPE_OF(role), room: o.room || c.room || c.hubRoom || K.t("devices.noRoom"), noRoom: !(o.room || c.room || c.hubRoom),   // (v3.0.0: the flag decides, the words only show)
-      states, main, battery, health, lastAt: lv.lastAt || null, driver: c.type || "", rules, isNew, firstSeen: (d.firstSeen || {})[c.id] || null, vals: v, pending: !!ov };
+      states, main, battery, health, lastAt: lv.lastAt || null, driver: c.type || "", rules, isNew, firstSeen: (d.firstSeen || {})[c.id] || null, vals: v, pending: !!ov,
+      // (v3.0.5) its protocol, as the Skypane Helper app reported it (null: no Helper, or not one of its devices)
+      protocol: PROTOS.includes((d.protocols || {})[String(c.id)]) ? d.protocols[String(c.id)] : null };
   }
   const iconOf = (i) => ICON_FOR[i.role] || TYPE_ICON[i.type] || "grid";
   // (v2.9.2) the state a command just sent asks for, shown at once over the reported one: device id →
@@ -151,6 +156,8 @@
     rule: { d: "pin, unlock, view-only, hidden, changed", get: (i) => (i.rules.length ? i.rules : ["none"]) },   // i18n-ok (the values typed in the filter)
     battery: { d: "low, half, good, none (mains)", get: (i) => [i.battery == null ? "none" : i.battery < BATTERY_LOW ? "low" : i.battery < 50 ? "half" : "good"] },   // i18n-ok (the values typed in the filter)
     driver: { d: K.t("devices.filter.driver"), get: (i) => [i.driver || "—"] },
+    // (v3.0.5) protocol:zigbee … (the Skypane Helper's report; "none" = not reported)
+    protocol: { d: K.t("devices.filter.protocol"), get: (i) => [i.protocol || "none"] },
     new: { d: K.t("devices.filter.new"), get: (i) => [i.isNew ? "yes" : "no"], hidden: true },
   };
   const valuesOf = (k, list, aliases) => {
@@ -722,14 +729,18 @@
     });
   }
   const byName = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" }).compare;   // ("Door 46" before "Door 414")
+  const usedOf = (id) => ((D() || {}).used || {})[String(id)] || { panels: 0, cards: 0 };   // (v3.0.5)
   const COLS = [
     ["name", K.t("devices.col.name"), "", (i) => i.name.toLowerCase()],
     ["room", K.t("devices.room"), "", (i) => i.room.toLowerCase()],
     ["as", K.t("devices.showsAs"), "c-mid", (i) => M.roleName(i.role).toLowerCase()],
+    // (v3.0.5) In use: the panels and cards whose layouts show it (the server's "used"), as a badge with a count
+    ["used", K.t("devices.col.inUse"), "c-use", (i) => usedOf(i.id).cards || null],
     ["state", K.t("devices.col.state"), "", (i) => i.main[0].toLowerCase()],
     ["battery", K.t("devices.col.battery"), "", (i) => i.battery],
     ["last", K.t("devices.col.last"), "", (i) => (i.lastAt ? -i.lastAt : null)],
     ["driver", K.t("devices.col.driver"), "c-drv", (i) => i.driver.toLowerCase() || null],
+    ["protocol", K.t("devices.col.protocol"), "c-pro", (i) => i.protocol],   // (v3.0.5)
     ["id", K.t("devices.col.id"), "c-wide", (i) => i.id],
     ["rules", K.t("devices.col.rules"), "", (i) => (i.isNew ? "0" : "") + i.rules.join(",")],
   ];
@@ -803,12 +814,14 @@
           const on = hasChip(k, v);
           return el("button.fo" + (on ? ".on" : ""), { type: "button", role: "checkbox", "aria-checked": String(on), "data-fk": `fo:${k}:${v}`, onclick: () => { toggleChip(k, v); draw(); } },
             el("span.cb", {}, on ? ic("check", 10) : null), k === "state" ? el("span.dot." + (DOT[v] || "ok")) : null,
-            el("span.fl", {}, k === "battery" ? { low: K.t("devices.facet.low", { n: BATTERY_LOW }), half: K.t("devices.facet.half"), good: K.t("devices.facet.good"), none: K.t("devices.mains") }[v] || v : k === "type" || k === "state" || k === "rule" ? word(v) : v),
+            el("span.fl", {}, k === "battery" ? { low: K.t("devices.facet.low", { n: BATTERY_LOW }), half: K.t("devices.facet.half"), good: K.t("devices.facet.good"), none: K.t("devices.mains") }[v] || v : k === "type" || k === "state" || k === "rule" ? word(v) : k === "protocol" ? protoWord(v === "none" ? null : v) : v),
             el("span.n", {}, String(n)));
         }));
     };
     const top = parts.facets.scrollTop;
-    parts.facets.replaceChildren(...[grp("room", K.t("devices.room")), grp("type", K.t("devices.col.type")), grp("state", K.t("devices.col.state")), grp("battery", K.t("devices.col.battery")), grp("rule", K.t("devices.col.rules")), grp("driver", K.t("devices.col.driver"), 25)].filter(Boolean));
+    parts.facets.replaceChildren(...[grp("room", K.t("devices.room")), grp("type", K.t("devices.col.type")), grp("state", K.t("devices.col.state")), grp("battery", K.t("devices.col.battery")), grp("rule", K.t("devices.col.rules")), grp("driver", K.t("devices.col.driver"), 25),
+      // (v3.0.5) the protocol facet — only once the Skypane Helper has reported
+      Object.keys(D().protocols || {}).length ? grp("protocol", K.t("devices.col.protocol")) : null].filter(Boolean));
     parts.facets.scrollTop = top;
   }
   function sortedShown(list) {
@@ -850,10 +863,13 @@
           el("td.nm2", {}, el("button.rowb", { type: "button", "data-fk": `dev:${i.id}`, onclick: (e) => { e.stopPropagation(); openDev(i.id, true); } },
             el("span.di" + (i.main[1] === "lit" ? ".on" : ""), {}, iconEl(iconOf(i), 15)), el("span.ell", {}, i.name))),
           el("td.rm", { title: i.room }, i.room), el("td.c-mid", {}, M.roleName(i.role)),
+          ((u, w) => el("td.c-use", { title: w || null }, K.trash ? K.trash.inUseBadge(u.cards, w) : String(u.cards || "—")))(usedOf(i.id),
+            usedOf(i.id).cards ? [K.t("trash.nPanels", { n: usedOf(i.id).panels }), K.t("trash.nCards", { n: usedOf(i.id).cards })].join(" · ") : ""),   // i18n-ok (a separator)
           el("td", {}, el("span.sd" + (i.main[1] === "bad" ? ".bad" : i.main[1] === "warn" ? ".warn" : ""), {}, el("span.dot." + dotOf(i.main[1])), i.main[0])),
           el("td.mono", {}, i.battery == null ? el("span.muted", {}, "—") : [el("span.bbar", {}, el("i" + (i.battery < BATTERY_LOW ? ".bad" : i.battery < 35 ? ".warn" : ""), { style: `width:${i.battery}%` })), `${i.battery}%`]),   // i18n-ok (selectors, CSS: not words)
           el("td.mono" + (i.health === "offline" ? ".bad" : ""), { "data-ago": i.lastAt ? String(i.lastAt) : null }, i.lastAt ? ago(i.lastAt) : el("span.muted", {}, "—")),
           el("td.c-drv.drv", { title: i.driver }, i.driver || "—"),
+          el("td.c-pro", {}, i.protocol ? protoWord(i.protocol) : el("span.muted", {}, "—")),   // (v3.0.5)
           el("td.mono.c-wide.muted", {}, String(i.id)),
           ((t) => el("td", {}, t.length ? t : el("span.muted", {}, "—")))(ruleTags(i, true)));
         tr.addEventListener("click", () => openDev(i.id, true));
@@ -959,9 +975,9 @@
   function exportCsv() {
     const shown = sortedShown(allInfo());
     const q = (s) => `"${String(s == null ? "" : s).replace(/"/g, '""')}"`;
-    const lines = [[K.t("devices.col.name"), K.t("devices.room"), K.t("devices.showsAs"), K.t("devices.col.state"), K.t("devices.col.battery"), K.t("devices.col.last"), K.t("devices.col.driver"), K.t("devices.col.id"), K.t("devices.col.rules")].map(q).join(",")];
+    const lines = [[K.t("devices.col.name"), K.t("devices.room"), K.t("devices.showsAs"), K.t("devices.col.state"), K.t("devices.col.battery"), K.t("devices.col.last"), K.t("devices.col.driver"), K.t("devices.col.protocol"), K.t("devices.col.id"), K.t("devices.col.rules")].map(q).join(",")];
     for (const i of shown) lines.push([i.name, i.room, M.roleName(i.role), i.main[0], i.battery == null ? "" : i.battery, i.lastAt ? new Date(i.lastAt * 1000).toISOString() : "",
-      i.driver, i.id, i.rules.join(" ")].map((x) => q(/^\s*[=+\-@]|^[\t\r]/.test(String(x)) ? `'${x}` : x)).join(","));
+      i.driver, i.protocol ? protoWord(i.protocol) : "", i.id, i.rules.join(" ")].map((x) => q(/^\s*[=+\-@]|^[\t\r]/.test(String(x)) ? `'${x}` : x)).join(","));
     const url = URL.createObjectURL(new Blob(["\ufeff" + lines.join("\r\n") + "\r\n"], { type: "text/csv;charset=utf-8" }));
     const a = el("a", { href: url, download: "skypane-devices.csv" }); document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
