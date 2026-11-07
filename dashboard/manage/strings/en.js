@@ -860,7 +860,7 @@ window.SKYPANE_STRINGS.en = {
   "health.spark.bad": "down",
   "health.spark.label": "The last 24 hours, an hour per bar",
   "health.card.hubSub": "Hubitat + bridge",
-  "health.card.hubDo": "Check that the hub has power and its network; its address is in Integrations → Hubitat.",
+  "health.card.hubDo": "Check that the hub has power and its network; its address is in Integrations → Home hub.",
   "health.card.brokerSub": "MQTT messages",
   "health.card.brokerDo": "The panels hear device changes and alerts through it — check that it runs (Integrations → MQTT).",
   "health.card.cameras": "Camera video",
@@ -1188,7 +1188,7 @@ window.SKYPANE_STRINGS.en = {
   "devices.groups": "Groups & rules",
   "devices.groupsN": "Groups & rules · {n}",
   "devices.lead": "Everything your hub knows about — how each one shows on the panels, its room and its safety rules.",
-  "devices.bridgeDown": "The Hubitat bridge isn't running (Integrations → Hubitat, or the server's log): changes here are saved, and the panels get them when it runs again.",
+  "devices.bridgeDown": "The Hubitat bridge isn't running (Integrations → Home hub, or the server's log): changes here are saved, and the panels get them when it runs again.",
   "devices.new.found": {"one": "{n} new device found on the hub", "other": "{n} new devices found on the hub"},
   "devices.new.namesMore": {"one": "{names} and {n} more — check how each shows on the panels and its room.", "other": "{names} and {n} more — check how each shows on the panels and its room."},
   "devices.new.names": "{names} — check how each shows on the panels and its room.",
@@ -5589,7 +5589,7 @@ window.SKYPANE_STRINGS.en = {
   "lists.preview.quickAdd": "Quick add",
   "lists.preview.pinned": "Pinned notes",
   "lists.preview.noPinned": "No pinned notes",
-  // (v3.0.5) Integrations → Hubitat: the Skypane Notifier driver's version check
+  // (v3.0.5) Integrations → Home hub: the Skypane Notifier driver's version check
   "integrations.notifier.label": "Skypane Notifier",
   "integrations.notifier.ok": "Up to date",
   "integrations.notifier.old": "Out of date",
@@ -5611,7 +5611,7 @@ window.SKYPANE_STRINGS.en = {
   "integrations.notifier.installTitle": "Install the Skypane Notifier (once, on the hub)",
   "integrations.notifier.instDriver": "In Hubitat, open Drivers code, click + New Driver, then Import. Paste this address and click Import, then Save.",
   "integrations.notifier.instDevice": "Devices → Add Device → Virtual. Name it Skypane, pick the type Skypane Notifier and click Save Device.",
-  "integrations.notifier.instMaker": "Apps → Maker API: tick the new Skypane device and click Done.",
+  "integrations.notifier.instMaker": "Apps → Skypane Helper: under Skypane Notifier → A Skypane Notifier you made yourself, pick the new Skypane device and click Done.",
   "integrations.notifier.instTest": "Test it: on the Skypane device, type Test next to Info and press Info. Every panel shows “Test” for a minute.",
   "integrations.notifier.failed": "Import says Failed to fetch? Open the address in your browser, copy everything on the page, paste it over all the code in the driver, and click Save.",
   "integrations.notifier.copy": "Copy",
@@ -5623,7 +5623,7 @@ window.SKYPANE_STRINGS.en = {
   "integrations.notifier.checkedHave": "Checked: {state} · the hub has {have}",
   "integrations.notifier.unknownState": "the hub hasn't said yet",
   "integrations.notifier.lastChecked": "Last checked {when}",
-  // (v3.0.5) the Skypane Helper Hubitat app (Integrations → Hubitat)
+  // (v3.0.5) the Skypane Helper Hubitat app (Integrations → Home hub)
   "integrations.helper.label": "Skypane Helper",
   "integrations.helper.linked": "Linked",
   "integrations.helper.notLinked": "Not linked",
@@ -5673,7 +5673,7 @@ window.SKYPANE_STRINGS.en = {
   "integrations.helper.loginOff": "Hub login: none (needed only with Hub Login Security)",
   "integrations.helper.unlink": "Unlink",
   "integrations.helper.unlinkQ": "Unlink the Skypane Helper? It stops reporting until you link it again with a new code.",
-  // (v3.0.7) the Skypane Helper as the hub link (Integrations → Hubitat)
+  // (v3.0.7) the Skypane Helper as the hub link (Integrations → Home hub)
   "integrations.helper.notLinkedHub": "Skypane's link to your hub, in place of Maker API: one app, one token it makes itself, and the Notifier made for you.",
   "integrations.helper.setUp": "Set up with the Skypane Helper",
   "integrations.helper.hubLink": "Hub link",
@@ -5728,7 +5728,7 @@ window.SKYPANE_STRINGS.en = {
   "hubhelper.hpm.two": "Paste the manifest address below and press Next. It installs the Helper app with OAuth turned on.",
   "hubhelper.hpm.three": "Then Apps → Add user app → Skypane Helper.",
   "hubhelper.hand.title": "By hand",
-  "hubhelper.hand.one": "On the hub: Apps Code → New app → Import.",
+  "hubhelper.hand.one": "On the hub: Apps Code → + New App → Import.",
   "hubhelper.hand.two": "Paste the import address below, press Import, then Save.",
   "hubhelper.hand.three": "Press OAuth → Enable OAuth in App → Update. (Package Manager does this part for you.)",
   "hubhelper.hand.four": "Then Apps → Add user app → Skypane Helper.",
@@ -5823,7 +5823,7 @@ window.SKYPANE_STRINGS.en = {
   "hubhelper.done.commands": "commands · its own endpoint",
   "hubhelper.done.linked": "Linked",
   "hubhelper.done.notifier": "Skypane Notifier (child device)",
-  "hubhelper.done.integrations": "Integrations → Hubitat now says “Events and commands go through the Skypane Helper”.",
+  "hubhelper.done.integrations": "Integrations → Home hub now says “Events and commands go through the Skypane Helper”.",
   "hubhelper.toIntegrations": "Back to Integrations",
   "hubhelper.new.title": { "one": "{n} device not given to the Helper", "other": "{n} devices not given to the Helper" },
   "hubhelper.new.text": "The hub has {hub} devices; the Helper was given {given}. Skypane can't show {names} until they're added.",
@@ -5918,7 +5918,7 @@ window.SKYPANE_STRINGS.en = {
   "hubhelper.rm.forgot": "Skypane forgot Maker API",
   // (v3.0.7) when the Helper stops answering: a problem, never a fallback to Maker API
   "hubhelper.down.title": "If the Helper stops answering",
-  "hubhelper.down.ok": "The Helper answers. If it ever stops, Skypane shows a problem here and on Integrations → Hubitat. It never moves back to Maker API by itself.",
+  "hubhelper.down.ok": "The Helper answers. If it ever stops, Skypane shows a problem here and on Integrations → Home hub. It never moves back to Maker API by itself.",
   "hubhelper.down.notYet": "Maker API is the hub link until you switch. After that, Skypane never moves back to Maker API by itself.",
   "hubhelper.down.bad": "The Skypane Helper doesn't answer.",
   "hubhelper.down.noFallback": "Panels show their devices' last known state.",

@@ -18,8 +18,9 @@ Lost the password later? See [troubleshooting.md](troubleshooting.md#i-forgot-th
 
 ## 2. Check your devices
 
-**Sidebar → Devices.** It lists everything Hubitat shares through Maker API, grouped by room (the rooms come from
-Hubitat). Click a device to open its settings.
+**Sidebar → Devices.** It lists every device you gave the Skypane Helper on the hub, grouped by room (the rooms come
+from Hubitat). Click a device to open its settings. A device missing? On the hub: **Apps → Skypane Helper → Devices for
+Skypane**, tick it, then **Done** ([hubitat.md](hubitat.md#2-later-new-devices-and-updates)).
 
 - **Shows as:** what each device is on the panels (light, fan, lock, door, sensor…). Skypane guesses; fix the ones that
   are wrong. **Hidden** keeps a device off the panels.
@@ -151,7 +152,8 @@ panel count catches up after a page reload.
   More: [help.md](help.md#cameras).
 - **Calendars:** **Integrations → Calendars** — a read-only iCal / ICS link per calendar (Google: *Secret address in
   iCal format*; Outlook / iCloud: their published link). The panels' calendar cards show them.
-- **Alerts from Hubitat rules:** install the Skypane Notifier ([hubitat.md](hubitat.md#3-the-skypane-notifier--alerts-from-your-rules-recommended)).
+- **Alerts from Hubitat rules:** the Skypane Helper already made the Skypane Notifier; test it and use it in your rules
+  ([hubitat.md](hubitat.md#3-the-skypane-notifier--alerts-from-your-rules-recommended)).
 - **Guest Wi-Fi:** the panels show a QR code for guests. With a UniFi console (e.g. a UDM Pro) — **Integrations →
   Guest Wi-Fi console** — Skypane can change the guest password by itself (after guests leave, or every few days), and
   the panels' QR code follows. Without one, type the network yourself on **Guest Wi-Fi** and change the password by

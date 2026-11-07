@@ -51,11 +51,13 @@ tab → the Skypane icon → **Restart**; Docker: `docker restart skypane`) and 
 
 ## No devices, or "Hubitat not set up"
 
-- The log says `Hubitat not set up (Manager page → Integrations) — bridge not started`: fill in **Integrations → Home
-  hub** (address, Maker API app number, token) and **Save and restart** ([hubitat.md](hubitat.md)).
-- Health says the hub can't be reached: check the hub's address, and that Maker API has **Allow Access via Local IP
-  Address** on.
-- A device is missing: tick it in the **Maker API** app. It shows within a few minutes.
+- The log says `Hubitat not set up (Manager page → Integrations) — bridge not started`: open **Integrations → Home
+  hub** → **Set up with the Skypane Helper** and follow the steps ([hubitat.md](hubitat.md)).
+- Health says the hub can't be reached, or the Manager says **The Skypane Helper doesn't answer**: check that the hub is
+  on and opens in a browser, then open **Apps → Skypane Helper** on the hub. If it says **Not linked**, make a new link
+  code; if it says OAuth is off, turn it on ([hubitat.md](hubitat.md#troubleshooting)).
+- A device is missing: tick it in the Helper (**Apps → Skypane Helper → Devices for Skypane**, then **Done**). It shows
+  within a few minutes.
 
 ## Pairing problems
 
@@ -164,7 +166,7 @@ OpenWeatherMap with your key, else Open-Meteo. A source that isn't connected is 
 ## "Timer up" doesn't sound on the house speakers
 
 Only a Hubitat speaker whose driver has a `speak` command (SpeechSynthesis) can be picked, and the Hubitat bridge must
-be running. Check the speaker is ticked in Maker API and not on the never-switch list. The container log says
+be running. Check the speaker is ticked in the Skypane Helper and not on the never-switch list. The container log says
 `timers: Timer up on N of N house speaker(s)` and the bridge `Timer up: speak on device … sent` (or why not). A timer
 that ran out while Skypane was stopped isn't spoken later.
 

@@ -36,7 +36,7 @@ This page — the **Manager** — is where you set it all up from a laptop or a 
 
 **What it works with**
 
-- **Hubitat** — every device, room and mode comes from your hub (through Maker API). Alerts come from Hubitat rules too ([Alerts come from Hubitat](#alerts-hubitat)).
+- **Hubitat** — every device, room and mode comes from your hub (through the Skypane Helper app). Alerts come from Hubitat rules too ([Alerts come from Hubitat](#alerts-hubitat)).
 - **Cameras** — UniFi Protect cameras show up by themselves. Other cameras work too (an RTSP, RTMP or MJPEG address); the video is played through the built-in go2rtc ([Cameras: Setup, your own cameras and views](#cameras)).
 - **Switchboard** — another project by the same author: a Hubitat app for announcements, notifications and sirens. It is also still in development.
 - **Sonos Panel** — a page by the same author for people with a Sonos system. A panel's **Music page** setting can open it from the panel's Music button ([A panel's General settings](#panel-general)).
@@ -1161,7 +1161,7 @@ See also: [The Skypane Notifier driver (Hubitat)](#notifier-driver) · [Alerts o
 
 1. Hubitat → **Drivers Code** → **+ New Driver** → **Import** → the same address you open the Manager with, without /admin, followed by /hubitat/SkypaneNotifier.groovy — e.g. http://192.168.1.50/hubitat/SkypaneNotifier.groovy on Unraid, or http://192.168.1.20:8088/hubitat/SkypaneNotifier.groovy with Docker (Skypane serves the driver itself) → **Import** → **Save**. Import says “Failed to fetch”? Open that address in your browser, copy everything and paste it into the **New Driver** box instead.
 2. **Devices** → **Add Device** → **Virtual** → **Device Name:** Skypane, **Type:** *Skypane Notifier* (namespace skypane) → **Save Device**.
-3. **Apps** → **Maker API** → tick the new device. (Needed so a dismiss on a panel reaches Hubitat.)
+3. **Apps** → **Skypane Helper** → under **Skypane Notifier**, pick the new device → **Done**. (Needed so a dismiss on a panel reaches Hubitat.)
 
 **Send an alert**
 
@@ -1182,16 +1182,16 @@ notify(“Timer: Emma, Free time”) starts every Countdown & timers timer named
 <!-- (v3.0.5) the Skypane Helper app: how it links, the signed updates, and what unlinks it -->
 **Keep it up to date: the Skypane Helper app**
 
-The optional **Skypane Helper** app on the hub can update this driver for you (**Integrations** → **Hubitat** → **Link the Helper**, then type the code in the app). The link gives the app a token and a key of its own; every update Skypane offers is signed with that key, and the app checks the signature, the code's sha256 and that it is the Skypane code before it saves anything.
+The **Skypane Helper** app on the hub can update this driver for you (**Integrations** → **Home hub** → **Set up with the Skypane Helper**, then type the link code in the app). The link gives the app a token and a key of its own; every update Skypane offers is signed with that key, and the app checks the signature, the code's sha256 and that it is the Skypane code before it saves anything.
 
 > **Note:** If Skypane answers the app with 401 or 403 (you unlinked it in the Manager, or Skypane lost the link), the app **unlinks itself**: it stops asking and its page says “Not linked”. Make a new link code in the Manager and type it in the app again.
 
 <!-- (v3.0.7) the Helper is the hub link: OAuth, its own token, no Maker API, no fallback -->
 **The Skypane Helper is the hub link (3.0.7)**
 
-Since 3.0.7 the Helper does Maker API's job: **Integrations** → **Hubitat** → **Set up with the Skypane Helper** walks you through it. The app makes its own access token (OAuth must be on for it: Hubitat Package Manager turns it on; by hand, **Apps Code** → **Skypane Helper** → **OAuth** → **Enable OAuth in App** → **Update**), makes the Skypane Notifier as its own child device, and Skypane sees only the devices you pick in the app.
+Since 3.0.7 the Helper does Maker API's job: **Integrations** → **Home hub** → **Set up with the Skypane Helper** walks you through it. The app makes its own access token (OAuth must be on for it: Hubitat Package Manager turns it on; by hand, **Apps Code** → **Skypane Helper** → **OAuth** → **Enable OAuth in App** → **Update**), makes the Skypane Notifier as its own child device, and Skypane sees only the devices you pick in the app.
 
-> **Note:** There's no fallback: if the Helper stops answering, Skypane shows a problem on **Integrations** → **Hubitat** and never moves back to Maker API by itself. A hub that already uses Maker API moves over on **Switch from Maker API** (test one light, then remove the Maker API settings).
+> **Note:** There's no fallback: if the Helper stops answering, Skypane shows a problem on **Integrations** → **Home hub** and never moves back to Maker API by itself. A hub that already uses Maker API moves over on **Switch from Maker API** (test one light, then remove the Maker API settings).
 
 <!-- (v3.0.7) review: the Helper's access token works through Hubitat's cloud endpoint too -->
 > **Note:** Treat the Helper's access token like a password: it also works through Hubitat's cloud endpoint, not only on your network. Skypane keeps it on the server only and never shows it. Unlinking or reinstalling the app makes a new one (the old one stops working).
@@ -1212,11 +1212,11 @@ Skypane can use a weather device on your Hubitat hub. Its warnings (tornado, flo
 3. **Devices** → **Add Device** → **Virtual** → **Type:** *OpenWeatherMap-Alerts Weather Driver* → **Save Device**. Paste the API key, turn **API Key Version** on (3.0) and type your city.
 4. Set **Weather Alert Source** to weather.gov (in the US) or OWM, and both poll intervals to 30 minutes for the fastest warnings. A warning takes up to one update interval to appear on the panels and to clear; with more than 2 hours between updates the weather card shows Open-Meteo in between.
 5. Turn on the attributes Skypane reads: **Weather Alert**, **Condition Code**, **Condition Text**, **Forecast High/Low Temperatures**, **Forecast Code**, **Forecast Text**, **Today's Precipitation Probability**, **Precipitation Forecast**, **Local SunRise and SunSet**, **Wind Speed** and **Observation time**. Press **Save Preferences**.
-6. **Apps** → **Maker API** → tick the weather device → **Done**.
+6. **Apps** → **Skypane Helper** → **Devices for Skypane** → tick the weather device → **Done**.
 
 **In Skypane**
 
-1. **Integrations** → **Weather** → pick the device. (It shows up a few minutes after you tick it in Maker API.)
+1. **Integrations** → **Weather** → pick the device. (It shows up a few minutes after you tick it in the Skypane Helper.)
 2. Leave **Show its warnings** on, or switch it off. Which weather each card shows is now the card's own **Weather from** setting ([Weather card: places, source and days](#weather-places)).
 3. Choose the **Panels that show warnings**, and under **Warning levels** which level each kind of warning gets.
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0.8
+
+- **Guides rewritten for the Skypane Helper:** the Hubitat guide follows the Manager's setup steps (Package Manager
+  first, link code, pick devices, hub login, live checks), with troubleshooting and "Already using Maker API?". The
+  first-run guide and the README no longer mention Maker API for setup.
+- The Manager and the Helper app say **Integrations → Home hub**, matching the screen, and the Notifier step says to
+  pick it in the Helper. **Skypane Helper 3.0.8:** only that label changed.
+
 ## 3.0.7
 
 ### The Skypane Helper takes over from Maker API

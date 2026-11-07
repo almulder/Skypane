@@ -19,7 +19,8 @@ Example rule for a leak: *Trigger: Kitchen leak sensor wet → Skypane: critical
 
 ## Install (once, on the hub)
 
-The same steps as in [hubitat.md](hubitat.md#3-the-skypane-notifier--alerts-from-your-rules-recommended):
+Since 3.0.7 the Skypane Helper app installs the driver and makes the **Skypane** device for you
+([hubitat.md](hubitat.md#3-the-skypane-notifier--alerts-from-your-rules-recommended)). Only if it can't, do it by hand:
 
 1. Hubitat → **Drivers Code → + New Driver** → **Import** → paste the address below → **Import** → **Save**.
 
@@ -32,8 +33,8 @@ The same steps as in [hubitat.md](hubitat.md#3-the-skypane-notifier--alerts-from
    instead.
 2. **Devices → Add Device → Virtual** → **Device Name:** `Skypane`, **Type:** *Skypane Notifier* (under the
    `skypane` namespace) → **Save Device**.
-3. **Apps → Maker API** → tick the new **Skypane** device → **Done**. Skypane needs it there so that a dismissal on a
-   panel reaches Hubitat, and so it can ask for the alerts again after a restart.
+3. **Apps → Skypane Helper** → under **Skypane Notifier**, pick the new **Skypane** device → **Done**. Skypane needs it
+   there so that a dismissal on a panel reaches Hubitat, and so it can ask for the alerts again after a restart.
 4. Test it: open the **Skypane** device in Hubitat, type `Test` in the box next to **Info** and press **Info**. Within a
    few seconds every panel shows a short note "Test" (it goes away by itself after a minute). No panel set up yet?
    The Manager's **Overview** lists alerts that are waiting, so you can check it there too.
@@ -201,10 +202,11 @@ every 30 s:
 {"v": 1, "n": 2, "lvl": 4, "text": "Hubitat bridge not running; Panel Office is disconnected"}
 ```
 
-The bridge passes it to every notifier through the Maker API: `GET devices/<id>/serverHeartbeat/2,4,Hubitat%20bridge…`
+The bridge passes it to every notifier through the Skypane Helper's endpoint (or the Maker API on a hub not yet
+switched): `GET devices/<id>/serverHeartbeat/2,4,Hubitat%20bridge…`
 — the same message at most every 20 s, a changed one at most every 5 s. The text has only letters, digits, spaces and
-`. : ; ' ( ) ! ? + _ -` (the Maker API splits at commas; no slashes in a URL path), at most 120 characters; `OK` when
-`n` is 0. *Why the bridge and not the hub polling the server:* the bridge already holds the Maker API token and talks to
+`. : ; ' ( ) ! ? + _ -` (the hub splits at commas; no slashes in a URL path), at most 120 characters; `OK` when
+`n` is 0. *Why the bridge and not the hub polling the server:* the bridge already holds the Helper's access token and talks to
 the hub, the server has no token (by design), and a hub polling a URL would need the server's address and an open
 route — the bridge's way needs nothing new on the hub.
 

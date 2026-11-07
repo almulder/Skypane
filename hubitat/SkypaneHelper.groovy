@@ -52,7 +52,7 @@ import java.security.MessageDigest
 import javax.crypto.Mac                    // (v3.0.5) the update offer's signature
 import javax.crypto.spec.SecretKeySpec
 
-@Field static final String APP_VERSION = "3.0.7"   // (v3.0.5) Skypane reads it from here (service/hubitat_helper.py)
+@Field static final String APP_VERSION = "3.0.8"   // (v3.0.5) Skypane reads it from here (service/hubitat_helper.py)
 @Field static final String HUB = "http://127.0.0.1:8080"
 @Field static final Integer MAX_DEVICES = 500
 @Field static final Integer MAX_MISSING = 50   // (v3.0.7) as service/hubitat_helper.py MAX_MISSING
@@ -98,9 +98,9 @@ mappings {
 def mainPage() {
     dynamicPage(name: "mainPage", title: "Skypane Helper ${APP_VERSION}", install: true, uninstall: true) {
         section("Skypane") {
-            input "skypaneUrl", "text", title: "Skypane address (for example http://192.168.1.50:8088)", required: true, submitOnChange: true
+            input "skypaneUrl", "text", title: "Skypane address (for example http://192.168.1.50, or http://192.168.1.20:8088 with Docker)", required: true, submitOnChange: true
             if (!state.token) {
-                input "linkCode", "text", title: "Link code (Skypane Manager → Integrations → Hubitat → Set up with the Skypane Helper)", required: false
+                input "linkCode", "text", title: "Link code (Skypane Manager → Integrations → Home hub → Set up with the Skypane Helper)", required: false
             }
             paragraph statusText()
             if (state.token) input "unlink", "bool", title: "Unlink from Skypane (a new link code is needed after this)", defaultValue: false

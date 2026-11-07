@@ -2501,7 +2501,7 @@ def main():
         log.info("hub link: %s", "the Skypane Helper (its own endpoint)" if link["via"] == "helper" else "Maker API")
         env = {**env, "HUBITAT_HOST": link["host"], "HUBITAT_APP_ID": link["app"], "HUBITAT_TOKEN": link["token"]}
     else:   # (run_all starts the bridge only with a hub link; by hand without one it stops at the missing settings)
-        log.error("no hub link: link the Skypane Helper, or set up Maker API (Manager → Integrations → Hubitat)")
+        log.error("no hub link: link the Skypane Helper, or set up Maker API (Manager → Integrations → Home hub)")
     bridge = Bridge(args, env, via=link["via"] or "maker")
     if args.once:
         devices = bridge.maker.get("devices/all", timeout=60)

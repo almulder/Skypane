@@ -19,8 +19,8 @@ See it first: the live demo at https://skypane.huskyserver.us (nothing to instal
 
 ## What you need
 
-- A **Hubitat** hub with the **Maker API** app (built into Hubitat and free; [the Hubitat guide](docs/hubitat.md) shows
-  how).
+- A **Hubitat** hub (the free **Skypane Helper** app is installed during setup; [the Hubitat guide](docs/hubitat.md)
+  shows how).
 - A machine that runs **Docker** and stays on — an Unraid server, a Synology NAS, or a Linux / Windows / macOS
   computer. It must be an **x86-64 (Intel / AMD)** machine: not a Raspberry Pi or an ARM NAS yet.
 - **Access to your router's settings**, to give Skypane, the hub and each tablet a fixed address.
@@ -40,7 +40,7 @@ See it first: the live demo at https://skypane.huskyserver.us (nothing to instal
 | Docker or Docker Compose (any computer) | [docs/install-docker.md](docs/install-docker.md) |
 | Synology | [docs/install-docker.md](docs/install-docker.md#synology) |
 
-Then: [connect Hubitat](docs/hubitat.md) and follow the [first-run walkthrough](docs/first-run.md) — first sign-in, your
+Then: [connect Hubitat with the Skypane Helper](docs/hubitat.md) and follow the [first-run walkthrough](docs/first-run.md) — first sign-in, your
 house, your first panel on the tablet. Something not working? [Troubleshooting](docs/troubleshooting.md). Updating
 later: [docs/upgrade.md](docs/upgrade.md).
 
