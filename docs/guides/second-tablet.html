@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add a tablet — Skypane</title>
+<style>
+  :root { --bg: #140e2b; --card: #1f1740; --line: rgba(255,255,255,.1); --txt: #efeaff; --muted: #a99fd0; --acc: #a78bfa; --warn: #fbbf24; --ok: #34d399; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg) linear-gradient(160deg, #22164a 0%, #140e2b 55%) fixed; color: var(--txt);
+    font: 16px/1.55 "Segoe UI", system-ui, sans-serif; padding: 28px 16px 60px; }
+  main { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 30px; margin: 0 0 4px; } h1 span { color: var(--acc); }
+  .lead { color: var(--muted); margin: 0 0 24px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px 22px; margin: 0 0 16px; }
+  h2 { font-size: 19px; margin: 0 0 10px; display: flex; align-items: center; gap: 10px; }
+  h2 b { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--acc); color: #1b1433; font-size: 15px; flex: none; }
+  h2 small { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--muted); background: rgba(255,255,255,.07); padding: 2px 10px; border-radius: 10px; }
+  ol, ul { margin: 6px 0 4px; padding-left: 22px; } li { margin: 4px 0; }
+  code { background: rgba(255,255,255,.09); padding: 1px 6px; border-radius: 6px; font-family: Consolas, ui-monospace, monospace; font-size: 14px; }
+  .path { color: var(--acc); font-weight: 600; }
+  .note, .warn, .tip { border-radius: 12px; padding: 10px 14px; margin: 10px 0 2px; font-size: 14.5px; }
+  .note { background: rgba(167,139,250,.12); } .warn { background: rgba(251,191,36,.12); border-left: 3px solid var(--warn); }
+  .tip { background: rgba(52,211,153,.1); border-left: 3px solid var(--ok); }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 14.5px; }
+  td, th { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .check li { list-style: none; margin-left: -22px; } .check li::before { content: "☐  "; color: var(--acc); }
+  footer { color: var(--muted); font-size: 13px; text-align: center; margin-top: 24px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Add a second <span>tablet</span></h1>
+  <p class="lead">From a new tablet out of the box to a working Skypane panel — about 20 minutes. In this guide your
+    server is <code>192.168.1.50</code> (with Docker: <code>192.168.1.20:8088</code> — add <code>:8088</code> everywhere);
+    the example panel is called <b>Office</b> (use your own name).</p>
+
+  <section>
+    <h2><b>0</b>What you need</h2>
+    <ul>
+      <li>The tablet (any Android tablet works; the same PoE wall-tablet model as the kitchen also gets the LED strip and
+        sensors — step 8).</li>
+      <li>It must join your <b>home Wi-Fi / LAN</b> — the network Skypane is on (a guest or work network that can't
+        reach the server won't do).</li>
+      <li>Your Manager open on a computer: <code>http://192.168.1.50/admin/</code>, signed in as the admin.</li>
+    </ul>
+    <div class="note">Since Skypane 3.0.2 a panel works only on the tablet you approved for it. The tablet shows a
+      code, you approve it in the Manager, and it opens its own panel by itself from then on — even when its IP
+      address changes. More: <code>docs/panel-pairing.md</code>.</div>
+  </section>
+
+  <section>
+    <h2><b>1</b>Connect the tablet to Wi-Fi<small>tablet</small></h2>
+    <ol>
+      <li>Connect the tablet to the home Wi-Fi (or plug in PoE).</li>
+      <li>A fixed IP address in your router isn't needed any more: the panel follows the tablet's key, not its
+        address.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2><b>2</b>Install FreeKiosk<small>tablet</small></h2>
+    <ol>
+      <li>Install <b>FreeKiosk</b> (Google Play, or its official GitHub releases page) — the same kiosk app as the
+        kitchen panel.</li>
+      <li>Allow what it asks for (display over other apps, device admin / kiosk lock) so it can stay on screen.</li>
+    </ol>
+    <div class="warn">Pair the tablet <b>inside FreeKiosk</b> (next steps), not in Chrome first: the panel's key lives
+      in the browser that was approved.</div>
+  </section>
+
+  <section>
+    <h2><b>3</b>Point FreeKiosk at Skypane<small>tablet</small></h2>
+    <table>
+      <tr><th>FreeKiosk setting</th><th>Set it to</th></tr>
+      <tr><td>Start page / URL</td><td><code>http://192.168.1.50/</code> — Skypane's own address. Before pairing it
+        shows the code; after, it sends the tablet on to its panel.</td></tr>
+      <tr><td>Start on boot</td><td>On</td></tr>
+      <tr><td>Kiosk / lock mode</td><td>On (so the panel can't be swiped away)</td></tr>
+      <tr><td>Keep the screen on</td><td>On — Skypane keeps itself awake during tests and wakes the screen for alerts</td></tr>
+      <tr><td>Zoom / desktop mode</td><td>Off (100 %) — Skypane measures the real screen and sizes itself</td></tr>
+    </table>
+    <div class="tip">Setting names differ a little between FreeKiosk versions — look for these in its settings menu.</div>
+  </section>
+
+  <section>
+    <h2><b>4</b>Pair it: approve the code<small>tablet + computer</small></h2>
+    <ol>
+      <li>Restart FreeKiosk. The tablet shows <b>Connect this panel</b> with a 6-character code (e.g.
+        <code>K7M Q2X</code>) and what it is (e.g. Chrome on Android, SM-T500). The code changes every 10 minutes; leave
+        the screen open meanwhile.</li>
+      <li>In the Manager: <span class="path">Panels → New panel requests</span> → <b>Approve</b> next to that tablet.</li>
+      <li>Type <b>the code on the tablet</b> (capitals or not, spaces don't matter) and a name: <code>Office</code>. The
+        line under the name says <i>Creates a new panel at /office</i>. Press <b>Approve</b>.
+        <ul>
+          <li>Made the panel already (<span class="path">Panels → Add panel</span>)? Type its name, or pick it under
+            <b>Or take over:</b> — the tablet takes over that panel with its settings.</li>
+          <li>A panel that already has a tablet is refused: <b>Unlink device</b> on it first (step 7), or choose
+            another name.</li>
+        </ul></li>
+      <li>The tablet says <i>Connected as Office</i>, shows <code>http://192.168.1.50/office</code> and opens it after a
+        few seconds. A brand-new panel starts <b>blank</b>: an empty Home page with only the settings gear, no LED
+        strip — you fill it in step 6.</li>
+    </ol>
+    <div class="note">Nothing under New panel requests? <b>Accept new panels</b> (the switch on that box) must be on —
+      otherwise the tablet says <i>Pairing is closed</i>. And the request lasts only while the tablet shows the code.</div>
+  </section>
+
+  <section>
+    <h2><b>5</b>Connect FreeKiosk's extras (MQTT)<small>tablet + computer</small></h2>
+    <p>This lets Skypane turn the screen on and off, set the volume, speak alerts and pop up cameras on this tablet.</p>
+    <ol>
+      <li>Manager: <span class="path">Integrations → Message broker → Login for devices</span> → use <b>Copy user</b>
+        and <b>Copy password</b> (the password is never typed by hand).</li>
+      <li>Manager: <span class="path">Panels → Setup → Office → General → Set up the tablet</span>: note its
+        <b>FreeKiosk device name</b> (e.g. <code>office</code>). Every tablet needs its <b>own</b> name.</li>
+      <li>In FreeKiosk → <b>MQTT</b>:
+        <table>
+          <tr><td>Broker</td><td><code>192.168.1.50</code> &nbsp; port <code>1883</code></td></tr>
+          <tr><td>Username</td><td>paste it from the Manager</td></tr>
+          <tr><td>Password</td><td>paste it from the Manager</td></tr>
+          <tr><td>Device name</td><td>the FreeKiosk name from above (e.g. <code>office</code>)</td></tr>
+        </table>
+      </li>
+      <li>Check the <b>version tag</b> in the panel's lower-left corner matches the one in the Manager's sidebar.</li>
+    </ol>
+    <div class="warn">Keep that password to yourself — it can switch things through the broker. Don't paste it into
+      chats, forums or screenshots.</div>
+  </section>
+
+  <section>
+    <h2><b>6</b>Make it its own<small>computer</small></h2>
+    <p>Everything is per panel, in <span class="path">Panels → Setup → Office</span>. Changes wait in a bar at the
+      bottom (<i>2 changes waiting</i>) until you press <b>Save</b>; then they go to the panel at once.</p>
+    <ul>
+      <li><b>Look &amp; layout</b> — theme, background, room bar, and the builder for its Home page and room pages (or
+        start from a built-in layout, or copy another panel's).</li>
+      <li><b>Rooms &amp; devices</b> — which rooms show, extra devices from other rooms, the order.</li>
+      <li><b>Cameras</b>, <b>People &amp; calendars</b>, <b>Guest Wi-Fi card</b>, <b>Weather effects</b>.</li>
+      <li><b>Safety</b> (admin) — the panel PIN for every panel, how long it stays unlocked, and whether this panel
+        may unlock locks.</li>
+      <li>Run the <b>benchmark</b> once (<b>Weather effects</b>) with the tablet on — it picks how heavy the weather
+        effects can be on this tablet.</li>
+    </ul>
+    <p>Then on the tablet: tap a light to test. Anything that needs the <b>panel PIN</b> (garage, unlocking, Settings)
+      asks for the same PIN as the other panels.</p>
+    <div class="note">The Hubitat <b>Skypane Notifier</b> driver targets panels by name — after adding Office you can send
+      alerts or spoken messages to it (or "all").</div>
+  </section>
+
+  <section>
+    <h2><b>7</b>Later: replacing or moving a tablet<small>computer</small></h2>
+    <p>In <span class="path">Panels → Setup → Office</span>, the <b>Its tablet</b> card shows the device, its last IP,
+      when it was last seen and when it was paired:</p>
+    <ul>
+      <li><b>Unlink device</b> — the tablet loses its key; Office keeps its name and settings and waits, unclaimed. Pair
+        the new tablet with the name <code>Office</code> and it takes over.</li>
+      <li><b>Move this device to…</b> — this tablet takes over another, unclaimed panel.</li>
+      <li><b>Rename</b> — only the name; the address and FreeKiosk name stay.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><b>8</b>Only for the same PoE wall-tablet model: LED strip &amp; sensors<small>optional</small></h2>
+    <p>The kitchen panel runs a small <b>panel agent</b> for its LED strip and built-in sensors. A second panel of the
+      same model can run it too. It needs <b>adb</b> (developer options → USB/network debugging) once; <b>root is not
+      needed</b> since Skypane 3.0.5 (without root the agent is started again over adb after a reboot). The full steps,
+      with and without root: <b>docs/guides/led-agent.html</b> (in the Manager: Help &amp; guides → The LED agent). In
+      short:</p>
+    <!-- (v3.0.5) no root needed any more: the download, both install paths and self-update are in led-agent.html -->
+    <ol>
+      <li>Turn on network debugging on the new panel and note its address (e.g. <code>192.168.1.61:5555</code>).</li>
+      <li>Manager → <span class="path">Help &amp; guides → The LED agent → Download the LED agent</span>, and unzip it.</li>
+      <li>Without root: push <code>panel-agent</code>, <code>start-agent-noroot.sh</code> and <code>install-agent-noroot.sh</code>
+        to <code>/data/local/tmp</code>, run <code>sh /data/local/tmp/install-agent-noroot.sh</code>, and switch on
+        <b>LED agent without root</b> for the panel. With root: push <code>panel-agent</code>, <code>start-agent.sh</code>
+        and <code>install-agent.sh</code>, run <code>su 0 sh /data/local/tmp/install-agent.sh</code>, and install
+        <code>panel-agent-boot.apk</code> so the agent starts after a reboot.</li>
+      <li>Nothing more for the broker: with the built-in broker the panel page sets the agent up by itself (its name, the
+        broker, the devices login), through the agent's port on the tablet itself (<code>852</code> with root,
+        <code>8852</code> without). The agent keeps its own MQTT settings, apart from FreeKiosk's (step 5), and updates
+        itself from Skypane. Within a minute <span class="path">Panels → Setup → Office → Its tablet</span> shows
+        <b>LED agent: Connected</b>. A separate broker: write <code>agent.args</code> by hand (docs/panel-agent.md).</li>
+      <li>On this tablet, open Skypane by its IP address (e.g. <code>http://192.168.1.50/</code>), not by a name: the
+        agent connects to the broker at the address the page was opened with.</li>
+      <li>Manager → <span class="path">Panels → Setup → Office → General → This tablet</span>: switch <b>LED strip</b>
+        on (new panels start with it off).</li>
+      <li>Manager → <span class="path">Panels → Setup → Office → Alerts</span>: choose <b>This tablet's own light</b> (or
+        any Hubitat light) as the notification light.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Troubleshooting</h2>
+    <table>
+      <tr><th>What you see</th><th>Try</th></tr>
+      <tr><td>Blank page / can't connect</td><td>Is the tablet on the <b>home</b> Wi-Fi? Can it open
+        <code>http://192.168.1.50/</code> in a browser?</td></tr>
+      <tr><td>"Pairing is closed"</td><td>Switch <b>Accept new panels</b> on (<span class="path">Panels</span>, the New
+        panel requests box). The tablet asks again by itself.</td></tr>
+      <tr><td>"That isn't the code on the tablet"</td><td>Type the code the tablet shows <b>now</b> (it renews every 10
+        minutes; no 0, O, 1 or I). 5 wrong codes cancel the request — the tablet then asks with a new one.</td></tr>
+      <tr><td>The tablet isn't under New panel requests</td><td>It left the pairing screen or went to sleep. Wake it and
+        reload <code>http://192.168.1.50/</code>.</td></tr>
+      <tr><td>"Unable to connect. This panel is connected to another device"</td><td>Office already has a tablet. On
+        this one, press <b>Connect this device</b> and approve it — after <b>Unlink device</b> on Office if this
+        tablet should have it.</td></tr>
+      <tr><td>The pairing screen again, after it worked</td><td>The tablet's browser data was cleared (or FreeKiosk
+        reinstalled): the key is gone. <b>Unlink device</b> on Office, then approve the tablet with the name
+        <code>Office</code> — its settings are kept.</td></tr>
+      <tr><td>Screen on/off, volume or spoken alerts don't reach it</td><td>Step 5: broker address, login, and the
+        FreeKiosk device name must match the panel's.</td></tr>
+      <tr><td>Older version tag than the Manager</td><td>Tap the <b>Refresh</b> pill if it shows, or restart FreeKiosk.</td></tr>
+      <tr><td>Effects stutter</td><td>Run the benchmark (step 6), or lower Weather effects for this panel.</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Checklist</h2>
+    <ul class="check">
+      <li>Tablet on the home Wi-Fi</li>
+      <li>FreeKiosk: start page <code>http://192.168.1.50/</code>, start on boot, kiosk mode, screen on</li>
+      <li>Code approved in Panels → New panel requests; the tablet opened its panel</li>
+      <li>FreeKiosk MQTT: broker, devices login, device name</li>
+      <li>Loads, version tag matches, a light switches</li>
+      <li>Rooms, layout, cameras, people set for this panel and saved; benchmark run</li>
+      <li>(PoE model) panel agent (with root: + boot app; without root: the setting on), LED strip as the notification light</li>
+    </ul>
+  </section>
+  <footer>Skypane · guide written 2026-10-29, pairing added for 3.0.2 · docs/guides/second-tablet.html</footer>
+</main>
+</body>
+</html>

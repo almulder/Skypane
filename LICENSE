@@ -1,0 +1,30 @@
+Skypane — personal use license (all rights reserved)
+
+Copyright (c) 2026 almulder (https://github.com/almulder). All rights reserved.
+
+Skypane is source-available, not open source. Reading the code does not give you any right to use it beyond this
+license.
+
+You may:
+  - install and run Skypane (the ghcr.io/almulder/skypane image) for your own personal, non-commercial use in your own
+    home;
+  - send feedback, bug reports and ideas.
+
+You may not, without written permission from the copyright holder:
+  - fork, copy, reproduce or mirror the code, in whole or in part, in any form or on any site;
+  - modify the code or build your own versions of it;
+  - redistribute, sublicense, sell, rent or lease Skypane, the code or the image;
+  - use any part of the code, its design or its assets in another product, project or service;
+  - use Skypane for any commercial purpose, including installing it for customers or offering it as a paid service.
+
+Commercial use, or any use of the code: please reach out first through https://github.com/almulder to ask for written
+permission.
+
+Versions released before this license was added keep the license they were released under.
+
+Third-party components keep their own licenses — see CREDITS.md.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
