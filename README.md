@@ -11,12 +11,24 @@ designed to be so easy that even a Jeremy could use it.
 > 🚧 **Under heavy development.** Skypane is being built in a private repository and changes every week. There are no
 > public downloads or install guides right now. This page shows where the project is and what it can already do.
 
+## What's new
+
+The latest release is **3.0.40**: a new **Unraid server card**, builder settings in tabs, and mix-and-match cards.
+Before that came about **1,500 device drawings**, people and pets, and **Bambu Lab 3D printer** cards.
+
+- **[What's in Skypane](https://almulder.github.io/Skypane/)**: browse every feature by category, search, and pick a
+  release to see what it added.
+- **[CHANGELOG.md](CHANGELOG.md)**: what each release added, in plain words.
+- **[Device drawing gallery](https://almulder.github.io/ha-device-art/)**: the same drawings that are built into Skypane.
+
 ## What Skypane can do so far
 
 **Panels and layouts**
 - One layout per wall tablet, built by drag and drop in the Manager's layout builder, with ready-made templates.
 - Room pages that fill themselves in for every room, a room bar on any edge, and per-panel room choices.
 - A blank card you fill with your own pieces: buttons, values, pictures, gates, bins and more.
+- Builder settings in tidy tabs (Shows, Style, Actions, When, Place), searchable device pickers, and card and page
+  templates you can save and reuse.
 
 **Cards**
 - Lights, fans, shades, switches, locks, garage doors and gates, with live state and one-tap control.
@@ -26,6 +38,18 @@ designed to be so easy that even a Jeremy could use it.
 - A speaker card with album art, glow, progress and big touch-friendly controls for Sonos.
 - Network cards for UniFi: internet lines, a live network map, clients, PoE and status tabs.
 - Live cameras from UniFi Protect or any RTSP camera.
+- Mix-and-match cards: pick each part's look (ring, tile, bar or list), its order, and what shows at each card size.
+- 3D printer cards that draw each printer as its own model, with every spool, the camera and print alerts
+  (Bambu Lab only for now).
+- An Unraid server card (Unraid 7.2 or newer): array and pools, parity, CPU, temperatures, updates, containers, VMs and
+  problem drives, read only.
+
+**Device drawings**
+- About 1,500 of Skypane's own drawings in 16 groups, each showing its device live: on or off, brightness and color,
+  fan speed, shade position, door open or closed, a plant's moisture.
+- Pickers with search, for the whole house or per card, with colors, menus and scenery for each drawing.
+- People and pets: people who show home or away, dogs and cats, pet habitats and chicken coops.
+- Browse them all in the [device drawing gallery](https://almulder.github.io/ha-device-art/).
 
 **Looks**
 - Nearly 30 themes, including five premium ones that draw their own cards, and a set of simple, playful kids themes

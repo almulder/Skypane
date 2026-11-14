@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What's in Skypane</title>
+<meta name="description" content="Browse what Skypane, the Hubitat wall-panel dashboard, can do: panels, cards, device drawings, themes, integrations and every release.">
+<link rel="icon" href="../assets/icon-256.png">
+<style>
+:root {
+  --text: #f3efff; --faint: #8982ad; --accent: #8b5cf6; --accent-2: #a78bfa; --ok: #34d399; --new: #fbbf24;
+  --surface: rgba(32, 20, 80, .52); --surface-2: rgba(255, 255, 255, .055); --hover: rgba(255, 255, 255, .075);
+  --line: rgba(255, 255, 255, .1); --t2: rgba(234, 226, 255, .76); --acc-soft: rgba(167, 139, 250, .2); --acc-text: #dacfff;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; overflow-x: hidden; }
+body { color: var(--text); font: 14px/1.5 "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; min-height: 100vh;
+  background: #140b3a radial-gradient(1200px 700px at 70% 110%, #3a1d6e 0%, #1d1145 45%, #0b0820 100%) fixed; }
+button, input { font: inherit; color: inherit; }
+button { border: 0; background: none; cursor: pointer; padding: 0; }
+:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+a { color: var(--accent-2); }
+.skip { position: absolute; left: -999px; top: 8px; background: var(--accent); color: #fff; padding: 6px 10px; border-radius: 8px; z-index: 50; }
+.skip:focus { left: 16px; }
+
+.top { position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 16px;
+  background: rgba(20, 11, 58, .92); border-bottom: 1px solid var(--line); }
+.top h1 { margin: 0; font-size: 17px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
+.top h1 img { width: 24px; height: 24px; border-radius: 6px; }
+.top nav { display: inline-flex; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 2px; }
+.top nav a { height: 28px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 8px; font-size: 12.5px; color: var(--t2); text-decoration: none; }
+.top nav a:hover { background: var(--hover); color: var(--text); }
+.top .sp { flex: 1; }
+.top .gh { font-size: 12.5px; color: var(--t2); }
+
+.page { max-width: 1180px; margin: 0 auto; padding: 18px 16px 80px; }
+.hero { display: grid; grid-template-columns: 180px 1fr; gap: 22px; align-items: center; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 18px; padding: 18px 22px; }
+.hero img { width: 180px; height: auto; display: block; }
+.hero h2 { margin: 0 0 6px; font-size: 26px; font-weight: 700; letter-spacing: -.01em; }
+.hero p { margin: 0 0 10px; color: var(--t2); font-size: 14.5px; max-width: 64ch; }
+.badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.badge { font-size: 11.5px; font-weight: 650; padding: 3px 9px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--t2); }
+.badge.dev { color: #fde68a; border-color: rgba(251, 191, 36, .4); background: rgba(251, 191, 36, .1); }
+.badge.ver { color: var(--acc-text); background: var(--acc-soft); border-color: rgba(179, 157, 255, .5); }
+
+.art-cta { margin-top: 14px; display: flex; gap: 16px; align-items: center; text-decoration: none; color: var(--text);
+  background: linear-gradient(110deg, rgba(139, 92, 246, .35), rgba(52, 211, 153, .14)); border: 1px solid rgba(179, 157, 255, .45);
+  border-radius: 18px; padding: 14px 18px; transition: transform .15s, border-color .15s; }
+.art-cta:hover { border-color: var(--accent-2); transform: translateY(-1px); }
+.art-cta svg { flex: none; width: 54px; height: 54px; }
+.art-cta b { display: block; font-size: 16px; }
+.art-cta span { color: var(--t2); font-size: 13px; }
+.art-cta .go { margin-left: auto; flex: none; font-weight: 700; font-size: 13px; padding: 7px 12px; border-radius: 10px; background: var(--accent); color: #fff; white-space: nowrap; }
+
+section { margin-top: 26px; scroll-margin-top: 64px; }
+.sh { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin: 0 0 10px; }
+.sh h2 { margin: 0; font-size: 19px; font-weight: 650; }
+.sh small { color: var(--faint); font-size: 12.5px; }
+
+.tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+.qwrap { position: relative; flex: 0 1 320px; min-width: 0; }
+.qwrap svg { position: absolute; left: 10px; top: 9px; width: 14px; height: 14px; opacity: .6; pointer-events: none; }
+input.q { width: 100%; height: 34px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); padding: 0 10px 0 30px; }
+input.q::placeholder { color: var(--faint); }
+.counts { font-size: 12.5px; color: var(--t2); }
+.clear { font-size: 12.5px; color: var(--accent-2); text-decoration: underline; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.chip { height: 30px; display: inline-flex; align-items: center; gap: 6px; padding: 0 11px; border-radius: 9px; font-size: 12.5px; font-weight: 600;
+  background: var(--surface-2); border: 1px solid var(--line); color: var(--t2); }
+.chip:hover { background: var(--hover); color: var(--text); }
+.chip svg { width: 15px; height: 15px; flex: none; }
+.chip small { color: var(--faint); font-weight: 500; font-size: 11px; }
+.chip[aria-pressed="true"] { background: var(--acc-soft); color: var(--acc-text); border-color: rgba(179, 157, 255, .5); }
+
+.cat { margin-bottom: 18px; }
+.cat h3 { margin: 0 0 8px; font-size: 15px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
+.cat h3 svg { width: 20px; height: 20px; color: var(--accent-2); }
+.cat h3 small { color: var(--faint); font-weight: 500; font-size: 12px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.feat { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+.feat b { font-size: 14px; font-weight: 650; }
+.feat p { margin: 0; color: var(--t2); font-size: 13px; }
+.feat .meta { margin-top: auto; padding-top: 6px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.vlink { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 7px; background: var(--surface-2); border: 1px solid var(--line); color: var(--t2); }
+.vlink:hover { color: var(--acc-text); border-color: rgba(179, 157, 255, .5); }
+.tag-new { font-size: 10.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #1a1033; background: var(--new); padding: 1px 6px; border-radius: 5px; }
+mark { background: rgba(251, 191, 36, .3); color: inherit; border-radius: 3px; padding: 0 1px; }
+.empty { color: var(--faint); font-size: 13.5px; padding: 18px; background: var(--surface); border: 1px dashed var(--line); border-radius: 14px; }
+
+.tl { display: grid; grid-template-columns: 250px 1fr; gap: 14px; align-items: start; }
+.rail { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 6px; max-height: 520px; overflow-x: hidden; overflow-y: auto; }
+.rail button { width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 7px 10px; border-radius: 9px; text-align: left; color: var(--t2); font-size: 13px; }
+.rail button:hover { background: var(--hover); color: var(--text); }
+.rail button b { font-weight: 650; color: var(--text); min-width: 0; }
+.rail button small { color: var(--faint); font-size: 11px; white-space: nowrap; }
+.rail button[aria-selected="true"] { background: var(--acc-soft); }
+.rail button[aria-selected="true"] b { color: var(--acc-text); }
+.rel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; min-width: 0; position: sticky; top: 66px; }
+.rel h3 { margin: 0; font-size: 20px; font-weight: 700; }
+.rel .when { color: var(--faint); font-size: 12.5px; margin: 2px 0 12px; }
+.rel ul { margin: 0; padding-left: 18px; }
+.rel li { margin: 0 0 7px; color: var(--t2); }
+.rel li b { color: var(--text); font-weight: 650; }
+.rel .cats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.rel .nav { display: flex; gap: 8px; margin-top: 14px; }
+.btn { height: 30px; padding: 0 12px; border-radius: 9px; font-size: 12.5px; font-weight: 650; background: var(--surface-2); border: 1px solid var(--line); color: var(--t2); }
+.btn:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.btn:disabled { opacity: .4; cursor: default; }
+
+.foot { margin-top: 34px; color: var(--faint); font-size: 12.5px; border-top: 1px solid var(--line); padding-top: 14px; }
+
+@media (max-width: 760px) {
+  .top { gap: 6px 10px; } .top .gh { display: none; }
+  .page { padding: 14px 16px 60px; }
+  .hero { grid-template-columns: minmax(0, 1fr); text-align: center; padding: 16px; gap: 10px; }
+  .hero img { width: 150px; margin: 0 auto; }
+  .hero h2 { font-size: 22px; }
+  .badges { justify-content: center; }
+  .art-cta { flex-wrap: wrap; padding: 14px; }
+  .art-cta > div { flex: 1 1 180px; min-width: 0; }
+  .art-cta .go { margin-left: 0; width: 100%; text-align: center; }
+  .qwrap { flex: 1 1 100%; }
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .tl { grid-template-columns: minmax(0, 1fr); }
+  .rel { position: static; }
+  .rail button b { white-space: nowrap; }
+  .rail { display: flex; overflow-x: auto; overflow-y: hidden; max-height: none; gap: 4px; scrollbar-width: thin; }
+  .rail button { width: auto; flex: none; flex-direction: column; gap: 0; padding: 6px 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#features">Skip to features</a>
+<header class="top">
+  <h1><img src="../assets/icon-256.png" alt="">Skypane</h1>
+  <nav aria-label="Sections"><a href="#features">Features</a><a href="#releases">Releases</a><a href="https://almulder.github.io/ha-device-art/">Drawings</a></nav>
+  <span class="sp"></span>
+  <a class="gh" href="https://github.com/almulder/Skypane">GitHub · Skypane</a>
+</header>
+
+<main class="page">
+  <div class="hero">
+    <img src="../assets/skypane-header.png" alt="Skypane — Dashboard Designer for Hubitat" width="540" height="516">
+    <div>
+      <h2>What's in Skypane</h2>
+      <p>Skypane turns a wall tablet into a beautiful, easy dashboard for a Hubitat home, all set up from one web page, the
+        Manager. Browse what it can do by category, search for a feature, or pick a release to see what it added.</p>
+      <div class="badges"><span class="badge ver" id="latest"></span><span class="badge dev">Under heavy development</span><span class="badge">Runs on your own network</span></div>
+    </div>
+  </div>
+
+  <a class="art-cta" href="https://almulder.github.io/ha-device-art/">
+    <svg viewBox="0 0 56 56" aria-hidden="true"><defs><radialGradient id="bg1" cx=".5" cy=".42" r=".6"><stop offset="0" stop-color="#ffe7a8" stop-opacity=".9"/><stop offset="1" stop-color="#ffe7a8" stop-opacity="0"/></radialGradient></defs>
+      <rect width="56" height="56" rx="14" fill="rgba(0,0,0,.25)"/><circle cx="28" cy="25" r="22" fill="url(#bg1)"/>
+      <path d="M17 12h22l-5 13H22z" fill="#f3efff"/><path d="M22 25h12" stroke="#c4b5fd" stroke-width="2"/><circle cx="28" cy="30" r="4.5" fill="#ffd27a"/>
+      <path d="M28 25v-13" stroke="#6d5bb8" stroke-width="1.5"/><rect x="18" y="44" width="20" height="3" rx="1.5" fill="#a78bfa"/><path d="M28 34v10" stroke="#a78bfa" stroke-width="2.5"/></svg>
+    <div><b>See all ~1,500 device drawings</b><span>Lights, appliances, plants, people, pets and more, every one built into Skypane. Try their colors and menus in the gallery.</span></div>
+    <span class="go">Open the gallery ↗</span>
+  </a>
+
+  <section id="features" aria-labelledby="fh">
+    <div class="sh"><h2 id="fh">Features</h2><small>What Skypane can do so far</small></div>
+    <div class="tools">
+      <label class="qwrap"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M11 11l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input class="q" id="q" type="search" placeholder="Search features…" aria-label="Search features" autocomplete="off"></label>
+      <span class="counts" id="counts" aria-live="polite"></span>
+      <button type="button" class="clear" id="clear" hidden>Show everything</button>
+    </div>
+    <div class="chips" id="chips" role="group" aria-label="Filter by category"></div>
+    <div id="list"></div>
+  </section>
+
+  <section id="releases" aria-labelledby="rh">
+    <div class="sh"><h2 id="rh">Release timeline</h2><small>Pick a version to see what it added · full list in <a href="https://github.com/almulder/Skypane/blob/main/CHANGELOG.md">CHANGELOG.md</a></small></div>
+    <div class="tl">
+      <div class="rail" id="rail" role="tablist" aria-label="Releases" aria-orientation="vertical"></div>
+      <div class="rel" id="rel" role="tabpanel" tabindex="0"></div>
+    </div>
+  </section>
+
+  <p class="foot">Skypane is built in a private repository; there are no public downloads or install guides right now. Ideas and
+    questions are welcome: <a href="https://github.com/almulder/Skypane/issues">open an issue</a>.</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  const $ = (s, r = document) => r.querySelector(s);
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  /* ---------- icons (24x24, stroke) ---------- */
+  const I = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const ICON = {
+    all: I('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'),
+    panels: I('<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M3 9h18M9 9v8M8 21h8"/>'),
+    cards: I('<rect x="3" y="3" width="8" height="10" rx="2"/><rect x="13" y="3" width="8" height="6" rx="2"/><rect x="3" y="15" width="8" height="6" rx="2"/><rect x="13" y="11" width="8" height="10" rx="2"/>'),
+    drawings: I('<path d="M8 3h8l-2 7h-4z"/><path d="M12 10v3"/><circle cx="12" cy="15.5" r="2.5"/><path d="M5 21h14"/>'),
+    looks: I('<path d="M12 3a9 9 0 1 0 0 18c1.2 0 2-.8 2-1.8 0-1.3-1-1.6-1-2.7 0-1 .8-1.5 2-1.5h2a4 4 0 0 0 4-4C21 6.6 17 3 12 3z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7" r="1"/>'),
+    family: I('<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><circle cx="12" cy="13" r="2"/><path d="M8.5 20c.5-2 1.8-3 3.5-3s3 1 3.5 3"/>'),
+    setup: I('<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>'),
+    hubitat: I('<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>'),
+    unifi: I('<path d="M2 9a15 15 0 0 1 20 0"/><path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r="1"/>'),
+    protect: I('<rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 11l5-3v8l-5-3"/><circle cx="9.5" cy="12" r="2"/>'),
+    sonos: I('<rect x="6" y="3" width="12" height="18" rx="3"/><circle cx="12" cy="14" r="3.5"/><circle cx="12" cy="7" r="1"/>'),
+    ups: I('<rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 10v4"/><path d="M11 9l-2 3h4l-2 3"/>'),
+    bambu: I('<path d="M4 3h16v18H4z"/><path d="M4 7h16"/><path d="M9 7v4h6V7"/><path d="M12 11v2"/><path d="M8 18h8l-1-3H9z"/>'),
+    unraid: I('<rect x="3" y="4" width="18" height="5" rx="1.5"/><rect x="3" y="10" width="18" height="5" rx="1.5"/><rect x="3" y="16" width="18" height="4" rx="1.5"/><path d="M7 6.5h.01M7 12.5h.01M7 18h.01"/>')
+  };
+
+  /* ---------- data (from the public CHANGELOG.md) ---------- */
+  const CATS = [
+    ["panels", "Panels & layouts"], ["cards", "Cards"], ["drawings", "Device drawings"], ["looks", "Looks & themes"],
+    ["family", "Home & family"], ["setup", "Manager & setup"], ["hubitat", "Hubitat"], ["unifi", "UniFi Network"],
+    ["protect", "Protect & cameras"], ["sonos", "Sonos & music"], ["ups", "UPS & power"], ["bambu", "Bambu Lab 3D printers"],
+    ["unraid", "Unraid servers"]
+  ];
+  const CN = Object.fromEntries(CATS);
+  /* [category, title, text, version] */
+  const F = [
+    ["panels", "One layout per tablet", "Build each wall tablet's layout by drag and drop in the Manager's layout builder, with ready-made templates.", "3.0.0"],
+    ["panels", "Builder settings in tabs", "A card's settings are split into Shows · Style · Actions · When · Place, and the page's into Page · Look · Dock · Grid. A dot marks a tab with something set.", "3.0.39"],
+    ["panels", "Searchable dropdowns", "Every device picker is one dropdown with its search inside: open it, type, pick.", "3.0.39"],
+    ["panels", "Card and page templates", "Save one card or a whole page as a template and reuse it anywhere.", "3.0.39"],
+    ["panels", "One blank card for everything", "Place devices, fans, text, values, pictures, gates and bins anywhere on a blank card, with alignment guides.", "3.0.5"],
+    ["panels", "Undo and redo everywhere", "Buttons and the usual keyboard shortcuts, plus a trash with Restore. Something in use can't be deleted by accident.", "3.0.5"],
+    ["panels", "Room pages and the room bar", "Room pages fill themselves in for every room; the room bar goes on any edge, with its own style.", "3.0.4"],
+    ["panels", "Panels pair with a code", "A new tablet shows a code; approve it in the Manager. A panel only works on the tablet you approved.", "3.0.2"],
+    ["panels", "Fonts per panel, page or card", "Twenty fonts built in, or import your own. Panels never need the internet for them.", "3.0.12"],
+
+    ["cards", "Mix-and-match cards", "The Unraid card lets every part pick its own look (ring, tile, bar, list), order and on / off per card size, with presets to start from.", "3.0.40"],
+    ["cards", "Devices card", "Lights, switches, readings, buttons, locks, fans and scenes as a list, tiles, freeform or one big item. Press and hold for more options.", "3.0.4"],
+    ["cards", "Garage doors", "One to four doors with a building look: roof, wall and door colors, windows. A vibration sensor can show Opening and Closing.", "3.0.11"],
+    ["cards", "Gates", "Up to four sets of gates in ten animated ways a gate opens. Always asks first, then the PIN.", "3.0.13"],
+    ["cards", "Bins / Trash", "Animated bins that fill up until pickup day, real schedules, holiday shifts and a reminder with a button.", "3.0.4"],
+    ["cards", "Timers & countdowns", "One button to start, pause and resume; lights can flash and house speakers can speak when time is up.", "3.0.26"],
+    ["cards", "Weather", "1 to 14 days, tap a day for its hours, warnings as alerts. Weather from Open-Meteo, OpenWeatherMap or a Hubitat device.", "3.0.4"],
+    ["cards", "Notifications", "Alerts from Hubitat in a compact or list card, up to 100 at a time.", "3.0.5"],
+    ["cards", "Picture screensaver", "Photos with a calm clock at night, optional weather and a status line; wakes on a motion sensor or a touch.", "3.0.13"],
+
+    ["drawings", "About 1,500 device drawings", "Skypane's own drawings in 16 groups, each showing its device live: on / off, brightness and color, fan speed, shade position, a plant's moisture.", "3.0.36"],
+    ["drawings", "Drawing pickers", "Pick a drawing per device for the whole house, or per card from the Drawings tab with search.", "3.0.36"],
+    ["drawings", "Colors, menus and scenery", "Per drawing: its colors, its menus (model, style) and its own scenery on or off. No circle or square behind it.", "3.0.37"],
+    ["drawings", "Plant and tree builders", "Pick the plant, the pot, the pot's color and the flowers' color.", "3.0.36"],
+    ["drawings", "People & pets", "People with outfits, hair, glasses, skin tones and mobility aids who show home or away; dogs and cats; pet habitats that warn outside the animal's range.", "3.0.38"],
+    ["drawings", "Chicken coops", "With the auto door, heat lamp, light and waterer.", "3.0.38"],
+
+    ["looks", "Nearly 30 themes", "Each with Light, Dark and Night, its own variants and color palettes, and a Home and room template.", "3.0.13"],
+    ["looks", "Premium themes", "Lucent, Reach, Residence, Alpine Lake and Pine Mist draw their own cards.", "3.0.21"],
+    ["looks", "Kids themes", "Fifteen simple, playful themes with 60 animated characters that blink, wave and jump when tapped.", "3.0.18"],
+    ["looks", "Backgrounds for any theme", "Use any theme's background with any theme, or your own pictures and slide shows.", "3.0.14"],
+    ["looks", "Animated sky", "The real sun, moon, clouds and weather, in the theme's colors or realistic ones, with weather effects behind or in front of the cards.", "3.0.0"],
+
+    ["family", "Personal views", "The panel puts the person at it first: their rooms, calendar, to-dos and favorites. By itself when only one person is home, or with one tap.", "3.0.21"],
+    ["family", "Holiday calendars", "By country and state, with Federal, State, Observances and Religious kept apart, and a Popular only switch.", "3.0.27"],
+    ["family", "Calendars, lists and notes", "Calendars with event icons, to-do lists and a family note board you can fill from Hubitat rules.", "3.0.5"],
+    ["family", "Panel PIN", "Guards locks, the alarm, garage doors and anything else you choose. Checked by the server, never stored on the tablet.", "3.0.2"],
+    ["family", "Guest Wi-Fi", "A QR code card for guests; panels can hide the calendar while guests stay.", "3.0.0"],
+
+    ["setup", "Guided setup", "From the very first sign-in: home location, preferences, Hubitat, the weather, optional extras, and pairing your first tablet.", "3.0.9"],
+    ["setup", "Every connection has a Test", "Connected, Not reachable, Wrong key… in plain words, before anything is saved.", "3.0.9"],
+    ["setup", "Accounts for the family", "An owner, admins, family and limited logins, plus Health checks with a timeline.", "3.0.0"],
+    ["setup", "Send feedback", "Report a bug or an idea right from the Manager, no GitHub account needed.", "3.0.0"],
+
+    ["hubitat", "Skypane Helper app", "One Hubitat app does the connecting, set up in a few guided steps. Device rules stay in Hubitat; Skypane shows, commands and runs your scenes.", "3.0.7"],
+    ["hubitat", "Alerts from your rules", "Hubitat rules send alerts to every panel, with notification lights and spoken messages on supported tablets.", "3.0.0"],
+    ["hubitat", "Modes and the alarm", "Hubitat modes and Safety Monitor on the panels, with the panel PIN.", "3.0.0"],
+
+    ["unifi", "Network cards", "Internet lines, a live network map, clients, PoE power, status tabs and a client log, each in three styles.", "3.0.4"],
+    ["unifi", "Internet speed test", "A live gauge for ping, download and upload, then the result and the last five tests.", "3.0.28"],
+    ["unifi", "Guest Wi-Fi passwords", "Change the guest password at a time you pick, shown as a QR code on the panels.", "3.0.10"],
+
+    ["protect", "Live cameras", "From UniFi Protect or any RTSP camera, through Skypane's own video server.", "3.0.0"],
+    ["protect", "Your own camera layouts", "Eighteen templates for 1 to 16 cameras; layouts the tablet can't play are grayed out.", "3.0.12"],
+
+    ["sonos", "Speaker card", "Album art with a glow, big touch buttons, a progress bar, and Cover, Strip, Row, Card and Big styles.", "3.0.26"],
+    ["sonos", "Covers and progress from Sonos Panel", "Real album art, shuffle, repeat and crossfade; the card's background takes on the cover's color.", "3.0.28"],
+    ["sonos", "Sonos groups", "Each speaker's volume and mute, plus a group volume that keeps the balance.", "3.0.30"],
+    ["sonos", "Record player", "A spinning record when there's no album art.", "3.0.30"],
+
+    ["ups", "Several UPSes", "UniFi, NUT or SNMP, each with a Connect test. Skypane only reads them, never sends a shutdown.", "3.0.11"],
+    ["ups", "Power and energy", "A power-now card, energy flow and a battery backup card.", "3.0.5"],
+
+    ["bambu", "3D printer cards", "Each Bambu Lab printer drawn as its own model, with the toolhead moving and the part growing. Bambu Lab only for now.", "3.0.31"],
+    ["bambu", "Every AMS and spool", "Each spool's color, material, humidity and how much is left; the spool in use glows.", "3.0.31"],
+    ["bambu", "Printer camera", "Live video or snapshots on the card; tap the printer to switch, or go full screen.", "3.0.32"],
+    ["bambu", "Print alerts", "When a print finishes, fails or runs out of filament. Local and read only.", "3.0.31"],
+
+    ["unraid", "Unraid server card", "Unraid 7.2 or newer: array and pools, parity, CPU, RAM and temperature, updates, containers, VMs and the UPS. Read only.", "3.0.40"],
+    ["unraid", "Problem drives at a glance", "Errors, too hot or disabled, with your own warning and alarm temperatures for hard drives and SSDs.", "3.0.40"],
+    ["unraid", "Tap for details", "Every disk with its temperature, the pools, the containers and the parity history.", "3.0.40"]
+  ];
+
+  /* [version, date, [category…], [bullet…]] */
+  const R = [
+    ["3.0.40", "Nov 13, 2026", ["unraid", "cards", "panels"], ["<b>New: the Unraid server card</b> (Unraid 7.2 or newer): array and pools, parity, CPU, RAM and temperature, updates, containers, VMs, the UPS and problem drives. Read only.", "<b>Mix and match:</b> every part has its own look, order and on / off per card size, with five presets. Tap the card for the details.", "The page's settings in the builder are now in tabs: Page · Look · Dock · Grid."]],
+    ["3.0.39", "Nov 13, 2026", ["panels", "bambu"], ["<b>Builder settings in tabs:</b> Shows · Style · Actions · When · Place.", "<b>Searchable dropdowns</b> for every device picker.", "3D printers in the guided setup (Bambu Lab only for now).", "Save a card or a whole page as a template."]],
+    ["3.0.38", "Nov 13, 2026", ["drawings"], ["<b>People & pets drawings:</b> people who show home or away, dogs and cats, and reptile and pet habitats.", "<b>Chicken coops</b> with the auto door, heat lamp and waterer."]],
+    ["3.0.37", "Nov 13, 2026", ["drawings", "looks"], ["Device drawings bring their own scenery, with no circle or square behind them.", "\"No background\" now really means none in every theme."]],
+    ["3.0.36", "Nov 13, 2026", ["drawings"], ["<b>About 1,500 new device drawings</b> in 16 groups, each showing its device live.", "<b>Pick a drawing per device</b> for the whole house, or per card from a Drawings tab with search.", "Colors, menus and scenery per drawing; plant and tree builders."]],
+    ["3.0.35", "Nov 12, 2026", ["bambu"], ["3D printer cards: the camera can go full screen, and spools always show in a compact row."]],
+    ["3.0.34", "Nov 12, 2026", ["bambu", "sonos"], ["A big printer card grows its drawing, numbers and spools with its space.", "Smoother animations on older wall tablets."]],
+    ["3.0.33", "Nov 12, 2026", ["bambu"], ["Printer drawings stay smooth while printing.", "Tap the printer to see its camera, and tap again for the drawing."]],
+    ["3.0.32", "Nov 12, 2026", ["bambu"], ["A printer card can show the printer's <b>camera</b>: live video or snapshots, depending on the model."]],
+    ["3.0.31", "Nov 12, 2026", ["bambu"], ["<b>Bambu Lab 3D printers:</b> a card per printer drawn as its own model, with progress, time left, temperatures and every AMS.", "A <b>3D printers</b> card with all of them at a glance.", "Alerts when a print finishes, fails or runs out of filament.", "Read only and local: nothing goes through the cloud."]],
+    ["3.0.30", "Nov 12, 2026", ["sonos"], ["<b>Sonos groups</b> on the speaker card, with a group volume.", "A spinning <b>record player</b> when there's no album art."]],
+    ["3.0.29", "Nov 12, 2026", ["sonos"], ["Play and Pause respond at once, and the progress bar runs smoothly."]],
+    ["3.0.28", "Nov 12, 2026", ["unifi", "sonos"], ["<b>Internet speed test</b> on the Internet card: a live gauge, then the result and the last five tests.", "The speaker card's background takes on the album cover's color."]],
+    ["3.0.27", "Nov 12, 2026", ["sonos", "family"], ["<b>Real album art, glow and progress</b> on the speaker card from Sonos Panel.", "Holiday calendars: pick the kinds of observances, and a <b>Popular only</b> switch."]],
+    ["3.0.26", "Nov 11, 2026", ["family", "sonos", "cards"], ["<b>Holiday calendars</b> in Federal, State, Observances and Religious groups; no doubles.", "Speaker card: <b>Cover and Strip</b> styles and big round buttons.", "<b>Timers & countdowns</b> get their own page; one button starts, pauses and resumes."]],
+    ["3.0.23 – 3.0.25", "Nov 11, 2026", ["cards"], ["Fixes and polish: steadier bins, readable see-through network cards, solid pop-ups, speaker artwork back."]],
+    ["3.0.22", "Nov 11, 2026", ["cards"], ["Bins: the pickup day is a simple dropdown, with an optional second day."]],
+    ["3.0.21", "Nov 11, 2026", ["looks", "family"], ["<b>Themes that draw their own cards,</b> and five premium themes.", "<b>Personal views:</b> the panel puts the person at it first.", "Set the notification lights' color when there's no alert."]],
+    ["3.0.20", "Nov 10, 2026", ["looks"], ["Gave Home its own theme? Saving asks whether to use it for the whole panel."]],
+    ["3.0.18", "Nov 10, 2026", ["looks"], ["<b>Kids theme characters come alive:</b> all 60 animate on their own and jump when tapped."]],
+    ["3.0.15 – 3.0.17, 3.0.19", "Nov 10, 2026", ["looks"], ["Fixes and polish: kids characters on every page and on older tablets; several themes fixed on older tablets."]],
+    ["3.0.14", "Nov 10, 2026", ["looks"], ["<b>Nineteen new themes,</b> including fifteen kids themes with characters peeking over the cards.", "<b>Every theme's background works with any theme.</b>"]],
+    ["3.0.13", "Nov 9, 2026", ["looks", "cards", "sonos"], ["<b>Five new themes</b> with Light, Dark and Night, variants and palettes.", "<b>Theme templates</b> filled with your own devices.", "<b>Gates card</b>, <b>Now playing</b> card and a <b>picture screensaver</b>."]],
+    ["3.0.12", "Nov 8, 2026", ["setup", "looks", "protect", "family"], ["<b>A tidier Manager</b> with live panel status and snapshots.", "Look & layout: themes, backgrounds, weather effects, a screensaver and <b>20 fonts</b>.", "<b>Your own camera layouts</b> for 1 to 16 cameras.", "<b>Holiday calendars</b> for any country and state."]],
+    ["3.0.11", "Nov 8, 2026", ["cards", "ups", "drawings"], ["<b>Garage doors card</b> with a building look.", "<b>Several UPSes</b> (UniFi, NUT or SNMP).", "New animated bins, and speaker and appliance drawings with real models.", "A better icon picker."]],
+    ["3.0.10", "Nov 8, 2026", ["setup", "cards", "ups"], ["<b>Pair your first tablet</b> in the guided setup.", "Weather card: 1, 3, 5 or 7 days; tap a day for its hours.", "UPS over SNMP; guest Wi-Fi passwords that change on a schedule."]],
+    ["3.0.9", "Nov 7, 2026", ["setup", "hubitat"], ["<b>A guided setup</b> from the very first sign-in.", "Every connection has a <b>Test</b> and says what's wrong.", "<b>US weather warnings</b> from the National Weather Service."]],
+    ["3.0.6 – 3.0.8", "Nov 6, 2026", ["hubitat"], ["<b>The Skypane Helper app</b> for Hubitat takes over from Maker API.", "Fixes and polish."]],
+    ["3.0.5", "Nov 6, 2026", ["panels", "cards", "ups", "family"], ["<b>One blank card for everything.</b>", "<b>Undo and redo everywhere,</b> and a trash with Restore.", "Notifications, UPS, doorbell and activity feed cards.", "<b>Lists & notes</b> you can fill from Hubitat rules."]],
+    ["3.0.4", "Nov 5, 2026", ["cards", "unifi", "panels"], ["<b>One Devices card</b> for every kind of device.", "<b>Bins / Trash</b> and <b>countdowns & timers</b>.", "<b>Nine UniFi network cards.</b>", "House-wide units and a 14-day forecast."]],
+    ["3.0.3", "Nov 4, 2026", ["cards"], ["Weather fixes, cards that keep their text size, and a soft PIN pad sound."]],
+    ["3.0.2", "Nov 2, 2026", ["panels", "family"], ["<b>Panels connect with a code</b> and only work on the tablet you approved.", "Press and hold a light for brightness, warmth and color.", "Calendar event icons."]],
+    ["3.0.1", "Nov 2, 2026", ["setup"], ["Fixes and polish."]],
+    ["3.0.0", "Nov 1, 2026", ["panels", "setup", "hubitat", "protect", "family"], ["<b>The first release for testers:</b> wall panels with rooms, lights, locks, the thermostat, cameras, calendars, the weather and an animated sky.", "<b>The Manager</b> with a drag-and-drop layout builder and family accounts.", "Built in: a message broker, camera video and automatic backups."]]
+  ];
+  const RECENT = new Set(["3.0.36", "3.0.37", "3.0.38", "3.0.39", "3.0.40"]);
+  /* a release label can be "3.0.6 – 3.0.8" or "3.0.15 – 3.0.17, 3.0.19" */
+  const patch = (v) => +String(v).split(".")[2];
+  const covers = (label, v) => label.split(",").some((part) => {
+    const [a, b] = part.split("–").map((s) => s.trim());
+    return b ? patch(v) >= patch(a) && patch(v) <= patch(b) : a === v;
+  });
+  const relIndex = (v) => R.findIndex((r) => covers(r[0], v));
+
+  /* ---------- state ---------- */
+  const view = { cat: "all", q: "", rel: 0 };
+  const P = new URLSearchParams(location.search);
+  if (P.get("cat") && CN[P.get("cat")]) view.cat = P.get("cat");
+  if (P.get("q")) view.q = P.get("q");
+  if (P.get("v") && relIndex(P.get("v")) >= 0) view.rel = relIndex(P.get("v"));
+
+  const norm = (s) => String(s).toLowerCase();
+  const hl = (s) => { const t = esc(s); if (!view.q) return t; const q = esc(view.q).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); return t.replace(new RegExp(q, "gi"), (m) => `<mark>${m}</mark>`); };
+  const matches = (f) => !view.q || norm(f[1] + " " + f[2] + " " + CN[f[0]]).indexOf(norm(view.q)) >= 0;
+
+  function renderChips() {
+    const n = (c) => F.filter((f) => (c === "all" || f[0] === c) && matches(f)).length;
+    $("#chips").innerHTML = [["all", "All"]].concat(CATS).map(([id, name]) =>
+      `<button type="button" class="chip" data-cat="${id}" aria-pressed="${view.cat === id}">${ICON[id]}${esc(name)} <small>${n(id)}</small></button>`).join("");
+  }
+  function renderList() {
+    const shown = F.filter((f) => (view.cat === "all" || f[0] === view.cat) && matches(f));
+    $("#counts").textContent = `${shown.length} of ${F.length} features`;
+    $("#clear").hidden = view.cat === "all" && !view.q;
+    if (!shown.length) { $("#list").innerHTML = `<div class="empty">Nothing matches “${esc(view.q)}”${view.cat !== "all" ? " in " + esc(CN[view.cat]) : ""}. Try another word, or show everything.</div>`; return; }
+    $("#list").innerHTML = CATS.filter(([id]) => shown.some((f) => f[0] === id)).map(([id, name]) => {
+      const fs = shown.filter((f) => f[0] === id);
+      return `<div class="cat"><h3>${ICON[id]}${esc(name)} <small>${fs.length}</small></h3><div class="grid">${fs.map((f) =>
+        `<article class="feat"><b>${hl(f[1])}</b><p>${hl(f[2])}</p><div class="meta">${RECENT.has(f[3]) ? '<span class="tag-new">New</span>' : ""}<button type="button" class="vlink" data-v="${f[3]}" aria-label="See release ${f[3]}">Since ${f[3]}</button></div></article>`).join("")}</div></div>`;
+    }).join("");
+  }
+  function renderRail() {
+    $("#rail").innerHTML = R.map((r, i) => `<button type="button" role="tab" id="rt${i}" aria-controls="rel" aria-selected="${i === view.rel}" tabindex="${i === view.rel ? 0 : -1}" data-i="${i}"><b>${esc(r[0])}</b><small>${esc(r[1].replace(/, \d{4}$/, ""))}</small></button>`).join("");
+  }
+  function renderRel() {
+    const r = R[view.rel];
+    $("#rel").setAttribute("aria-labelledby", "rt" + view.rel);
+    $("#rel").innerHTML = `<h3>Skypane ${esc(r[0])}</h3><div class="when">${esc(r[1])}${view.rel === 0 ? " · latest" : ""}</div><ul>${r[3].map((b) => `<li>${b}</li>`).join("")}</ul>`
+      + `<div class="cats">${r[2].map((c) => `<button type="button" class="chip" data-jump="${c}">${ICON[c]}${esc(CN[c])}</button>`).join("")}</div>`
+      + `<div class="nav"><button type="button" class="btn" data-step="1" ${view.rel === R.length - 1 ? "disabled" : ""}>‹ Older</button><button type="button" class="btn" data-step="-1" ${view.rel === 0 ? "disabled" : ""}>Newer ›</button></div>`;
+  }
+  function pickRel(i, focus) {
+    view.rel = Math.max(0, Math.min(R.length - 1, i)); renderRail(); renderRel();
+    const b = $("#rt" + view.rel); if (b) { if (focus) b.focus(); b.scrollIntoView({ block: "nearest", inline: "nearest" }); }
+  }
+  function all() { renderChips(); renderList(); }
+
+  /* ---------- events ---------- */
+  $("#q").value = view.q;
+  $("#q").addEventListener("input", (e) => { view.q = e.target.value.trim(); all(); });
+  $("#clear").addEventListener("click", () => { view.q = ""; view.cat = "all"; $("#q").value = ""; all(); $("#q").focus(); });
+  document.addEventListener("click", (e) => {
+    const t = e.target.closest("button"); if (!t) return;
+    if (t.dataset.cat) { view.cat = t.dataset.cat; all(); return; }
+    if (t.dataset.v) { const i = relIndex(t.dataset.v); if (i >= 0) { pickRel(i); $("#releases").scrollIntoView({ behavior: "smooth" }); $("#rt" + i).focus({ preventScroll: true }); } return; }
+    if (t.dataset.i) { pickRel(+t.dataset.i); return; }
+    if (t.dataset.step) { pickRel(view.rel + +t.dataset.step); return; }
+    if (t.dataset.jump) { view.cat = t.dataset.jump; view.q = ""; $("#q").value = ""; all(); $("#features").scrollIntoView({ behavior: "smooth" }); const c = $(`#chips [data-cat="${view.cat}"]`); if (c) c.focus({ preventScroll: true }); }
+  });
+  $("#rail").addEventListener("keydown", (e) => {
+    const k = e.key, d = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[k];
+    if (d) { e.preventDefault(); pickRel(view.rel + d, true); }
+    else if (k === "Home") { e.preventDefault(); pickRel(0, true); }
+    else if (k === "End") { e.preventDefault(); pickRel(R.length - 1, true); }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "/" && document.activeElement !== $("#q") && !e.ctrlKey && !e.metaKey) { e.preventDefault(); $("#q").focus(); }
+  });
+
+  $("#latest").textContent = "Latest: " + R[0][0];
+  all(); renderRail(); renderRel();
+  { const rl = $("#rail"), b = $("#rt" + view.rel); if (b) { rl.scrollTop = b.offsetTop - rl.clientHeight / 2; rl.scrollLeft = b.offsetLeft - rl.clientWidth / 2; } }
+})();
+</script>
+</body>
+</html>
