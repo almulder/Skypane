@@ -16,5 +16,6 @@ Freo Z Ultra and Freo X Plus are cloud-only and won't answer.
   moment; it tries again by itself.
 - The map, room names and outlines come from the robot. Changed rooms in the Narwal app? Skypane checks the map after
   every clean and every 30 minutes, or press **Refresh maps now**.
+- The map the wrong way round? Pick its **Map direction** in the card's settings in the layout builder (four ways). It's saved with the layout, so set it once.
 - Turn on the card's **PIN** setting to require the panel PIN before a clean starts.
 - What the plugin reaches: TCP port 9002 on the addresses you enter, nothing else.

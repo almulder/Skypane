@@ -3,14 +3,15 @@
 Shows and runs a Narwal robot vacuum on your Skypane panels. Skypane talks to the robot directly on your home network:
 no cloud, no Narwal account.
 
-**Download:** [narwal-1.0.2.skyplugin](narwal-1.0.2.skyplugin) · needs **Skypane 3.0.46.1 or newer**
+**Download:** [narwal-1.0.3.skyplugin](narwal-1.0.3.skyplugin) · needs **Skypane 3.0.46.1 or newer**
 
 ## What you get
 
 - **The map from your own robot**: your rooms with their names (or their type, like "Kitchen", when unnamed), the dock,
   and the robot's live position and path while it cleans.
-- **Turn, zoom and move the map**: a turn button (four ways, names stay upright), mouse wheel or two-finger pinch zoom
-  with the zoom % shown, drag to move, long-press for arrows. Kept per card, so it's as you left it.
+- **The map the right way round**: pick its **Map direction** (four ways, names stay upright) in the card's settings in
+  the layout builder, once. **Zoom and move** with the mouse wheel or a two-finger pinch (the zoom % shows), drag to
+  move, long-press for arrows; kept per card, so it's as you left it.
 - **Clean**: Vacuum, Mop, Both, or Vacuum then Mop; **All rooms**, or tap rooms on the map to pick them.
 - **While it cleans**: Pause, Resume, Home, Stop; the room it's in, area cleaned, minutes.
 - **Station buttons**: Wash mop, Dry mop, Empty bin, Find it.
@@ -40,7 +41,8 @@ Freo Z Ultra and Freo X Plus are cloud-only and won't answer. Tested live on a F
      **Robot ID** by itself.
    - If you already know the Robot ID (32 letters and digits), you can paste it instead.
    - "No answer from that address" means nothing answered there: check the address.
-4. In the layout builder, add a **Robot vacuum** card (Plugins group) and pick the robot in its settings.
+4. In the layout builder, add a **Robot vacuum** card (Plugins group), pick the robot in its settings, and set its
+   **Map direction** if the map shows the wrong way round.
 
 ## Good to know
 
@@ -59,7 +61,7 @@ Freo Z Ultra and Freo X Plus are cloud-only and won't answer. Tested live on a F
 
 | Path | What |
 |---|---|
-| `narwal-1.0.2.skyplugin` | the plugin, ready to install |
+| `narwal-1.0.3.skyplugin` | the plugin, ready to install |
 | `source/` | what's inside it: `plugin.json` (manifest), `worker/` (the server part), `card/vacuum/` (the panel card), `strings/en.json` (every word), `help.md`, `icon.svg` |
 | `tests/` | an end-to-end test against a stand-in robot on 127.0.0.1 (never a real robot); needs Skypane's source, see the top of `test_plugin_e2e.py` |
 

@@ -312,7 +312,7 @@ var S = window.Skypane;
 S.get("status", {v: "3"})       // → Promise of the route's answer (declared panel GET routes only)
 S.post("start", {mode: "x"})    // → Promise (asks for the PIN first when the route needs it)
 S.view.get()                    // this card's saved view state (or null)
-S.view.set({zoom: 2, rot: 90})  // ≤ 16 KB, kept on the panel per card: as the owner left it
+S.view.set({zoom: 2, pan: [0, 0]})  // ≤ 16 KB, kept on the panel per card: as the owner left it
 S.t("card.name", {n: 3})        // your words; "{n}" filled from the object
 S.on("theme", fn)               // the theme's colors changed (CSS variables are set for you)
 S.on("size", fn)                // {w, h} in pixels: the card was resized
@@ -333,7 +333,9 @@ S.options                       // the card's saved settings
 - **Poll only while visible**, every 10 s idle and faster while something happens; stop on `visible: false`.
 - **Problems float over the content**, never push it down: an absolute-positioned bar over the card's main area keeps
   the card's size steady.
-- **Save view state** (zoom, turn, the last mode picked…) with `view.set`, debounced (0.4 s).
+- **Save view state** (zoom, pan, the last mode picked…) with `view.set`, debounced (0.4 s). View state is for what
+  people change **on the panel**. A choice made once, like which way round a map goes, is a **card setting** instead:
+  settings are saved with the layout, but the builder's **Try it** preview doesn't save view state (see Lesson 8).
 - **Touch:** handle pointer events, with taps ≥ 30 px. Separate a tap from a drag (a 6 px threshold) so dragging a map
   never presses a button.
 
@@ -521,8 +523,12 @@ Skypane 3.0.47 now ignores the manifest size for a new card's start.
 A card can't open a pop-up, keep a text field focused, or reach the network. Design for taps and for the space you
 have.
 
-### Lesson 8: save what people set
-People expect the map they turned and zoomed to stay that way. `view.set` it, debounced.
+### Lesson 8: set-once choices are settings, not view state
+People expect what they set to stay. Zoom and position change on the panel, so they go in `view.set`, debounced. The
+map's direction is chosen once, so it's a card setting. Up to 1.0.2 the Narwal card had a turn button saving the turn
+in its view: an owner turned the map in the builder's **Try it** preview, saved, and came back to it reset, because
+that preview's view isn't saved with the layout. 1.0.3 made it a **Map direction** setting (a select) and dropped the
+button. Ask of each control: will people change this every day on the panel (view state), or set it once (a setting)?
 
 ### Lesson 9: check imports against the compiled list
 A from-source test can't catch a module missing from Skypane's compiled image. Check by script before release.
@@ -544,6 +550,7 @@ Room-only cleaning still needs a confirmation on a real robot, and its README sa
 - [ ] Every word in `strings/en.json`; no raw words in the card or worker.
 - [ ] The card works at every size, every state, in a dark and a light theme, with no console errors.
 - [ ] The card is ES5.
+- [ ] Choices made once are card settings, not panel buttons saving view state.
 - [ ] Commands allowlisted; the device comes from the card's own setting.
 - [ ] No address, id, token or secret reaches a card or the log.
 - [ ] Unit, end-to-end and card tests pass; the fake is as strict as the device.
