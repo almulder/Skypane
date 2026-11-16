@@ -8,6 +8,7 @@ yourself; nothing here ships inside Skypane.
 | Plugin | What it does | Download |
 |---|---|---|
 | [Narwal robot vacuum](narwal/) | Your Narwal robot's map with your rooms, live status and battery; vacuum or mop all rooms or the rooms you tap; pause, resume, send it home. Local, no cloud. | [narwal-1.0.3.skyplugin](narwal/narwal-1.0.3.skyplugin) |
+| [NVIDIA Shield remote](nvidia-shield/) | A remote for your NVIDIA Shield TV: the real remote's look (or flat), your own button, volume to your receiver over HDMI, power, find my remote, and tiles of your installed apps with their icons. Local, no cloud. | [nvidia-shield-1.0.0.skyplugin](nvidia-shield/nvidia-shield-1.0.0.skyplugin) |
 
 ## Installing a plugin
 

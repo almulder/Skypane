@@ -20,8 +20,8 @@ Before that came about **1,500 device drawings**, people and pets, and **Bambu L
   release to see what it added.
 - **[CHANGELOG.md](CHANGELOG.md)**: what each release added, in plain words.
 - **[Device drawing gallery](https://almulder.github.io/ha-device-art/)**: the same drawings that are built into Skypane.
-- **[Additional plugins](additional-plugins/)**: integrations you download and install yourself (Skypane 3.0.46.1+). The
-  first one is a Narwal robot vacuum card with your robot's own map.
+- **[Additional plugins](additional-plugins/)**: integrations you download and install yourself (Skypane 3.0.46.1+). So far: a Narwal
+  robot vacuum card with your robot's own map, and an NVIDIA Shield TV remote with your own apps.
 
 ## What Skypane can do so far
 
