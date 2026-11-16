@@ -19,3 +19,10 @@ yourself; nothing here ships inside Skypane.
 
 A plugin runs its own code on your Skypane server, with the same access as Skypane. Only install plugins from people you
 trust. Skypane never downloads or updates a plugin by itself: you upload every version.
+
+## Writing your own
+
+**[PLUGIN-GUIDE.md](PLUGIN-GUIDE.md)** is the full guide: the package and manifest, the worker and its SDK, the settings
+tab, the card and its bridge, alerts, the panel PIN, security, testing, packing, sharing a plugin here, the lessons
+from building the Narwal plugin, checklists, and every limit in one table. The [Narwal plugin](narwal/) is a complete
+worked example.
