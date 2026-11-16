@@ -1,0 +1,73 @@
+{
+  "api": 1,
+  "id": "nvidia-shield",
+  "name": "plugin.name",
+  "version": "1.0.0",
+  "author": "plugin.author",
+  "description": "plugin.description",
+  "homepage": "https://github.com/almulder/Skypane/tree/main/additional-plugins/nvidia-shield",
+  "skypane": "3.0.46",
+  "network": [
+    "TCP port 8987 (NVIDIA's own remote connection) on the Shield addresses you enter",
+    "TCP port 8009 (Google Cast, to read what's on) on the Shield addresses you enter",
+    "App icons from the Shield itself (a web address the Shield gives while connected)"
+  ],
+  "worker": {"entry": "worker/main.py"},
+  "settings": {
+    "list": {
+      "key": "shields", "label": "settings.shields", "add": "settings.add", "max": 10,
+      "fields": [
+        {"key": "name", "type": "text", "label": "settings.name", "placeholder": "settings.namePh", "required": true, "max": 48},
+        {"key": "ip", "type": "host", "label": "settings.ip", "placeholder": "settings.ipPh", "required": true, "help": "settings.ipHelp"},
+        {"key": "code", "type": "text", "label": "settings.code", "max": 8, "help": "settings.codeHelp"}
+      ],
+      "actions": [
+        {"route": "pair", "label": "settings.pair"},
+        {"route": "test", "label": "settings.test"},
+        {"route": "forget", "label": "settings.forget"}
+      ]
+    }
+  },
+  "routes": {
+    "panel": [
+      {"name": "status", "method": "GET"},
+      {"name": "apps", "method": "GET"},
+      {"name": "icon", "method": "GET"},
+      {"name": "key", "method": "POST"},
+      {"name": "launch", "method": "POST"},
+      {"name": "find", "method": "POST"},
+      {"name": "power", "method": "POST", "pin": "optional"}
+    ],
+    "manage": [
+      {"name": "pair", "method": "POST"},
+      {"name": "test", "method": "POST"},
+      {"name": "forget", "method": "POST"}
+    ]
+  },
+  "cards": [
+    {
+      "type": "remote", "name": "card.name", "icon": "remote", "frame": "card/remote/index.html",
+      "size": {"w": 2, "h": 1},
+      "settings": [
+        {"key": "shield", "type": "item", "label": "card.shield"},
+        {"key": "look", "type": "select", "label": "card.look", "default": "remote",
+         "options": [{"value": "remote", "label": "card.look.remote"}, {"value": "flat", "label": "card.look.flat"}]},
+        {"key": "btnLabel", "type": "text", "label": "card.btnLabel", "default": "Netflix"},
+        {"key": "btnAction", "type": "select", "label": "card.btnAction", "default": "app",
+         "options": [{"value": "app", "label": "card.btnAction.app"}, {"value": "home", "label": "card.btnAction.home"},
+                     {"value": "back", "label": "card.btnAction.back"}, {"value": "menu", "label": "card.btnAction.menu"},
+                     {"value": "search", "label": "card.btnAction.search"}, {"value": "playpause", "label": "card.btnAction.playpause"},
+                     {"value": "mute", "label": "card.btnAction.mute"}, {"value": "find", "label": "card.btnAction.find"},
+                     {"value": "none", "label": "card.btnAction.none"}]},
+        {"key": "btnApp", "type": "text", "label": "card.btnApp", "default": "Netflix"},
+        {"key": "btnColor", "type": "color", "label": "card.btnColor", "default": "#e50914"},
+        {"key": "tiles", "type": "select", "label": "card.tiles", "default": "all",
+         "options": [{"value": "all", "label": "card.tiles.all"}, {"value": "media", "label": "card.tiles.media"},
+                     {"value": "none", "label": "card.tiles.none"}]},
+        {"key": "findBtn", "type": "bool", "label": "card.findBtn", "default": true},
+        {"key": "showStatus", "type": "bool", "label": "card.showStatus", "default": true}
+      ]
+    }
+  ],
+  "alerts": false
+}
