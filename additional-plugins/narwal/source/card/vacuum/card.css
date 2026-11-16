@@ -1,0 +1,66 @@
+/* Narwal robot vacuum card. Colors only from the theme's variables (the panel sends them in), with fallbacks. */
+html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
+body { color: var(--text, #f3efff); font: 14px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-user-select: none; user-select: none; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+button { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; }
+svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+.vac { height: 100%; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.vac.t-tiny, .vac.t-short { flex-direction: row; align-items: center; gap: 10px; padding: 6px 10px; }
+.vhead { display: flex; align-items: center; gap: 10px; flex: none; min-width: 0; }
+.t-tiny .vhead, .t-short .vhead { flex: 1; }
+.art { width: 36px; height: 36px; flex: none; }
+.t-tiny .art { width: 28px; height: 28px; }
+.tt { flex: 1; min-width: 0; }
+.tt b { display: block; font-size: 15px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t-tiny .tt b { font-size: 13px; }
+.tt span { display: block; font-size: 12.5px; color: var(--muted, rgba(234, 226, 255, .76)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tt span.bad { color: var(--bad, #fb7185); font-weight: 600; }
+.bat { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 650; color: var(--muted, rgba(234, 226, 255, .76)); flex: none; }
+.bat i { width: 22px; height: 11px; border: 1.5px solid currentColor; border-radius: 3px; position: relative; display: inline-block; }
+.bat i b { position: absolute; left: 1px; top: 1px; bottom: 1px; border-radius: 1px; background: var(--ok, #4ade80); }
+.bat i b.low { background: var(--warn, #fbbf24); }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad, #fb7185); flex: none; }
+
+.mapbox { position: relative; flex: 1 1 auto; min-height: 50px; border-radius: 12px; background: rgba(0, 0, 0, .2); overflow: hidden; touch-action: none; }
+.mapbox canvas { position: absolute; left: 0; top: 0; }
+.lab { position: absolute; transform: translate(-50%, -50%); font-size: 11.5px; font-weight: 650; color: #fff; pointer-events: none; white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .85), 0 0 6px rgba(0, 0, 0, .5); }
+.lab.sel:before { content: "\2713  "; }
+.mbtn { position: absolute; z-index: 2; background: rgba(0, 0, 0, .5); border: 1px solid rgba(255, 255, 255, .22); color: #fff; border-radius: 9px; }
+.rot { right: 8px; bottom: 8px; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; }
+.rot svg.i { width: 18px; height: 18px; }
+.zoom { left: 8px; bottom: 8px; display: flex; align-items: center; padding: 2px; gap: 2px; }
+.zoom button { width: 30px; height: 30px; border-radius: 7px; font-size: 18px; font-weight: 600; }
+.zoom b { min-width: 44px; text-align: center; font: 600 12px ui-monospace, Consolas, monospace; cursor: pointer; }
+.pad { position: absolute; right: 48px; bottom: 8px; z-index: 2; display: none; }
+.pad.on { display: block; width: 108px; height: 108px; }
+.pad button { position: absolute; width: 34px; height: 34px; background: rgba(0, 0, 0, .6); border: 1px solid rgba(255, 255, 255, .22); color: #fff; border-radius: 9px; font-size: 13px; }
+.alert { position: absolute; left: 8px; right: 8px; top: 8px; z-index: 3; display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 10px; font-size: 13px;
+  background: rgba(60, 10, 24, .92); border: 1px solid var(--bad, #fb7185); color: #fda4af; }
+.alert.warn { background: rgba(60, 44, 6, .92); border-color: var(--warn, #fbbf24); color: #fde68a; }
+.alert .sp { flex: 1; }
+.empty { position: absolute; left: 0; top: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 16px; color: var(--muted, rgba(234, 226, 255, .76)); font-size: 13px; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 40px; padding: 0 12px; border-radius: 11px; font-weight: 600;
+  border: 1px solid var(--glass-line, rgba(255, 255, 255, .18)); background: rgba(255, 255, 255, .06); white-space: nowrap; }
+.btn.pri { background: var(--accent-grad, var(--accent, #7c4dff)); border-color: transparent; color: #fff; }
+.btn.sm { height: 30px; padding: 0 10px; font-size: 12.5px; }
+.btn:disabled { opacity: .5; }
+.acts { display: flex; gap: 8px; flex: none; }
+.acts .btn { flex: 1; }
+.t-tiny .acts .btn, .t-short .acts .btn { flex: none; height: 34px; }
+.modes { display: flex; gap: 3px; padding: 3px; border-radius: 11px; background: rgba(255, 255, 255, .05); border: 1px solid var(--glass-line, rgba(255, 255, 255, .12)); flex: none; }
+.modes button { flex: 1; padding: 6px 2px; border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--muted, rgba(234, 226, 255, .76)); display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.modes button.on { background: rgba(167, 139, 250, .22); color: var(--text, #fff); box-shadow: inset 0 0 0 1px var(--accent, #b39dff); }
+.rooms { display: flex; align-items: center; gap: 8px; flex: none; min-width: 0; }
+.rooms .hint { font-size: 12px; color: var(--faint, rgba(222, 212, 255, .7)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip { height: 30px; padding: 0 11px; border-radius: 99px; font-size: 12.5px; font-weight: 600; border: 1px solid var(--glass-line, rgba(255, 255, 255, .18)); flex: none; }
+.chip.on { border-color: var(--accent, #b39dff); background: rgba(167, 139, 250, .22); }
+.more { display: flex; gap: 6px; flex: none; }
+.more .btn { flex: 1; flex-direction: column; height: 52px; font-size: 11.5px; gap: 3px; padding: 0 4px; }
+.prog { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 12.5px; color: var(--muted, rgba(234, 226, 255, .76)); flex: none; }
+.prog b { color: var(--text, #fff); }
+.toast { position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%); max-width: 92%; padding: 8px 14px; border-radius: 10px; font-size: 13px;
+  background: rgba(20, 12, 50, .95); border: 1px solid rgba(255, 255, 255, .2); z-index: 9; text-align: center; }

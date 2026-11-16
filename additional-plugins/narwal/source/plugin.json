@@ -1,0 +1,130 @@
+{
+  "api": 1,
+  "id": "narwal",
+  "name": "plugin.name",
+  "version": "1.0.2",
+  "author": "plugin.author",
+  "description": "plugin.description",
+  "skypane": "3.0.46",
+  "network": [
+    "TCP port 9002 (the robot's local connection) on the robot addresses you enter"
+  ],
+  "worker": {
+    "entry": "worker/main.py"
+  },
+  "settings": {
+    "list": {
+      "key": "robots",
+      "label": "settings.robots",
+      "add": "settings.add",
+      "max": 6,
+      "fields": [
+        {
+          "key": "name",
+          "type": "text",
+          "label": "settings.name",
+          "required": true,
+          "max": 48,
+          "placeholder": "settings.namePh"
+        },
+        {
+          "key": "ip",
+          "type": "host",
+          "label": "settings.ip",
+          "required": true,
+          "placeholder": "settings.ipPh",
+          "help": "settings.ipHelp"
+        },
+        {
+          "key": "deviceId",
+          "type": "text",
+          "label": "settings.deviceId",
+          "max": 40,
+          "placeholder": "settings.deviceIdPh",
+          "help": "settings.deviceIdHelp"
+        }
+      ],
+      "actions": [
+        {
+          "route": "test",
+          "label": "settings.test"
+        }
+      ]
+    },
+    "actions": [
+      {
+        "route": "refresh",
+        "label": "settings.refresh"
+      }
+    ]
+  },
+  "routes": {
+    "panel": [
+      {
+        "name": "status",
+        "method": "GET"
+      },
+      {
+        "name": "map",
+        "method": "GET"
+      },
+      {
+        "name": "start",
+        "method": "POST",
+        "pin": "optional"
+      },
+      {
+        "name": "command",
+        "method": "POST"
+      }
+    ],
+    "manage": [
+      {
+        "name": "test",
+        "method": "POST"
+      },
+      {
+        "name": "refresh",
+        "method": "POST"
+      }
+    ]
+  },
+  "cards": [
+    {
+      "type": "vacuum",
+      "name": "card.name",
+      "icon": "robot",
+      "frame": "card/vacuum/index.html",
+      "size": {
+        "w": 2,
+        "h": 1
+      },
+      "settings": [
+        {
+          "key": "robot",
+          "type": "item",
+          "label": "card.robot"
+        },
+        {
+          "key": "rotate",
+          "type": "bool",
+          "label": "card.rotateBtn",
+          "default": true
+        },
+        {
+          "key": "controls",
+          "type": "bool",
+          "label": "card.controls",
+          "default": true
+        },
+        {
+          "key": "station",
+          "type": "bool",
+          "label": "card.station",
+          "default": true
+        }
+      ]
+    }
+  ],
+  "alerts": true
+}
