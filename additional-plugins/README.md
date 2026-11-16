@@ -7,7 +7,7 @@ yourself; nothing here ships inside Skypane.
 
 | Plugin | What it does | Download |
 |---|---|---|
-| [Narwal robot vacuum](narwal/) | Your Narwal robot's map with your rooms, live status and battery; vacuum or mop all rooms or the rooms you tap; pause, resume, send it home. Local, no cloud. | [narwal-1.0.2.skyplugin](narwal/narwal-1.0.2.skyplugin) |
+| [Narwal robot vacuum](narwal/) | Your Narwal robot's map with your rooms, live status and battery; vacuum or mop all rooms or the rooms you tap; pause, resume, send it home. Local, no cloud. | [narwal-1.0.3.skyplugin](narwal/narwal-1.0.3.skyplugin) |
 
 ## Installing a plugin
 

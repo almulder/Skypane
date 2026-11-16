@@ -1,6 +1,7 @@
 // Narwal robot vacuum card (mockup n260 v4, approved), written against the card frame's bridge, window.Skypane:
-// get/post (this plugin's panel routes: status, map, start, command), view.get/set (the map's turn, zoom and pan, kept
-// per card), t (its words), on("theme" | "size" | "visible"), options (robot, rotate, controls, station).
+// get/post (this plugin's panel routes: status, map, start, command), view.get/set (the map's zoom and pan, kept
+// per card), t (its words), on("theme" | "size" | "visible"), options (robot, turn, controls, station). The map's
+// direction is the "turn" setting (set once in the builder, saved with the layout), not a button on the panel.
 // The map comes from the owner's own robot (rooms, names, outlines, dock), so the card works for any Narwal owner.
 // Old-tablet safe: ES5 only (no arrow functions, let / const, template strings, ?. or ??).
 (function () {
@@ -25,8 +26,7 @@
     dryMop: '<svg class="i" viewBox="0 0 24 24"><path d="M4 9h11a3 3 0 1 0-3-3M4 15h15a3 3 0 1 1-3 3M4 12h8"/></svg>',
     emptyDust: '<svg class="i" viewBox="0 0 24 24"><path d="M6 7h12l-1 13H7z"/><path d="M9 7V4h6v3"/></svg>',
     locate: '<svg class="i" viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15 9a4 4 0 0 1 0 6M18 6a8 8 0 0 1 0 12"/></svg>',
-    warn: '<svg class="i" viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17v.5"/></svg>',
-    rot: '<svg class="i" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>'
+    warn: '<svg class="i" viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17v.5"/></svg>'
   };
   function art(state) {
     var c = state === "error" ? "#fb7185" : state === "cleaning" ? "#4ade80" : state === "returning" ? "#fbbf24" : "#7dd3fc";
@@ -41,11 +41,12 @@
   var st = null, mp = null, cells = null, BOX = null, BASE = null, ver = null;
   var mode = "both", sel = {}, size = { w: window.innerWidth, h: window.innerHeight }, shown = true, timer = null, sending = false;
   var v0 = S.view.get() || {};
-  var view = { rot: [0, 90, 180, 270].indexOf(v0.rot) >= 0 ? v0.rot : 0, zoom: typeof v0.zoom === "number" && v0.zoom >= 1 && v0.zoom <= 6 ? v0.zoom : 1,
+  var turn = parseInt(O.turn, 10);
+  var view = { rot: [0, 90, 180, 270].indexOf(turn) >= 0 ? turn : 0, zoom: typeof v0.zoom === "number" && v0.zoom >= 1 && v0.zoom <= 6 ? v0.zoom : 1,
                pan: v0.pan instanceof Array && v0.pan.length === 2 ? [+v0.pan[0] || 0, +v0.pan[1] || 0] : [0, 0] };
   if (MODES.indexOf(v0.mode) >= 0) mode = v0.mode;
   var saveT = null;
-  function saveView() { clearTimeout(saveT); saveT = setTimeout(function () { S.view.set({ rot: view.rot, zoom: view.zoom, pan: view.pan, mode: mode }); }, 400); }
+  function saveView() { clearTimeout(saveT); saveT = setTimeout(function () { S.view.set({ zoom: view.zoom, pan: view.pan, mode: mode }); }, 400); }
 
   function selIds() { var out = []; for (var k in sel) if (sel.hasOwnProperty(k)) out.push(+k); return out; }
   function roomById(id) { var rs = (mp && mp.rooms) || []; for (var i = 0; i < rs.length; i++) if (rs[i].id === id) return rs[i]; return null; }
@@ -146,8 +147,7 @@
           '<button data-z="in" title="' + esc(T("btn.zoomIn")) + '">+</button></div>' +
           '<div class="pad" id="pad"><button data-pan="u" style="left:37px;top:0">▲</button><button data-pan="l" style="left:0;top:37px">◀</button>' +
           '<button data-pan="x" style="left:37px;top:37px" title="' + esc(T("btn.hideArrows")) + '">✕</button><button data-pan="r" style="left:74px;top:37px">▶</button>' +
-          '<button data-pan="d" style="left:37px;top:74px">▼</button></div>' +
-          (O.rotate !== false ? '<button class="mbtn rot" data-rot="1" title="' + esc(T("btn.turn")) + '">' + ICON.rot + "</button>" : "") : "") + "</div>";
+          '<button data-pan="d" style="left:37px;top:74px">▼</button></div>' : "") + "</div>";
       var prog = "";
       if (st && st.job && (st.state === "cleaning" || paused)) {
         prog = '<div class="prog">' + (st.job.areaM2 !== null && st.job.areaM2 !== undefined ? "<span><b id=\"area\">" + esc(T("job.area", { n: st.job.areaM2 })) + "</b></span>" : "") +
@@ -291,7 +291,6 @@
     each("[data-all]", function (b) { b.onclick = function () { sel = {}; BASE = null; render(); }; });
     each("[data-start]", function (b) { b.onclick = function () { send("start", { mode: mode, rooms: selIds() }); }; });
     each("[data-cmd]", function (b) { b.onclick = function () { send("command", { cmd: b.getAttribute("data-cmd") }); }; });
-    each("[data-rot]", function (b) { b.onclick = function () { view.rot = (view.rot + 90) % 360; view.pan = [0, 0]; draw(); saveView(); }; });
     each("[data-z]", function (b) {
       b.onclick = function (e) {
         e.stopPropagation(); var k = b.getAttribute("data-z");
