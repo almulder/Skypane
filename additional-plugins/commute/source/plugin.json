@@ -1,0 +1,284 @@
+{
+  "api": 1,
+  "id": "commute",
+  "name": "plugin.name",
+  "version": "1.3.0",
+  "author": "almulder",
+  "description": "Your commute with live traffic: when to leave, how long it takes now, why it's slow, and a map. Uses your free TomTom key.",
+  "homepage": "https://github.com/almulder/Skypane/tree/main/additional-plugins/commute",
+  "skypane": "3.0.49",
+  "network": [
+    "TomTom's map services on the internet (api.tomtom.com, HTTPS), with the TomTom key you enter",
+    "Sends TomTom your two addresses once, to find them on the map, then only their map points"
+  ],
+  "worker": {
+    "entry": "worker/main.py"
+  },
+  "settings": {
+    "fields": [
+      {
+        "key": "apiKey",
+        "type": "secret",
+        "label": "settings.apiKey",
+        "required": true,
+        "help": "settings.apiKeyHelp"
+      },
+      {
+        "key": "units",
+        "type": "select",
+        "label": "settings.units",
+        "default": "mi",
+        "options": [
+          {
+            "value": "mi",
+            "label": "settings.units.mi"
+          },
+          {
+            "value": "km",
+            "label": "settings.units.km"
+          }
+        ],
+        "help": "settings.unitsHelp"
+      },
+      {
+        "key": "clock",
+        "type": "select",
+        "label": "settings.clock",
+        "default": "12",
+        "options": [
+          {
+            "value": "12",
+            "label": "settings.clock.12"
+          },
+          {
+            "value": "24",
+            "label": "settings.clock.24"
+          }
+        ],
+        "help": "settings.clockHelp"
+      },
+      {
+        "key": "refresh",
+        "type": "select",
+        "label": "settings.refresh",
+        "default": "5",
+        "help": "settings.refreshHelp",
+        "options": [
+          {
+            "value": "2",
+            "label": "settings.refresh.2"
+          },
+          {
+            "value": "5",
+            "label": "settings.refresh.5"
+          },
+          {
+            "value": "10",
+            "label": "settings.refresh.10"
+          },
+          {
+            "value": "15",
+            "label": "settings.refresh.15"
+          }
+        ]
+      }
+    ],
+    "list": {
+      "key": "trips",
+      "label": "settings.trips",
+      "add": "settings.add",
+      "max": 4,
+      "fields": [
+        {
+          "key": "name",
+          "type": "text",
+          "label": "settings.name",
+          "placeholder": "settings.namePh",
+          "required": true,
+          "max": 40,
+          "help": "settings.nameHelp"
+        },
+        {
+          "key": "home",
+          "type": "text",
+          "label": "settings.home",
+          "placeholder": "settings.homePh",
+          "required": true,
+          "max": 200,
+          "help": "settings.addrHelp"
+        },
+        {
+          "key": "work",
+          "type": "text",
+          "label": "settings.work",
+          "placeholder": "settings.workPh",
+          "required": true,
+          "max": 200,
+          "help": "settings.workHelp"
+        },
+        {
+          "key": "how",
+          "type": "select",
+          "label": "settings.how",
+          "default": "car",
+          "help": "settings.howHelp",
+          "options": [
+            {
+              "value": "car",
+              "label": "settings.how.car"
+            },
+            {
+              "value": "bike",
+              "label": "settings.how.bike"
+            },
+            {
+              "value": "walk",
+              "label": "settings.how.walk"
+            }
+          ]
+        },
+        {
+          "key": "arriveBy",
+          "type": "text",
+          "label": "settings.arriveBy",
+          "placeholder": "settings.timePh",
+          "required": true,
+          "max": 8,
+          "default": "8:30",
+          "help": "settings.arriveByHelp"
+        },
+        {
+          "key": "days",
+          "type": "select",
+          "label": "settings.days",
+          "default": "weekdays",
+          "options": [
+            {
+              "value": "weekdays",
+              "label": "settings.days.weekdays"
+            },
+            {
+              "value": "monsat",
+              "label": "settings.days.monsat"
+            },
+            {
+              "value": "all",
+              "label": "settings.days.all"
+            }
+          ],
+          "help": "settings.daysHelp"
+        },
+        {
+          "key": "margin",
+          "type": "number",
+          "label": "settings.margin",
+          "min": 0,
+          "max": 60,
+          "step": 1,
+          "default": 5,
+          "help": "settings.marginHelp"
+        },
+        {
+          "key": "homeAfter",
+          "type": "text",
+          "label": "settings.homeAfter",
+          "placeholder": "settings.homeAfterPh",
+          "max": 8,
+          "help": "settings.homeAfterHelp"
+        }
+      ],
+      "actions": [
+        {
+          "route": "test",
+          "label": "settings.test"
+        }
+      ]
+    }
+  },
+  "routes": {
+    "panel": [
+      {
+        "name": "status",
+        "method": "GET"
+      },
+      {
+        "name": "map",
+        "method": "GET"
+      },
+      {
+        "name": "traffic",
+        "method": "GET"
+      },
+      {
+        "name": "command",
+        "method": "POST"
+      }
+    ],
+    "manage": [
+      {
+        "name": "test",
+        "method": "POST"
+      }
+    ]
+  },
+  "cards": [
+    {
+      "type": "commute",
+      "name": "card.name",
+      "icon": "car",
+      "frame": "card/commute/index.html",
+      "size": {
+        "w": 2,
+        "h": 1
+      },
+      "settings": [
+        {
+          "key": "trip",
+          "type": "item",
+          "label": "card.trip"
+        },
+        {
+          "key": "view",
+          "type": "select",
+          "label": "card.view",
+          "default": "map",
+          "options": [
+            {
+              "value": "map",
+              "label": "card.view.map"
+            },
+            {
+              "value": "times",
+              "label": "card.view.times"
+            }
+          ]
+        },
+        {
+          "key": "mapLook",
+          "type": "select",
+          "label": "card.mapLook",
+          "default": "day",
+          "tab": "style",
+          "options": [
+            {
+              "value": "day",
+              "label": "card.mapLook.day"
+            },
+            {
+              "value": "night",
+              "label": "card.mapLook.night"
+            }
+          ]
+        },
+        {
+          "key": "routeColor",
+          "type": "color",
+          "label": "card.routeColor",
+          "default": "#3b82f6",
+          "tab": "style"
+        }
+      ]
+    }
+  ],
+  "alerts": false
+}
