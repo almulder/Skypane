@@ -3,12 +3,13 @@
 Plugins that add integrations Skypane doesn't have built in. Each one is a `.skyplugin` file you download and install
 yourself; nothing here ships inside Skypane.
 
-**Needs Skypane 3.0.46.1 or newer** (the release that added plugins).
+**Needs Skypane 3.0.46.1 or newer** (the release that added plugins). Some plugins need a newer Skypane: each one's
+line below and its page say which.
 
 | Plugin | What it does | Download |
 |---|---|---|
 | [Narwal robot vacuum](narwal/) | Your Narwal robot's map with your rooms, live status and battery; vacuum or mop all rooms or the rooms you tap; pause, resume, send it home. Local, no cloud. | [narwal-1.0.3.skyplugin](narwal/narwal-1.0.3.skyplugin) |
-| [NVIDIA Shield remote](nvidia-shield/) | A remote for your NVIDIA Shield TV: the real remote's look (or flat), your own button, volume to your receiver over HDMI, power, find my remote, and tiles of your installed apps with their icons. Local, no cloud. | [nvidia-shield-1.0.0.skyplugin](nvidia-shield/nvidia-shield-1.0.0.skyplugin) |
+| [NVIDIA Shield remote](nvidia-shield/) | A remote for your NVIDIA Shield TV: the real remote's look (or flat), an on-screen keyboard, your own button, volume to your receiver over HDMI, power, find my remote, and the apps you pick beside the remote with their icons. Local, no cloud. Needs Skypane 3.0.52. | [nvidia-shield-1.1.4.skyplugin](nvidia-shield/nvidia-shield-1.1.4.skyplugin) |
 
 ## Installing a plugin
 
@@ -25,5 +26,6 @@ trust. Skypane never downloads or updates a plugin by itself: you upload every v
 
 **[PLUGIN-GUIDE.md](PLUGIN-GUIDE.md)** is the full guide: the package and manifest, the worker and its SDK, the settings
 tab, the card and its bridge, alerts, the panel PIN, security, testing, packing, sharing a plugin here, the lessons
-from building the Narwal plugin, checklists, and every limit in one table. The [Narwal plugin](narwal/) is a complete
-worked example.
+from building the Narwal plugin, checklists, and every limit in one table. Updated for Skypane 3.0.52.7: tick lists, sliders,
+device slots, the rate limit. The [Narwal plugin](narwal/) and the [NVIDIA Shield remote](nvidia-shield/) are complete
+worked examples.
