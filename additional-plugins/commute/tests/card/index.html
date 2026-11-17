@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Commute card check</title>
+<style>body{background:#120e22;color:#ddd;font:13px system-ui;margin:16px}figure{display:inline-block;margin:0 14px 18px 0;vertical-align:top}
+iframe{border:0;border-radius:14px;background:#1d1733;display:block}figcaption{margin-top:4px;opacity:.7}.lt{background:#f3f0fa}</style></head>
+<body>
+<script>
+var cases = [
+  [260, 90, "state=ok", "2x1 row"], [420, 90, "state=ok", "wide row"], [520, 120, "state=ok&view=times", "times, short"],
+  [220, 150, "state=ok", "small map"], [360, 240, "state=ok", "medium map"], [560, 360, "state=ok", "large map"],
+  [360, 240, "state=ok&view=times", "times only"], [420, 300, "state=ok&view=times", "times only, bigger"],
+  [360, 240, "state=ok&view=times&late=6&level=heavy&delay=14&min=36", "times, late"], [360, 240, "state=ok&view=times&mode=home&level=clear&delay=0&why=0", "times, drive home"],
+  [240, 160, "state=ok&view=times", "times, small"],
+  [360, 240, "state=ok&late=6&level=heavy&delay=14&min=36", "map, late"], [360, 240, "state=ok&mode=home&level=clear&delay=0&why=0", "map, drive home"],
+  [360, 240, "state=ok&look=night&units=km&clock=24", "night, km, 24 h"], [360, 240, "state=ok&err=offline", "TomTom down"], [360, 240, "state=ok&light=1&view=times", "light, times"],
+  [360, 240, "state=ok&mode=rest&kind=next", "rest: tomorrow"], [360, 240, "state=ok&mode=rest&kind=today&at=417", "rest: today at"],
+  [260, 90, "state=ok&mode=rest&kind=home&at=900", "rest, short"], [360, 240, "state=ok&mode=rest&kind=next&tomorrow=0", "rest: Friday night"],
+  [360, 240, "state=ok&how=bike", "bike, map"], [360, 240, "state=ok&how=bike&view=times", "bike, times"],
+  [260, 90, "state=ok&how=walk", "walk, row"], [360, 240, "state=ok&how=walk&view=times", "walk, times"],
+  [260, 90, "state=setup", "not set up"], [260, 90, "state=loading", "loading"]
+];
+cases.forEach(function (c) {
+  document.write('<figure><iframe width="' + c[0] + '" height="' + c[1] + '" src="frame.html#' + c[2] + '"' + (c[2].indexOf("light=1") >= 0 ? ' class="lt"' : "") + '></iframe><figcaption>' + c[3] + " · " + c[0] + "×" + c[1] + "</figcaption></figure>");
+});
+</script>
+</body></html>
