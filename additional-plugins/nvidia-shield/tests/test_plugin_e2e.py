@@ -30,6 +30,15 @@ from service.test_plugins_package import kit_pack  # noqa: E402
 import fake_shield as fs  # noqa: E402
 
 plugin_host.say = lambda line: None
+# (Skypane 3.0.52.1 writes a four-part RELEASE, which its own check reads as 3.0.46 and so refuses plugins needing
+# 3.0.52: worked around here until Skypane reads it)
+KIT_ARGS = []
+if plugins.vkey(plugins.current_release()) < plugins.vkey("3.0.52"):
+    plugins.HOST_RELEASE = "3.0.52"
+    import tempfile
+    _fixed = pathlib.Path(tempfile.mkdtemp(prefix="kit-")) / "plugins.py"
+    _fixed.write_text((SKY / "service" / "plugins.py").read_text(encoding="utf-8").replace('HOST_RELEASE = "3.0.46"', 'HOST_RELEASE = "3.0.52"'), encoding="utf-8")
+    KIT_ARGS = ["--plugins", str(_fixed)]
 PID = "nvidia-shield"
 
 
@@ -90,7 +99,7 @@ class ShieldPluginE2E(ts.PinCase):
         pack = kit_pack()
         out = self.tmp / "shield.skyplugin"
         with contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(pack.main([str(PLUGIN), "-o", str(out)]), 0)
+            self.assertEqual(pack.main([str(PLUGIN), "-o", str(out)] + KIT_ARGS), 0)
         st, got = self.j("POST", "/api/manage/plugins/inspect", out.read_bytes(), {**self.h, "Content-Type": "application/octet-stream"})
         self.assertEqual(st, 200, got)
         self.assertIn("TCP port 8987", " ".join(got["plugin"]["network"]))
@@ -126,7 +135,7 @@ class ShieldPluginE2E(ts.PinCase):
     def test_pair_status_apps_keys_power_end_to_end(self):
         self.install()
         iid = self.point_at_fake()
-        self.panel("tablet", [card("c1", iid, btnApp="com.example.sideloaded"), card("c2", iid, pin=True)])
+        self.panel("tablet", [card("c1", iid, btnApp="com.example.sideloaded"), card("c2", iid, pin=True), card("c3", iid, btnApp="Pandora")])
         host = self.start_host()
 
         # not paired yet: Test says so, and so does the card's status
@@ -159,11 +168,60 @@ class ShieldPluginE2E(ts.PinCase):
                          30, 0.3, "a paired status with apps")
         self.assertEqual((stat["app"], stat["volume"], stat["standby"], stat["name"]), ("Plex", 47, False, "Living room"))
         self.assertNotIn("127.0.0.1", json.dumps(stat))
-        st, ap = self.call("apps")
-        self.assertEqual(st, 200, ap)
-        self.assertEqual([a["name"] for a in ap["apps"]], ["Plex", "Netflix", "Pandora", "Settings"])
-        self.assertTrue(all(a["icon"] is True for a in ap["apps"]))
+        st, ap = self.call("apps")                                        # (nothing synced yet: no apps on the card)
+        self.assertEqual((st, ap["synced"], ap["apps"]), (200, False, []), ap)
+
+        # Sync apps (Integrations): the list is pulled once and kept; the first sync ticks every app; the tick list's
+        # choices come from the "choices" route (each app, its icon once the icons came)
+        self.assertEqual(self.do("choices", iid)[1]["options"], [])
+        st, res = self.do("sync", iid)
+        self.assertEqual((st, res["ok"]), (200, True), res)
+        self.assertIn("Got 4 apps", res["text"])
+        self.assertEqual(res["values"]["shields"][0]["showApps"], ["com.plexapp.android", "com.netflix.ninja", "com.pandora.android.atv", "com.android.tv.settings"])
+        ch = self.wait(lambda: (lambda r: r[1] if r[0] == 200 and len(r[1].get("options", [])) == 4 and all("icon" in o for o in r[1]["options"]) else None)(self.do("choices", iid)),
+                       20, 0.3, "the choices with icons")
+        self.assertEqual(ch["options"][1]["value"], "com.netflix.ninja")
+        self.assertEqual(ch["options"][1]["label"], "Netflix")
+        # the owner ticks two, in their own order, and saves (one tick is an app since removed); a re-sync keeps them
+        f = self.data / "plugins-data" / PID / "settings.json"
+        doc = json.loads(f.read_text(encoding="utf-8"))
+        (doc.get("values", doc))["shields"][0]["showApps"] = ["com.netflix.ninja", "com.gone.app", "com.plexapp.android"]
+        f.write_text(json.dumps(doc), encoding="utf-8")
+        st, res = self.do("sync", iid)
+        self.assertEqual((st, res["ok"]), (200, True), res)
+        self.assertIn("Your ticks are kept", res["text"])
+        self.assertIn("No longer on the Shield: com.gone.app", res["text"])
+        self.assertNotIn("save", res)
+        doc = json.loads(f.read_text(encoding="utf-8"))
+        self.assertEqual(doc.get("values", doc)["shields"][0]["showApps"], ["com.netflix.ninja", "com.gone.app", "com.plexapp.android"])
+        # an upgrade from 1.0.x: its comma list of names (kept by Skypane as an undeclared key) becomes ticks, once
+        doc = json.loads(f.read_text(encoding="utf-8"))
+        item = doc.get("values", doc)["shields"][0]
+        item.pop("showApps")
+        item["apps"] = "Netflix, Gone App, Plex"
+        f.write_text(json.dumps(doc), encoding="utf-8")
+        st, res = self.do("sync", iid)
+        self.assertEqual((st, res["ok"]), (200, True), res)
+        self.assertEqual(res["values"]["shields"][0]["showApps"], ["com.netflix.ninja", "com.plexapp.android"])
+        ap = self.wait(lambda: (lambda r: r[1] if r[0] == 200 and len(r[1].get("apps", [])) == 2 and all(a["icon"] for a in r[1]["apps"]) else None)(self.call("apps")),
+                       20, 0.3, "the picked apps with their icons")
+        self.assertEqual([a["name"] for a in ap["apps"]], ["Netflix", "Plex"])
+        self.assertTrue(all(a["icon"].startswith("data:image/png;base64,") for a in ap["apps"]))    # (icons inside: one call)
+        self.assertTrue(ap["synced"])
         self.assertEqual(self.call("apps", query="?v=" + ap["version"])[1], {"same": True, "version": ap["version"]})
+        # apps kept by 1.1.2 have no card icon ("tile"): the card's next ask makes them from the kept icons, once
+        kept = list(self.data.rglob("apps-*.json"))
+        self.assertTrue(kept)
+        for kf in kept:
+            d = json.loads(kf.read_text(encoding="utf-8"))
+            for a in d["apps"]:
+                a.pop("tile", None)
+                a.pop("tileTried", None)
+            kf.write_text(json.dumps(d), encoding="utf-8")
+        st, old = self.call("apps")
+        self.assertEqual(st, 200, old)
+        self.assertTrue(all(a["icon"] and a["icon"].startswith("data:image/png;base64,") for a in old["apps"]), old)
+        self.assertTrue(all("tile" in a for a in json.loads(kept[0].read_text(encoding="utf-8"))["apps"]))
         st, ic = self.call("icon", query="?pkg=com.netflix.ninja")
         self.assertEqual(st, 200, ic)
         self.assertTrue(ic["icon"].startswith("data:image/png;base64,"))
@@ -181,6 +239,37 @@ class ShieldPluginE2E(ts.PinCase):
         self.wait(lambda: len(self.shield.got) >= 5, 5, 0.1, "the commands to arrive")
         self.assertEqual(self.shield.got[:5], [("key", 206), ("key", 230), ("launch", "com.netflix.ninja"),
                                                ("launch", "com.example.sideloaded"), ("find",)])
+        # a card's own button opens its app by name, even one not picked for the row; only its own name
+        self.shield.got.clear()
+        self.assertEqual(self.call("launch", "POST", {"name": "Pandora"}, card_id="home/c3")[1]["ok"], True)
+        self.assertEqual(self.call("launch", "POST", {"name": "Plex"}, card_id="home/c3")[0], 400)
+        self.wait(lambda: ("launch", "com.pandora.android.atv") in self.shield.got, 5, 0.1, "the launch by name")
+
+        # every key is a full press (down then up), each its own message: nothing came joined
+        self.assertEqual(self.shield.presses[:4], [("down", 206), ("up", 206), ("down", 230), ("up", 230)])
+        self.assertEqual(self.shield.dropped, 0)
+
+        # a held button: a few presses in one call (Skypane allows a panel 120 calls a minute to a plugin)
+        self.shield.presses.clear()
+        self.assertEqual(self.call("key", "POST", {"key": "volup", "times": 3})[1]["ok"], True)
+        self.assertEqual(self.call("key", "POST", {"key": "volup", "times": 11})[0], 400)
+        self.wait(lambda: len(self.shield.presses) >= 6, 5, 0.1, "three presses")
+        self.assertEqual(self.shield.presses, [("down", 230), ("up", 230)] * 3)
+
+        # typing: the text itself (as NVIDIA's app sends it); Backspace and Enter as key presses
+        self.shield.presses.clear()
+        self.assertEqual(self.call("text", "POST", {"text": "Hi!"})[1]["ok"], True)
+        self.assertEqual(self.call("text", "POST", {"key": "enter"})[1]["ok"], True)
+        self.assertEqual(self.call("text", "POST", {"key": "backspace", "n": 2})[1]["ok"], True)
+        self.assertEqual(self.call("text", "POST", {"key": "reboot"})[0], 400)
+        self.assertEqual(self.call("text", "POST", {"text": ""})[0], 400)
+        self.assertEqual(self.call("text", "POST", {"text": "x" * 101})[0], 400)
+        self.assertEqual(self.call("text", "POST", {"text": "caf\u00e9"})[0], 400)       # (ASCII only)
+        ent, bs = 56, 28
+        want = [("text", "Hi!"), ("down", ent), ("up", ent), ("down", bs), ("up", bs), ("down", bs), ("up", bs)]
+        self.wait(lambda: len(self.shield.presses) >= len(want), 5, 0.1, "the typing to arrive")
+        self.assertEqual(self.shield.presses, want)
+        self.assertEqual(self.shield.dropped, 0)
 
         # power: the PIN card needs a ticket once the panel has a PIN; it's awake, so power puts it to sleep
         self.assertEqual(self.pin({"action": "set", "pin": "1234"}), (200, {"ok": True}))

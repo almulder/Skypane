@@ -141,9 +141,25 @@ def hello(name="Skypane"):
     return outer(HANDSHAKE, f_int(1, 1) + f_bytes(2, name) + f_int(3, 1) + f_int(5, 81915))
 
 
+def key_message(code, down):
+    """One key change (down or up). The Shield reads one message per write, so each goes on its own."""
+    return outer(INPUT, f_int(1, 20) + f_int(2, 1) + f_int(4, 10) + f_int(5, 1 if down else 2) + f_bytes(6, varint(code)))
+
+
 def key_messages(code):
-    body = lambda d: f_int(1, 20) + f_int(2, 1) + f_int(4, 10) + f_int(5, d) + f_bytes(6, varint(code))   # noqa: E731
-    return outer(INPUT, body(1)) + outer(INPUT, body(2))
+    """(down, up) for a key: send them as two writes, never joined."""
+    return key_message(code, True), key_message(code, False)
+
+
+# typing: the text itself, as NVIDIA's app sends it (virtual input: a command from a keyboard, an ASCII string in field
+# 7; checked on a real Shield). Delete and Enter are key presses (Linux keys 14 and 28, × 2 like KEYS).
+TEXT_MAX = 100
+TEXT_OK = re.compile(r"[ -~]{1,%d}" % TEXT_MAX)          # (printable ASCII: what an ASCII string carries)
+TEXT_KEYS = {"backspace": 14 * 2, "enter": 28 * 2}
+
+
+def text_message(text):
+    return outer(INPUT, f_int(1, 20) + f_int(2, 1) + f_int(4, 12) + f_bytes(7, text))
 
 
 def launch_message(package):
@@ -364,7 +380,27 @@ class Session:
             raise ShieldError("reach", str(e))
 
     def key(self, name):
-        self.send(key_messages(KEYS[name]))
+        down, up = key_messages(KEYS[name])
+        self.send(down)          # (send() waits a moment for the Shield's reply: the press has a length)
+        self.send(up)
+
+    def write(self, data, gap=0.03):
+        try:
+            self.sock.sendall(data)
+            self.used = time.monotonic()
+            time.sleep(gap)
+        except (OSError, ssl.SSLError) as e:
+            raise ShieldError("reach", str(e))
+
+    def type_text(self, text):
+        self.send(text_message(text[:TEXT_MAX]))
+
+    def text_key(self, name, times=1):
+        down, up = key_messages(TEXT_KEYS[name])
+        for _ in range(times):
+            self.write(down)
+            self.write(up)
+        _read_for(self.sock, 0.05)
 
     def power(self, wake):
         self.send(POWER_WAKE if wake else POWER_SLEEP)
