@@ -1,7 +1,7 @@
 {
   "plugin.name": "Narwal robot vacuum",
-  "plugin.author": "Narwal plugin for Skypane",
-  "plugin.description": "Shows and runs Narwal robot vacuums on your panels: the map with your rooms, live status and battery, vacuum or mop all rooms or the rooms you tap, pause, resume, send it home. Talks to the robot directly on your home network (no cloud, no app account). Works with Narwal robots that have local control (Flow, Flow 2, Freo Z10 Ultra, Freo X10 Pro).",
+  "plugin.author": "almulder",
+  "plugin.description": "Your Narwal robot vacuum on your panels: its map, live status and battery, and cleaning by room. Local, no cloud.",
   "settings.robots": "Robots",
   "settings.add": "Add a robot",
   "settings.name": "Name on the panels",
@@ -99,5 +99,6 @@
   "test.needsId": "Something answered at that address, but it hasn't said it's a Narwal robot. If it is your robot, it's asleep on its dock: start any clean (Narwal app or the robot's button) and press Test again while it's cleaning, or paste its Robot ID. If it still says this while the robot is cleaning, the address is probably wrong.",
   "test.wrongId": "The robot answered, but not to that Robot ID. Clear the Robot ID field and press Test while the robot is cleaning.",
   "test.badId": "A Robot ID is 32 letters (a–f) and digits. Clear it to let Skypane learn it.",
-  "msg.noId": "Waiting for the robot to say who it is: start any clean once (Narwal app or its button), or add its Robot ID in Integrations."
+  "msg.noId": "Waiting for the robot to say who it is: start any clean once (Narwal app or its button), or add its Robot ID in Integrations.",
+  "settings.nameHelp": "What the cards call this robot, like Downstairs."
 }

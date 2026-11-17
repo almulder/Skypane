@@ -8,8 +8,8 @@ line below and its page say which.
 
 | Plugin | What it does | Download |
 |---|---|---|
-| [Narwal robot vacuum](narwal/) | Your Narwal robot's map with your rooms, live status and battery; vacuum or mop all rooms or the rooms you tap; pause, resume, send it home. Local, no cloud. | [narwal-1.0.3.skyplugin](narwal/narwal-1.0.3.skyplugin) |
-| [NVIDIA Shield remote](nvidia-shield/) | A remote for your NVIDIA Shield TV: the real remote's look (or flat), an on-screen keyboard, your own button, volume to your receiver over HDMI, power, find my remote, and the apps you pick beside the remote with their icons. Local, no cloud. Needs Skypane 3.0.52. | [nvidia-shield-1.1.4.skyplugin](nvidia-shield/nvidia-shield-1.1.4.skyplugin) |
+| [Narwal robot vacuum](narwal/) | Your Narwal robot's map with your rooms, live status and battery; vacuum or mop all rooms or the rooms you tap; pause, resume, send it home. Local, no cloud. | [narwal-1.0.4.skyplugin](narwal/narwal-1.0.4.skyplugin) |
+| [NVIDIA Shield remote](nvidia-shield/) | A remote for your NVIDIA Shield TV: the real remote's look (or flat), an on-screen keyboard, your own button, volume to your receiver over HDMI, power, find my remote, and the apps you pick beside the remote with their icons. Local, no cloud. Needs Skypane 3.0.52. | [nvidia-shield-1.2.0.skyplugin](nvidia-shield/nvidia-shield-1.2.0.skyplugin) |
 | [Commute](commute/) | Your drive to work with live traffic: when to leave, how long it takes right now, why it's slower, and a map of the route with traffic. By car, bike or on foot. Uses your own free TomTom key. Needs Skypane 3.0.49. | [commute-1.3.0.skyplugin](commute/commute-1.3.0.skyplugin) |
 
 ## Installing a plugin

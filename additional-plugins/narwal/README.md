@@ -3,7 +3,9 @@
 Shows and runs a Narwal robot vacuum on your Skypane panels. Skypane talks to the robot directly on your home network:
 no cloud, no Narwal account.
 
-**Download:** [narwal-1.0.3.skyplugin](narwal-1.0.3.skyplugin) · needs **Skypane 3.0.46.1 or newer**
+**Download:** [narwal-1.0.4.skyplugin](narwal-1.0.4.skyplugin) · needs **Skypane 3.0.46.1 or newer**
+
+![The Narwal card on a panel: the map with its rooms, the cleaning modes and the robot's buttons](screenshot.png)
 
 ## What you get
 
@@ -22,6 +24,7 @@ no cloud, no Narwal account.
 - **The panel PIN**: turn on the card's PIN setting to ask for the panel PIN before a clean starts.
 - **Room changes made in the Narwal app** are picked up by themselves: the map is checked after every clean and every
   30 minutes while docked (or press **Refresh maps now**).
+- **Icon size**: the card's pictures and button icons follow the **Icons** size in the card's Style tab.
 
 ## Robots that work
 
@@ -61,7 +64,7 @@ Freo Z Ultra and Freo X Plus are cloud-only and won't answer. Tested live on a F
 
 | Path | What |
 |---|---|
-| `narwal-1.0.3.skyplugin` | the plugin, ready to install |
+| `narwal-1.0.4.skyplugin` | the plugin, ready to install |
 | `source/` | what's inside it: `plugin.json` (manifest), `worker/` (the server part), `card/vacuum/` (the panel card), `strings/en.json` (every word), `help.md`, `icon.svg` |
 | `tests/` | an end-to-end test against a stand-in robot on 127.0.0.1 (never a real robot); needs Skypane's source, see the top of `test_plugin_e2e.py` |
 

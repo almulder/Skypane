@@ -290,7 +290,7 @@
     each("[data-mode]", function (b) { b.onclick = function () { mode = b.getAttribute("data-mode"); saveView(); render(); }; });
     each("[data-all]", function (b) { b.onclick = function () { sel = {}; BASE = null; render(); }; });
     each("[data-start]", function (b) { b.onclick = function () { send("start", { mode: mode, rooms: selIds() }); }; });
-    each("[data-cmd]", function (b) { b.onclick = function () { send("command", { cmd: b.getAttribute("data-cmd") }); }; });
+    each("[data-cmd]", function (b) { b.onclick = function () { send("command", { command: b.getAttribute("data-cmd") }); }; });
     each("[data-z]", function (b) {
       b.onclick = function (e) {
         e.stopPropagation(); var k = b.getAttribute("data-z");

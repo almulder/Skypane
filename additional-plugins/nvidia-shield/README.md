@@ -3,7 +3,7 @@
 A remote for your NVIDIA Shield TV on your Skypane panels. Skypane talks to the Shield directly on your home network:
 no cloud, no account.
 
-**Download:** [nvidia-shield-1.1.4.skyplugin](nvidia-shield-1.1.4.skyplugin) · needs **Skypane 3.0.52 or newer** (3.0.52.2 or
+**Download:** [nvidia-shield-1.2.0.skyplugin](nvidia-shield-1.2.0.skyplugin) · needs **Skypane 3.0.52 or newer** (3.0.52.2 or
 newer recommended: 3.0.52.1 refuses plugins that need 3.0.52)
 
 ## What you get
@@ -63,7 +63,7 @@ newer recommended: 3.0.52.1 refuses plugins that need 3.0.52)
 
 | Path | What |
 |---|---|
-| `nvidia-shield-1.1.4.skyplugin` | the plugin, ready to install |
+| `nvidia-shield-1.2.0.skyplugin` | the plugin, ready to install |
 | `source/` | what's inside it: `plugin.json` (manifest), `worker/` (the server part: `shield_core.py` the Shield's protocols, `selfcert.py` a plain-Python certificate maker, `pngthumb.py` a plain-Python icon shrinker), `card/remote/` (the panel card), `strings/en.json` (every word), `help.md`, `icon.svg` |
 | `tests/` | an end-to-end test against a stand-in Shield on 127.0.0.1 (never a real Shield); needs Skypane's source, see the top of `test_plugin_e2e.py` |
 

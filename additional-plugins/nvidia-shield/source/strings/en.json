@@ -1,7 +1,7 @@
 {
   "plugin.name": "NVIDIA Shield remote",
-  "plugin.author": "NVIDIA Shield plugin for Skypane",
-  "plugin.description": "A remote for your NVIDIA Shield TV on your panels: the d-pad, Home, Back, play / pause, volume (also to a receiver over HDMI), power, your own button, find my remote, and tiles of your installed apps with their icons. Shows the open app and the volume. Talks to the Shield directly on your home network: no cloud, no account.",
+  "plugin.author": "almulder",
+  "plugin.description": "A remote for your NVIDIA Shield TV: the real remote's buttons, a keyboard, volume, power and your apps. Local, no cloud.",
   "settings.shields": "Shields",
   "settings.add": "Add a Shield",
   "settings.name": "Name on the panels",
@@ -98,5 +98,6 @@
   "kbd.enter": "Enter",
   "kbd.back": "Delete",
   "msg.tooMany": "Busy for a moment: too many taps in a row. Try again in a few seconds.",
-  "card.appList": "Show the app list beside the remote (the apps picked in Integrations)"
+  "card.appList": "Show the app list beside the remote (the apps picked in Integrations)",
+  "settings.nameHelp": "What the cards call this Shield, like Living room."
 }

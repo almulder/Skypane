@@ -88,7 +88,7 @@ class NarwalPluginE2E(ts.PinCase):
         pack = kit_pack()
         out = self.tmp / "narwal.skyplugin"
         with contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(pack.main([str(PLUGIN), "-o", str(out)]), 0)
+            self.assertEqual(pack.main([str(PLUGIN), "-o", str(out)] + (["--draft"] if hasattr(pack, "catalog_problems") else [])), 0)
         st, got = self.j("POST", "/api/manage/plugins/inspect", out.read_bytes(), {**self.h, "Content-Type": "application/octet-stream"})
         self.assertEqual(st, 200, got)
         self.assertIn("TCP port 9002", " ".join(got["plugin"]["network"]))
@@ -157,10 +157,11 @@ class NarwalPluginE2E(ts.PinCase):
         self.assertEqual(self.call("map", query="?v=" + mp["version"])[1], {"same": True, "version": mp["version"]})
 
         # commands go to the robot (one connection: the worker's loop runs them)
-        st, res = self.call("command", "POST", {"cmd": "pause"})
+        st, res = self.call("command", "POST", {"command": "pause"})
         self.assertEqual((st, res["ok"]), (200, True), res)
         self.assertIn("task/pause", [n for n, _ in self.robot.got])
-        self.assertEqual(self.call("command", "POST", {"cmd": "reboot"})[0], 400)
+        self.assertEqual(self.call("command", "POST", {"command": "reboot"})[0], 400)
+        self.assertEqual(self.call("command", "POST", {"cmd": "resume"})[0], 200)                        # (1.0.3 cards' shape)
         st, res = self.call("start", "POST", {"mode": "mop", "rooms": [2]})
         self.assertEqual((st, res["ok"]), (200, True), res)
         sent = [p for n, p in self.robot.got if n == "clean/plan/start"]
@@ -180,7 +181,7 @@ class NarwalPluginE2E(ts.PinCase):
         st, res = self.j("POST", "/api/panel/tablet/plugin/narwal/start", {"mode": "vacuum"}, h)
         self.assertEqual((st, res["ok"]), (200, True), res)
         self.assertEqual(self.j("POST", "/api/panel/tablet/plugin/narwal/start", {"mode": "vacuum"}, h)[0], 403)   # (used up)
-        self.assertEqual(self.call("command", "POST", {"cmd": "dock"}, card_id="home/c2")[0], 200)         # (not a PIN route)
+        self.assertEqual(self.call("command", "POST", {"command": "dock"}, card_id="home/c2")[0], 200)         # (not a PIN route)
 
         # a stuck robot raises a "needs help" alert on the panel; the water-refill warning doesn't
         self.robot.base = fr.base_msg(ws=3, f3={2: 1, 5: 7}, f11=1, f47=2, fault=(0x02310027, 2, "x"))
