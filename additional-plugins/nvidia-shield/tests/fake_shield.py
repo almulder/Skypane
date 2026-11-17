@@ -59,6 +59,8 @@ class FakeShield:
         self.standby = standby
         self.app, self.volume = "Plex", 0.47
         self.open_sessions = 0
+        self.presses = []        # every key change in order: ("down" | "up", code)
+        self.dropped = 0        # messages that came joined to another in one write (the real Shield ignores them)
         self.stopping = False
         self.srv = self._listen(self._nv)
         self.cast = self._listen(self._cast)
@@ -128,6 +130,9 @@ class FakeShield:
                 if not c:
                     return
                 msgs, buf = sc.split_messages(buf + c)
+                if len(msgs) > 1:                     # (the real Shield acts on the first message of a write only)
+                    self.dropped += len(msgs) - 1
+                    msgs = msgs[:1]
                 for m in msgs:
                     top = dict((no, v) for no, _, v in sc.fields(m))
                     svc, body = top.get(1), top.get(2, b"")
@@ -158,8 +163,13 @@ class FakeShield:
                     elif not session_paired:
                         continue                                         # (an unknown client: ignored)
                     elif svc == sc.INPUT:
-                        if bd.get(5) == 1 and isinstance(bd.get(6), (bytes, bytearray)):
-                            self.got.append(("key", sc.read_varint(bd[6], 0)[0]))
+                        if bd.get(4) == 12 and isinstance(bd.get(7), (bytes, bytearray)):
+                            self.presses.append(("text", bytes(bd[7]).decode()))
+                        elif bd.get(5) in (1, 2) and isinstance(bd.get(6), (bytes, bytearray)):
+                            code = sc.read_varint(bd[6], 0)[0]
+                            if bd[5] == 1:
+                                self.got.append(("key", code))
+                            self.presses.append(("down" if bd[5] == 1 else "up", code))
                         elif bd.get(1) == 20 and bd.get(4) == 30:
                             self.got.append(("power", "wake" if bytes(body).endswith(b"\x40\x10") else "sleep"))
                     elif svc == sc.LAUNCHER and bd.get(1) == 0:
