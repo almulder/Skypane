@@ -1,10 +1,13 @@
 # Writing a Skypane plugin
 
 A complete guide to building, testing and sharing a plugin for Skypane 3.0.46.1 and newer: what a plugin is made of,
-every rule Skypane checks, the patterns that work, and the mistakes we already made so you don't have to.
+every rule Skypane checks, the patterns that work, and the mistakes we already made so you don't have to. Up to date
+with Skypane 3.0.52.7; features added after 3.0.46 say which release brought them (see
+[Which Skypane to ask for](#which-skypane-to-ask-for)).
 
-It is based on Skypane's plugin contract (API version 1) and on building the first real plugin, the
-[Narwal robot vacuum](narwal/), whose full source is in this folder and is the best worked example.
+It is based on Skypane's plugin contract (API version 1) and on building the first two real plugins, the
+[Narwal robot vacuum](narwal/) and the [NVIDIA Shield remote](nvidia-shield/), whose full sources are in this folder
+and are the best worked examples.
 
 **Contents**
 1. [What a plugin is](#1-what-a-plugin-is)
@@ -21,7 +24,7 @@ It is based on Skypane's plugin contract (API version 1) and on building the fir
 12. [Testing](#12-testing)
 13. [Packing, versions and updates](#13-packing-versions-and-updates)
 14. [Sharing it here](#14-sharing-it-here)
-15. [Lessons from the Narwal plugin](#15-lessons-from-the-narwal-plugin)
+15. [Lessons from the Narwal and Shield plugins](#15-lessons-from-the-narwal-and-shield-plugins)
 16. [Checklists](#16-checklists)
 17. [Reference: every limit in one place](#17-reference-every-limit-in-one-place)
 
@@ -35,7 +38,7 @@ up to three parts, all optional:
 | Part | Runs where | Does what |
 |---|---|---|
 | **Worker** | on the Skypane server, as its own process | talks to the device, keeps its state, answers the plugin's routes, raises alerts |
-| **Settings tab** | in the Manager (Integrations → your plugin) | fields and a list (for example a list of devices) that Skypane draws from your schema, with buttons like **Test** |
+| **Settings tab** | in the Manager (Integrations → Plugins → your plugin's own tab) | fields and a list (for example a list of devices) that Skypane draws from your schema, with buttons like **Test** |
 | **Cards** | on the panels, in a sealed frame | shows the device and lets people control it, talking only to its own worker through Skypane |
 
 ```
@@ -123,12 +126,12 @@ served to a page.
 | `version` | semver: `1.0.0`, `1.2.0-beta.1` |
 | `name`, `author`, `description` | plain text (≤ 60 / 80 / 500) or a string key |
 | `homepage` | an `http(s)://` address, optional |
-| `skypane` | the oldest Skypane it works with; refused on older ones |
+| `skypane` | the oldest Skypane it works with, as three numbers (`"3.0.52"`, never `"3.0.52.1"`); refused on older ones |
 | `network` | up to 10 lines in plain words of what the worker reaches. Shown on the trust screen. Be exact. |
 | `worker.entry` | a `.py` file in `worker/` |
 | `routes.panel` | up to 20: `{name, method: "GET" or "POST", pin?: "always" or "optional"}`. A name may appear twice, once per method. |
 | `routes.manage` | up to 20: `{name, method: "POST"}`: the Manager's buttons |
-| `cards` | up to 8 card types: `type` (`[a-z][a-z0-9-]{0,23}`), `name`, `icon`, `frame`, `size {w 1–12, h 1–8}`, `settings` |
+| `cards` | up to 8 card types: `type` (`[a-z][a-z0-9-]{0,23}`), `name`, `icon`, `frame`, `size {w 1–12, h 1–8}`, `settings`, `slots` (3.0.49) |
 | `alerts` | `true` when the worker raises alerts |
 
 - **Route names:** `[a-z][a-z0-9-]{0,18}` (up to 19 characters), not `card`, `strings` or `alerts`. Routes and alerts
@@ -138,6 +141,48 @@ served to a page.
 - **`size`** is in the builder's old grid units (12 × 8 per screen). As of Skypane 3.0.47 a newly placed plugin card
   starts at the same small default as every built-in card and `size` no longer decides the starting size; until then,
   keep it small (`2 × 1`), never big (see [lesson 6](#lesson-6-start-small)).
+- **Unknown keys:** an unknown top-level manifest key refuses the package. An unknown key *inside* a field or card
+  setting is ignored, so an older Skypane quietly drops `slider` or `tab`; but a field **type** it doesn't know
+  (`"checks"` before 3.0.52) refuses the package. Ask for the Skypane that has what you use.
+
+### Card settings
+
+Each card setting: `{key, type, label, default?, tab?, section?, help?}`. Up to 24.
+
+- **Types:** `text` (default ≤ 200), `number` (`min`, `max`, `step`; without a default it's 0 fitted into min–max),
+  `bool`, `select` (1–20 options, each text or `{value, label}`, values ≤ 40 characters, labels ≤ 60), `color`
+  (`#rrggbb`, default `#8b5cf6`), `item` (picks one item of your settings list, section 6).
+- **`"slider": true`** on a number (3.0.52) draws a range slider in the builder. It needs both `min` and `max`
+  (different, at most 1,000,000 apart) or the package is refused. `"step"` (> 0, ≤ max − min; one that doesn't fit is
+  left out) and `"unit"` (≤ 8 characters or a string key, shown after the value) are optional:
+  `{"key": "iconSize", "type": "number", "label": "card.iconSize", "min": 36, "max": 180, "default": 72, "slider": true, "step": 4, "unit": "px"}`.
+- **`"tab"`** (3.0.49): which tab of the builder shows it: `"shows"` (the default), `"style"` (the default for a color)
+  or `"acts"`. **`"section"`**: a heading over it in that tab (text or a key, ≤ 60).
+- **Skypane's own keys are refused:** `plugin type pin title icon id ids tid aid items parts rows doors tap hold dbl
+  wheel link contact solar grid battery home lights speakers bind slots set`.
+- **Saving checks every declared setting**, so a saved value that no longer fits (a select value you removed, a number
+  now out of range) makes the owner's layout save fail with "plugin card: <key>: one of the choices". When you remove a
+  select value or shrink a range, **give the setting a new key** (the old key's value is then simply dropped). Settings
+  you no longer declare are dropped when the layout is saved.
+
+### Device slots (3.0.49)
+
+A card can also bind the owner's own Hubitat devices, like a hand-made card: declare `"slots"` on the card type (up to
+12), and the owner picks the devices in the builder.
+
+```json
+"slots": [{"key": "light", "label": "card.light", "attributes": ["switch", "level"], "commands": ["on", "off", "setLevel"]},
+          {"key": "sensors", "label": "card.sensors", "many": true, "needs": "temperature", "max": 10, "attributes": ["temperature"]}]
+```
+
+- `attributes`: up to 30 names (`[A-Za-z][A-Za-z0-9_]{0,39}`) the card reads. `commands`: the ones it may send, from
+  `on off setLevel setSpeed setPosition open close lock unlock refresh setHeatingSetpoint setCoolingSetpoint
+  setThermostatMode setThermostatFanMode setColor setColorTemperature setHue setSaturation fanOn auto setFanSpeed push
+  play pause stop nextTrack previousTrack setVolume mute unmute`.
+- `required` (default true); `"many": true` for a list of devices, with `needs` (an attribute each must have) and `max`
+  (1–50); `"look": false` hides the slot's Look tab; `icon`: a Skypane icon name.
+- The trust screen lists what each slot reads and sends. The card gets the devices through the bridge (`S.state`,
+  `S.command`, `S.act`, `S.icon`: section 7), never through your worker.
 
 ## 5. The worker (the server part)
 
@@ -211,11 +256,24 @@ sp.run()                        # serve until SIGTERM
 ```
 
 **A Manager route's `req`:** `{"item": {the list item, secrets included} | null, "settings": {all of them},
-"body": {...}, "login": {"user": "..."}}`. Answer `{"ok", "text", "save"?}`: `save` is merged into that list item when
-it's saved (what a Test learned: an id, a model, firmware).
+"body": {...}, "login": {"user": "..."}}`. The item already holds the owner's **unsaved** edits (each checked by its
+field), so Test works before Save. Answer `{"ok", "text"?, "save"?, "options"?}`:
+
+- `text`: words for the owner (cut at 500 characters).
+- `save`: merged into that list item (what a Test learned: an id, a model, firmware). A key that is a declared field
+  is checked as that field (secret fields are skipped); any other key is kept as a "learned" value, ≤ 8 KB. If it can't
+  be saved the answer carries `saveError`.
+- `options`: the choices of a tick list (a `checks` field, section 6).
+
+Manager buttons are limited to 30 calls a minute per login; the tick list's calls count too.
 
 **Limits:** answers are JSON only (no NaN or Infinity), ≤ 2 MB, within a 20 s total deadline. Send pictures as `data:`
-URLs inside the JSON.
+URLs inside the JSON. `sp.Error` words are cut at 300 characters.
+
+**The rate limit is per plugin, not per card.** All of your plugin's cards on one panel share 120 calls a minute
+(a sliding 60 s window); past that a call gets status 429 with `{"error": "too-many"}`. A remote with a few buttons
+pressed quickly, two cards polling, and a picture fetched per item adds up fast. See
+[lesson 11](#lesson-11-count-your-calls).
 
 ### Patterns that work
 
@@ -279,14 +337,39 @@ Skypane draws the tab from your schema; no plugin code runs in the Manager.
  "actions": [{"route": "refresh", "label": "settings.refresh"}]}
 ```
 
-- **Field types:** `text` (`max` ≤ 2000), `number` (`min`, `max`, `step`), `bool`, `select` (`options`: texts or
-  `{value, label}`), `host`, `secret`. Each can have `label`, `help`, `placeholder`, `default` (not for a secret),
-  `required`.
+- **Field types:** `text` (`max` ≤ 2000, default ≤ 200), `number` (`min`, `max`, `step`), `bool`, `select` (1–40
+  `options`: texts or `{value, label}`, values ≤ 60 characters), `host`, `secret`, and `checks` (3.0.52, list items
+  only, below). Each can have `label`, `help`, `placeholder`, `default` (not for a secret or checks), `required`.
 - **`host`** is a name or address on the network, and is never this machine, `localhost`, `127.x` or `169.254.x`.
 - **`secret`**: readable by the worker, never sent back to the Manager (it shows "set").
-- **Limits:** up to 24 fields, up to 16 in the list, the list up to 50 items. Keys: `[a-zA-Z][a-zA-Z0-9_]{0,23}`.
+- **Limits:** up to 24 fields, up to 16 in the list, the list's `max` 1–50 items (20 if not given), up to 8 `actions`
+  (on the list, or for the whole plugin). The saved list ≤ 256 KB. Keys: `[a-zA-Z][a-zA-Z0-9_]{0,23}`.
 - Each list item gets an `"id"` (8 hex characters, Skypane's). Card settings of type `item` pick one of these ids.
 - Saved to `settings.json` in the data folder (0600). Read them with `sp.settings()`; react with `@sp.on_settings`.
+- Each plugin has its own tab under **Integrations → Plugins** (3.0.52.3: **Installed** first, then one tab per plugin,
+  A–Z); `#integrations/plugin-<id>` opens it.
+
+### A tick list: `checks` (3.0.52)
+
+For "which of the device's things should show": a dropdown of tick boxes whose choices come from your worker.
+
+```json
+{"key": "showApps", "type": "checks", "label": "settings.apps", "from": "choices", "max": 200, "order": true, "help": "settings.appsHelp"}
+```
+
+- Only inside the list's `fields`. `from` names one of your `manage` routes; `max` 1–500 (default 200);
+  `"order": true` keeps the owner's order (dragged, or Alt + ↑↓, from 3.0.52.7).
+- The Manager POSTs `{"item": <id> | null, "values": {unsaved edits}}` to that route when the item opens, and again
+  after any of your actions (so a **Sync** button refreshes it). Answer:
+  `{"ok": true, "options": [{"value": "com.example.app", "label": "Example", "icon": "data:image/png;base64,…"}]}`.
+  An answer without `options` shows its `text` instead.
+- Up to 500 options are used. `value`: 1–200 characters, no control characters, each once. `label` ≤ 120 (the value if
+  none). `icon`: only `data:image/png;base64,`, ≤ 11,000 characters; a bigger one is just left off, so shrink icons to
+  one size (about 48 px) yourself. Options that break the rules are skipped.
+- Saved as an array of values (≤ `max`, each once). Values no longer offered stay saved, and still count toward
+  `max`, until the owner presses **Forget them**: your worker should skip values it doesn't know.
+- Fetch the list in a manage route the owner presses once (**Sync**), keep it with `sp.write_private`, and answer the
+  `from` route from that copy: it is called often, and must never wait on the device.
 
 **Make Test useful.** It's the owner's first contact with your plugin. Return a different message for each real case:
 no answer at the address; something answered but isn't the device; the device answered but needs something (asleep,
@@ -301,7 +384,8 @@ Each card runs in a sandboxed iframe: an opaque origin, a strict content policy,
 (relative paths: `<script src="card.js">`), pictures from there or as `data:` URLs.
 
 - It must never navigate itself; a frame that navigates is stopped.
-- Text inputs inside a card can't keep focus. Use buttons and taps, not typing.
+- Text inputs inside a card can't keep focus, and the panel's on-screen keyboard closes at once. If people must type,
+  draw your own keyboard of buttons (the Shield card does).
 - It can't open a pop-up outside its own frame.
 - Up to 50 messages a second to the panel.
 
@@ -317,16 +401,35 @@ S.t("card.name", {n: 3})        // your words; "{n}" filled from the object
 S.on("theme", fn)               // the theme's colors changed (CSS variables are set for you)
 S.on("size", fn)                // {w, h} in pixels: the card was resized
 S.on("visible", fn)             // true / false: stop polling while hidden
-S.options                       // the card's saved settings
+S.options                       // the card's settings: every declared one, filled with its default
+S.card, S.plugin, S.type, S.lang  // "<page>/<card id>", your id, the card type, the panel's language
+// (3.0.49) cards with device slots
+S.state                         // {slots: {<slot>: {name, attrs, icon} | {many: true, items: [{id, name, attrs, icon}]}}, title, style}
+S.on("state", fn)               // the bound devices, title or Look changed
+S.command("light", "setLevel", 40, index)  // → Promise: one of the slot's declared commands (index: a "many" item)
+S.act("light", "press" | "hold", index)    // → Promise: the owner's own actions for that slot
+S.icon(el, "light", index)      // draws the slot's picture in el; true when it did
+// (3.0.50) S.state.style {icons, text}: the card's Style → Icons and Text
 ```
+
+- `get` gives up after 30 s, `post` after 150 s (it may wait for the PIN pad). A refusal rejects the Promise with a
+  short code: `too-many` (the rate limit), `timeout`, `no-route`, `too-big`.
+- `command` and `act` work only within 3 s of a real tap on the card, at most 6 in 10 s; they're refused with
+  `need-tap`, `too-many`, `busy`, `not-declared` or `no-device`.
+- **In the builder** the card runs for real (its GET routes answer) but `post()` is refused with `design`, and view
+  state lives only until the builder closes.
+- **The frame is made again** whenever the card's settings or title change, or the plugin is updated: read
+  `S.options` once at the start. Device and Look changes come as `state`, without a new frame.
 
 ### Writing a good card
 
 - **Size freely.** Skypane sizes cards on the grid, and the owner drags them to any size. Pick what to show from the
   pixels you get in `on("size")`: a one-line row when short, the full view when tall. Never assume a fixed size.
 - **Theme colors only:** `var(--text)`, `--muted`, `--faint`, `--accent`, `--accent-2`, `--accent-grad`, `--ok`,
-  `--warn`, `--bad`, `--glass`, `--glass-strong`, `--glass-line`, `--radius`, with fallbacks. Keep the page background
-  transparent: Skypane draws the card's frame.
+  `--warn`, `--bad`, `--heat`, `--cool`, `--glass`, `--glass-strong`, `--glass-solid`, `--glass-line`, `--radius`,
+  `--font`, with fallbacks. Keep the page background transparent: Skypane draws the card's frame.
+- **Follow Style → Icons** (3.0.50): Skypane sets `--icons` (1 = 100 %) on the frame. Scale your pictures with it,
+  `width: calc(32px * var(--icons, 1))`, so the owner's Icons slider works on your card too.
 - **Update in place.** Redraw the whole card only when its shape changes (a new state, a new size). For numbers that
   change every poll, set `textContent` on the existing elements.
 - **Escape everything** you put in `innerHTML`.
@@ -465,7 +568,22 @@ that output: it's what people will be asked to agree to.
   shows any permission change, so add new permissions only when needed.
 - **Removing** keeps the data folder unless the owner ticks "Also delete its saved data".
 - **Changing `id`** makes it a different plugin. Don't.
-- Saved cards keep their size and settings across updates. Keep card setting keys stable.
+- Saved cards keep their size and settings across updates. Keep card setting keys stable, except when a saved value
+  could stop fitting (a removed select value): then use a new key ([section 4](#card-settings)).
+- **A new manifest feature means a new `skypane` value.** A plugin that uses `checks` or `slider` must say `"3.0.52"`;
+  people on an older Skypane are then told to update instead of getting a broken settings tab.
+
+### Which Skypane to ask for
+
+| You use | `"skypane"` |
+|---|---|
+| plugins at all | `"3.0.46"` (install on 3.0.46.1 or newer) |
+| card `slots`, setting `tab` / `section` | `"3.0.49"` |
+| `--icons`, `state.style` | `"3.0.50"` |
+| `checks` tick lists, number `slider` / `unit` | `"3.0.52"` |
+
+Skypane 3.0.52.1 had a bug that refused every plugin asking for more than 3.0.46; 3.0.52.2 fixed it. If your plugin
+needs 3.0.52, tell people to use 3.0.52.2 or newer.
 
 ## 14. Sharing it here
 
@@ -487,9 +605,9 @@ and a row in [`additional-plugins/README.md`](README.md). Before you open the pu
 - **Credit what you learned from**, and include its license when you used it (an MIT project needs its notice included).
 - **Say what's not proven**: anything you couldn't confirm on a real device goes in the README's known limits.
 
-## 15. Lessons from the Narwal plugin
+## 15. Lessons from the Narwal and Shield plugins
 
-These are real mistakes and surprises from building the first plugin.
+These are real mistakes and surprises from building the first two plugins.
 
 ### Lesson 1: prove the protocol on the real device first
 The reference notes said the robot would identify itself to anyone who asked. It didn't: it ignores every message
@@ -536,6 +654,28 @@ A from-source test can't catch a module missing from Skypane's compiled image. C
 ### Lesson 10: say what isn't proven
 Room-only cleaning still needs a confirmation on a real robot, and its README says so.
 
+### Lesson 11: count your calls
+The Shield card first sent one call per button press and fetched each app icon with its own call. Tapping a few
+buttons while the icons loaded, or resizing the card, hit the 120-a-minute limit, and the card showed "too-many". The fixes: a key queue
+that sends at most one call every 400 ms and joins repeats of the same key into one call (`{key, times: 3}`); the icons
+sent inside the app list's single answer (as small `data:` URLs, under the 2 MB answer limit); a version number so the
+list is only sent again when it changed; and on `too-many`, wait quietly and try later instead of showing an error.
+
+### Lesson 12: a device may read only the first message of each write
+The Shield acted on the first message in each network write and silently dropped the rest, so "key down" and "key up"
+sent together pressed only some buttons. Each message now goes in its own write. A forgiving stand-in device hid it
+(lesson 2 again): the fake now drops everything after the first message, as the real one does.
+
+### Lesson 13: shrink pictures yourself
+Device icons came at many sizes; the tick list takes ≤ 11,000-character icons and looked uneven. Image libraries
+aren't part of the plugin contract (don't count on one being importable), so the Shield plugin includes a small
+pure-Python PNG shrinker (`nvidia-shield/source/worker/pngthumb.py`) that makes every icon the same size. Do such work
+once, when the owner syncs, and keep the result.
+
+### Lesson 14: removing a choice can break saved layouts
+Shield 1.1.0 dropped one value of a card select. Saved cards still held it, and saving the layout failed with "one of
+the choices". Renaming the setting's key fixed it. Plan a new key whenever a saved value could stop fitting.
+
 ## 16. Checklists
 
 ### Before the first line of code
@@ -555,7 +695,8 @@ Room-only cleaning still needs a confirmation on a real robot, and its README sa
 - [ ] No address, id, token or secret reaches a card or the log.
 - [ ] Unit, end-to-end and card tests pass; the fake is as strict as the device.
 - [ ] Tried on a real Skypane with the real device.
-- [ ] `version` bumped.
+- [ ] `version` bumped; `skypane` names the release with every feature you use.
+- [ ] The card stays under 120 calls a minute with fast tapping (several cards of yours on one panel share it).
 - [ ] Personal-data scan of the source and the `.skyplugin`: clean.
 - [ ] README: features, devices, setup, what it connects to, known limits, credits.
 
@@ -563,7 +704,7 @@ Room-only cleaning still needs a confirmation on a real robot, and its README sa
 
 | What | Limit |
 |---|---|
-| Skypane version | 3.0.46.1 or newer; manifest `api: 1` |
+| Skypane version | 3.0.46.1 or newer (3.0.49 slots, 3.0.52 checks / slider); `skypane` three numbers; manifest `api: 1` |
 | Plugins installed | 40 |
 | Package | ≤ 10 MB zipped, ≤ 300 entries, ≤ 5 MB a file, ≤ 30 MB unpacked, ≤ 8 folders deep |
 | File types | `.py .json .js .css .html .svg .png .jpg .webp .md .txt`; `.py` only in `worker/` |
@@ -576,10 +717,13 @@ Room-only cleaning still needs a confirmation on a real robot, and its README sa
 | Routes | ≤ 20 panel, ≤ 20 manage; names `[a-z][a-z0-9-]{0,18}`; not `card`, `strings`, `alerts` |
 | Card types | ≤ 8; type `[a-z][a-z0-9-]{0,23}`; `size` w 1–12, h 1–8 |
 | Card JavaScript | ≤ 512 KB per card type |
-| Settings | ≤ 24 fields, ≤ 16 list fields, ≤ 50 list items; keys `[a-zA-Z][a-zA-Z0-9_]{0,23}` |
-| Card settings | ≤ 24; types text, number, bool, select, color, item; Skypane's own keys refused (`plugin type pin title icon id items` …) |
+| Settings | ≤ 24 fields, ≤ 16 list fields, ≤ 50 list items (20 if no `max`), ≤ 8 actions, saved list ≤ 256 KB; select 1–40 options; keys `[a-zA-Z][a-zA-Z0-9_]{0,23}` |
+| Tick list (`checks`) | list fields only; `max` 1–500 (200); ≤ 500 options; value ≤ 200, label ≤ 120; icon PNG `data:` URL ≤ 11,000 characters |
+| Manager buttons | ≤ 30 calls a minute per login; `text` ≤ 500 characters; learned `save` values ≤ 8 KB |
+| Card settings | ≤ 24; types text, number, bool, select (1–20 options, values ≤ 40), color, item; slider min–max ≤ 1,000,000 apart, unit ≤ 8; Skypane's own keys refused (section 4) |
+| Card slots | ≤ 12 per card; ≤ 30 attributes; `many` max 1–50; commands from Skypane's list; ≤ 6 commands in 10 s, within 3 s of a tap |
 | Worker answer | JSON only, ≤ 2 MB, 20 s deadline, no NaN / Infinity |
-| Panel call | ≤ 64 KB body; query ≤ 20 values, ≤ 2 KB, ≤ 500 characters each; 120 calls a minute per panel and plugin |
+| Panel call | ≤ 64 KB body; query ≤ 20 values, ≤ 2 KB, ≤ 500 characters each; 120 calls a minute per panel and plugin (all its cards together), then 429 `too-many`; bridge waits 30 s (get) / 150 s (post) |
 | Card view state | ≤ 16 KB per card |
 | Card messages | ≤ 50 a second |
 | Alerts | ≤ 20; levels help, warning, info |
