@@ -150,7 +150,11 @@
     toastEl.textContent = text; toastEl.hidden = false;
     clearTimeout(toast.t); toast.t = setTimeout(function () { toastEl.hidden = true; }, 3500);
   }
-  function said(r) { if (r && r.ok === false) toast(r.text || T("msg.failed")); return r; }
+  function said(r) {                       // (a command's answer is data, {ok, result}: the words are the card's)
+    if (r && r.ok === false) { var k = "msg." + (r.result || "failed"), m = T(k, { app: r.app || "" }); toast(m !== k ? m : T("msg.failed")); }
+    return r;
+  }
+  function cmd(name, value) { return S.post("command", { command: name, value: value || {} }); }
   function fail(e) { var m = e && e.message; toast(m === "too-many" ? T("msg.tooMany") : m || T("msg.failed")); }
   function poll() {
     clearTimeout(timer);
@@ -241,7 +245,7 @@
     var wait = (kb.last || 0) + GAP - Date.now();
     if (wait > 0) { kb.timer = setTimeout(function () { kb.timer = null; kbNext(); }, wait); return; }
     kb.sending = true; kb.last = Date.now();
-    S.post("text", kb.todo.shift()).then(function (r) { kb.sending = false; said(r); kbNext(); },
+    cmd("text", kb.todo.shift()).then(function (r) { kb.sending = false; said(r); kbNext(); },
       function (e) { kb.sending = false; kb.todo = []; fail(e); });
   }
   function kbKey(b) {
@@ -261,7 +265,7 @@
   }
 
   function press(name) {
-    if (name === "find") return S.post("find", {}).then(function (r) { if (said(r).ok) toast(T("msg.found")); }, fail);
+    if (name === "find") return cmd("find").then(function (r) { if (said(r).ok) toast(T("msg.found")); }, fail);
     if (name === "power") return S.post("power", {}).then(said, fail);
     if (name === "custom") {
       var act = O.btnAction || "none";
@@ -270,7 +274,7 @@
       if (act !== "app") return keySend(act);
       if (!String(O.btnApp || "").trim()) return;
       var a = findApp(O.btnApp);                // (else the worker looks the name up in every app the Shield has)
-      return S.post("launch", a ? { pkg: a.pkg } : { name: String(O.btnApp).trim().slice(0, 150) }).then(said, fail);
+      return cmd("launch", a ? { pkg: a.pkg } : { name: String(O.btnApp).trim().slice(0, 150) }).then(said, fail);
     }
     return keySend(name);
   }
@@ -286,7 +290,7 @@
     var wait = kLast + GAP - Date.now();
     if (wait > 0) { kTimer = setTimeout(function () { kTimer = null; keyNext(); }, wait); return; }
     kBusy = true; kLast = Date.now();
-    S.post("key", kq.shift()).then(function (r) { kBusy = false; said(r); keyNext(); },
+    cmd("key", kq.shift()).then(function (r) { kBusy = false; said(r); keyNext(); },
       function (e) { kBusy = false; kq = []; fail(e); });
   }
 
@@ -318,7 +322,7 @@
   root.addEventListener("pointerleave", release);
   root.addEventListener("click", function (e) {
     var t = e.target.closest ? e.target.closest("[data-app]") : null;
-    if (t) { flash(t); S.post("launch", { pkg: t.getAttribute("data-app") }).then(said, fail); }
+    if (t) { flash(t); cmd("launch", { pkg: t.getAttribute("data-app") }).then(said, fail); }
   });
 
   S.on("size", function (s) {

@@ -274,7 +274,8 @@ def start(req):
 def command(req):
     r = card_robot(req)
     body = req.get("body") if isinstance(req.get("body"), dict) else {}
-    cmd = body.get("cmd")
+    # {"command": name} (1.0.4); {"cmd": name} from cards of 1.0.3 and before still works
+    cmd = body.get("command", body.get("cmd"))
     if cmd not in nw.SIMPLE:
         raise sp.Error("unknown command", 400)
     return run_command(r["id"], cmd, {})

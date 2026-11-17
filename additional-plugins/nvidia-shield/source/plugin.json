@@ -2,7 +2,7 @@
   "api": 1,
   "id": "nvidia-shield",
   "name": "plugin.name",
-  "version": "1.1.4",
+  "version": "1.2.0",
   "author": "plugin.author",
   "description": "plugin.description",
   "homepage": "https://github.com/almulder/Skypane/tree/main/additional-plugins/nvidia-shield",
@@ -17,7 +17,7 @@
     "list": {
       "key": "shields", "label": "settings.shields", "add": "settings.add", "max": 10,
       "fields": [
-        {"key": "name", "type": "text", "label": "settings.name", "placeholder": "settings.namePh", "required": true, "max": 48},
+        {"key": "name", "type": "text", "label": "settings.name", "placeholder": "settings.namePh", "required": true, "max": 48, "help": "settings.nameHelp"},
         {"key": "ip", "type": "host", "label": "settings.ip", "placeholder": "settings.ipPh", "required": true, "help": "settings.ipHelp"},
         {"key": "code", "type": "text", "label": "settings.code", "max": 8, "help": "settings.codeHelp"},
         {"key": "showApps", "type": "checks", "label": "settings.apps", "from": "choices", "max": 200, "order": true, "help": "settings.appsHelp"}
@@ -34,11 +34,7 @@
     "panel": [
       {"name": "status", "method": "GET"},
       {"name": "apps", "method": "GET"},
-      {"name": "icon", "method": "GET"},
-      {"name": "key", "method": "POST"},
-      {"name": "text", "method": "POST"},
-      {"name": "launch", "method": "POST"},
-      {"name": "find", "method": "POST"},
+      {"name": "command", "method": "POST"},
       {"name": "power", "method": "POST", "pin": "optional"}
     ],
     "manage": [

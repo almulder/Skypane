@@ -2,7 +2,7 @@
   "api": 1,
   "id": "narwal",
   "name": "plugin.name",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "author": "plugin.author",
   "description": "plugin.description",
   "skypane": "3.0.46",
@@ -25,7 +25,8 @@
           "label": "settings.name",
           "required": true,
           "max": 48,
-          "placeholder": "settings.namePh"
+          "placeholder": "settings.namePh",
+          "help": "settings.nameHelp"
         },
         {
           "key": "ip",

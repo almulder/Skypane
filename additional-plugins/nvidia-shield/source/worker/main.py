@@ -337,11 +337,8 @@ def card_shield(req):
 
 
 def answer(res):
-    out = {"ok": bool(res.get("ok")), "result": res.get("result", "ok" if res.get("ok") else "failed")}
-    if not out["ok"]:
-        text = w("msg." + out["result"])
-        out["text"] = text if text != "msg." + out["result"] else w("msg.failed")
-    return out
+    """A command's answer for the card: plain data, {"ok", "result"} (the card turns "result" into words)."""
+    return {"ok": bool(res.get("ok")), "result": res.get("result", "ok" if res.get("ok") else "failed")}
 
 
 @sp.route("status")
@@ -398,39 +395,25 @@ def apps_with_icons(shown):
     return out
 
 
-@sp.route("icon")
-def icon(req):
-    sh, _ = card_shield(req)
-    pkg = (req.get("query") or {}).get("pkg")
-    for a in kept_apps(sh["id"], sh["ip"]) or []:
-        if a["pkg"] == pkg:
-            return {"pkg": pkg, "icon": a.get("icon")}
-    raise sp.Error("no such app", 404)
-
-
-@sp.route("key")
-def key(req):
-    sh, _ = card_shield(req)
-    body = req.get("body") or {}
-    k, n = body.get("key"), body.get("times", 1)
+# ---- commands: one route, {"command": name, "value": ...}; each name maps to one function here
+# (power keeps its own route: the panel PIN covers every call to a route, and only power may ask for it)
+def _key(sh, o, v):
+    """value {"key": one of shield_core.KEYS, "times": 1-10} (a held button: a few presses in one call)"""
+    k, n = v.get("key"), v.get("times", 1)
     if k not in sc.KEYS:
         raise sp.Error("unknown key", 400)
-    if not isinstance(n, int) or isinstance(n, bool) or not 1 <= n <= 10:   # (a held button: a few presses a call)
+    if not isinstance(n, int) or isinstance(n, bool) or not 1 <= n <= 10:
         raise sp.Error("bad times", 400)
-    st(sh["id"])["asked"] = time.monotonic()
     return answer(run_job("key", sh, (k, n)))
 
 
-@sp.route("text")
-def text(req):
-    """Type on the Shield: {"text": "..."} (up to 100 characters), or {"key": "backspace" | "enter", "n": times}."""
-    sh, _ = card_shield(req)
-    body = req.get("body") or {}
-    k, t = body.get("key"), body.get("text")
+def _text(sh, o, v):
+    """value {"text": "..."} (up to 100 printable ASCII characters), or {"key": "backspace" | "enter", "n": times}"""
+    k, t = v.get("key"), v.get("text")
     if k is not None:
         if k not in sc.TEXT_KEYS:
             raise sp.Error("unknown key", 400)
-        n = body.get("n", 1)
+        n = v.get("n", 1)
         if not isinstance(n, int) or isinstance(n, bool) or not 1 <= n <= sc.TEXT_MAX:
             raise sp.Error("bad count", 400)
         arg = {"key": k, "n": n}
@@ -438,15 +421,12 @@ def text(req):
         arg = {"text": t}
     else:
         raise sp.Error("bad text", 400)
-    st(sh["id"])["asked"] = time.monotonic()
     return answer(run_job("text", sh, arg, wait=30))
 
 
-@sp.route("launch")
-def launch(req):
-    sh, o = card_shield(req)
-    body = req.get("body") or {}
-    pkg, name = body.get("pkg"), body.get("name")
+def _launch(sh, o, v):
+    """value {"pkg": an app on this Shield} or {"name": the card's own button app}"""
+    pkg, name = v.get("pkg"), v.get("name")
     if pkg is None and isinstance(name, str) and name.strip():
         # (the card's own button, by name: looked up in every app the Shield has, picked or not)
         if name.strip() != str(o.get("btnApp") or "").strip():
@@ -454,21 +434,38 @@ def launch(req):
         kept = kept_apps(sh["id"], sh["ip"]) or []
         a = _index(kept).get(name.strip().lower()) or next((x for x in kept if x["name"].lower().startswith(name.strip().lower())), None)
         if a is None:
-            return {"ok": False, "result": "noApp", "text": w("msg.noApp", app=name.strip()[:60])}
+            return {"ok": False, "result": "noApp", "app": name.strip()[:60]}
         pkg = a["pkg"]
     if not isinstance(pkg, str) or not re.fullmatch(r"[A-Za-z0-9_.]{1,150}", pkg):
         raise sp.Error("bad app", 400)
     known = {a["pkg"] for a in (kept_apps(sh["id"], sh["ip"]) or [])}
     if pkg not in known and pkg != str(o.get("btnApp") or ""):
         raise sp.Error("not an app on this Shield", 400)
-    st(sh["id"])["asked"] = time.monotonic()
     return answer(run_job("launch", sh, pkg))
 
 
-@sp.route("find")
-def find(req):
-    sh, _ = card_shield(req)
+def _find(sh, o, v):
+    """no value: the remote beeps"""
     return answer(run_job("find", sh))
+
+
+COMMANDS = {"key": _key, "text": _text, "launch": _launch, "find": _find}
+
+
+@sp.route("command")
+def command(req):
+    sh, o = card_shield(req)
+    body = req.get("body") if isinstance(req.get("body"), dict) else {}
+    do = COMMANDS.get(body.get("command"))
+    if do is None:
+        raise sp.Error("unknown command", 400)
+    v = body.get("value")
+    if v is None:
+        v = {}
+    if not isinstance(v, dict):
+        raise sp.Error("bad value", 400)
+    st(sh["id"])["asked"] = time.monotonic()
+    return do(sh, o, v)
 
 
 @sp.route("power")

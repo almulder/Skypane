@@ -99,7 +99,7 @@ class ShieldPluginE2E(ts.PinCase):
         pack = kit_pack()
         out = self.tmp / "shield.skyplugin"
         with contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(pack.main([str(PLUGIN), "-o", str(out)] + KIT_ARGS), 0)
+            self.assertEqual(pack.main([str(PLUGIN), "-o", str(out)] + KIT_ARGS + (["--draft"] if hasattr(pack, "catalog_problems") else [])), 0)
         st, got = self.j("POST", "/api/manage/plugins/inspect", out.read_bytes(), {**self.h, "Content-Type": "application/octet-stream"})
         self.assertEqual(st, 200, got)
         self.assertIn("TCP port 8987", " ".join(got["plugin"]["network"]))
@@ -222,27 +222,27 @@ class ShieldPluginE2E(ts.PinCase):
         self.assertEqual(st, 200, old)
         self.assertTrue(all(a["icon"] and a["icon"].startswith("data:image/png;base64,") for a in old["apps"]), old)
         self.assertTrue(all("tile" in a for a in json.loads(kept[0].read_text(encoding="utf-8"))["apps"]))
-        st, ic = self.call("icon", query="?pkg=com.netflix.ninja")
-        self.assertEqual(st, 200, ic)
-        self.assertTrue(ic["icon"].startswith("data:image/png;base64,"))
-        self.assertEqual(self.call("icon", query="?pkg=com.nope")[0], 404)
+        self.assertEqual(self.call("icon", query="?pkg=com.netflix.ninja")[0], 404)     # (1.2.0: icons come with the apps only)
 
         # keys, apps, find: through the worker's one connection
         self.shield.got.clear()
-        self.assertEqual(self.call("key", "POST", {"key": "up"})[1]["ok"], True)
-        self.assertEqual(self.call("key", "POST", {"key": "volup"})[1]["ok"], True)
-        self.assertEqual(self.call("key", "POST", {"key": "reboot"})[0], 400)
-        self.assertEqual(self.call("launch", "POST", {"pkg": "com.netflix.ninja"})[1]["ok"], True)
-        self.assertEqual(self.call("launch", "POST", {"pkg": "com.evil.app"})[0], 400)                   # not on the Shield
-        self.assertEqual(self.call("launch", "POST", {"pkg": "com.example.sideloaded"})[1]["ok"], True)  # c1's own button
-        self.assertEqual(self.call("find", "POST", {})[1]["ok"], True)
+        self.assertEqual(self.call("command", "POST", {"command": "key", "value": {"key": "up"}})[1]["ok"], True)
+        self.assertEqual(self.call("command", "POST", {"command": "key", "value": {"key": "volup"}})[1]["ok"], True)
+        self.assertEqual(self.call("command", "POST", {"command": "key", "value": {"key": "reboot"}})[0], 400)
+        self.assertEqual(self.call("command", "POST", {"command": "launch", "value": {"pkg": "com.netflix.ninja"}})[1]["ok"], True)
+        self.assertEqual(self.call("command", "POST", {"command": "launch", "value": {"pkg": "com.evil.app"}})[0], 400)                   # not on the Shield
+        self.assertEqual(self.call("command", "POST", {"command": "launch", "value": {"pkg": "com.example.sideloaded"}})[1]["ok"], True)  # c1's own button
+        self.assertEqual(self.call("command", "POST", {"command": "find", "value": {}})[1]["ok"], True)
+        self.assertEqual(self.call("command", "POST", {"command": "reboot"})[0], 400)
+        self.assertEqual(self.call("command", "POST", {"command": "key", "value": "up"})[0], 400)
+        self.assertEqual(self.call("command", "POST", {"command": "launch", "value": {"name": "Nope"}}, card_id="home/c3")[0], 400)
         self.wait(lambda: len(self.shield.got) >= 5, 5, 0.1, "the commands to arrive")
         self.assertEqual(self.shield.got[:5], [("key", 206), ("key", 230), ("launch", "com.netflix.ninja"),
                                                ("launch", "com.example.sideloaded"), ("find",)])
         # a card's own button opens its app by name, even one not picked for the row; only its own name
         self.shield.got.clear()
-        self.assertEqual(self.call("launch", "POST", {"name": "Pandora"}, card_id="home/c3")[1]["ok"], True)
-        self.assertEqual(self.call("launch", "POST", {"name": "Plex"}, card_id="home/c3")[0], 400)
+        self.assertEqual(self.call("command", "POST", {"command": "launch", "value": {"name": "Pandora"}}, card_id="home/c3")[1]["ok"], True)
+        self.assertEqual(self.call("command", "POST", {"command": "launch", "value": {"name": "Plex"}}, card_id="home/c3")[0], 400)
         self.wait(lambda: ("launch", "com.pandora.android.atv") in self.shield.got, 5, 0.1, "the launch by name")
 
         # every key is a full press (down then up), each its own message: nothing came joined
@@ -251,20 +251,20 @@ class ShieldPluginE2E(ts.PinCase):
 
         # a held button: a few presses in one call (Skypane allows a panel 120 calls a minute to a plugin)
         self.shield.presses.clear()
-        self.assertEqual(self.call("key", "POST", {"key": "volup", "times": 3})[1]["ok"], True)
-        self.assertEqual(self.call("key", "POST", {"key": "volup", "times": 11})[0], 400)
+        self.assertEqual(self.call("command", "POST", {"command": "key", "value": {"key": "volup", "times": 3}})[1]["ok"], True)
+        self.assertEqual(self.call("command", "POST", {"command": "key", "value": {"key": "volup", "times": 11}})[0], 400)
         self.wait(lambda: len(self.shield.presses) >= 6, 5, 0.1, "three presses")
         self.assertEqual(self.shield.presses, [("down", 230), ("up", 230)] * 3)
 
         # typing: the text itself (as NVIDIA's app sends it); Backspace and Enter as key presses
         self.shield.presses.clear()
-        self.assertEqual(self.call("text", "POST", {"text": "Hi!"})[1]["ok"], True)
-        self.assertEqual(self.call("text", "POST", {"key": "enter"})[1]["ok"], True)
-        self.assertEqual(self.call("text", "POST", {"key": "backspace", "n": 2})[1]["ok"], True)
-        self.assertEqual(self.call("text", "POST", {"key": "reboot"})[0], 400)
-        self.assertEqual(self.call("text", "POST", {"text": ""})[0], 400)
-        self.assertEqual(self.call("text", "POST", {"text": "x" * 101})[0], 400)
-        self.assertEqual(self.call("text", "POST", {"text": "caf\u00e9"})[0], 400)       # (ASCII only)
+        self.assertEqual(self.call("command", "POST", {"command": "text", "value": {"text": "Hi!"}})[1]["ok"], True)
+        self.assertEqual(self.call("command", "POST", {"command": "text", "value": {"key": "enter"}})[1]["ok"], True)
+        self.assertEqual(self.call("command", "POST", {"command": "text", "value": {"key": "backspace", "n": 2}})[1]["ok"], True)
+        self.assertEqual(self.call("command", "POST", {"command": "text", "value": {"key": "reboot"}})[0], 400)
+        self.assertEqual(self.call("command", "POST", {"command": "text", "value": {"text": ""}})[0], 400)
+        self.assertEqual(self.call("command", "POST", {"command": "text", "value": {"text": "x" * 101}})[0], 400)
+        self.assertEqual(self.call("command", "POST", {"command": "text", "value": {"text": "caf\u00e9"}})[0], 400)       # (ASCII only)
         ent, bs = 56, 28
         want = [("text", "Hi!"), ("down", ent), ("up", ent), ("down", bs), ("up", bs), ("down", bs), ("up", bs)]
         self.wait(lambda: len(self.shield.presses) >= len(want), 5, 0.1, "the typing to arrive")
@@ -286,9 +286,9 @@ class ShieldPluginE2E(ts.PinCase):
         self.shield.forget()
         host_drop = self.do("forget", iid)
         self.assertEqual(host_drop[1]["ok"], True)
-        st, res = self.call("key", "POST", {"key": "home"})
+        st, res = self.call("command", "POST", {"command": "key", "value": {"key": "home"}})
         self.assertEqual((st, res["ok"], res["result"]), (200, False, "unpaired"), res)
-        self.assertIn("isn't paired", res["text"])
+        self.assertNotIn("text", res)                                    # (plain data: the card picks the words)
         self.assertIn("Not paired", self.do("test", iid)[1]["text"])
 
         # the card's files come through the card frame

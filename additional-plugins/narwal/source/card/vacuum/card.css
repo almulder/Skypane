@@ -4,14 +4,15 @@ body { color: var(--text, #f3efff); font: 14px/1.35 system-ui, -apple-system, "S
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 button { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; }
-svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+svg.i { width: calc(16px * var(--icons, 1)); height: calc(16px * var(--icons, 1)); flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
 .vac { height: 100%; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
 .vac.t-tiny, .vac.t-short { flex-direction: row; align-items: center; gap: 10px; padding: 6px 10px; }
 .vhead { display: flex; align-items: center; gap: 10px; flex: none; min-width: 0; }
 .t-tiny .vhead, .t-short .vhead { flex: 1; }
-.art { width: 36px; height: 36px; flex: none; }
-.t-tiny .art { width: 28px; height: 28px; }
+/* (the card's Style -> Icons scales the pictures: --icons, 1 = 100 %) */
+.art { width: calc(36px * var(--icons, 1)); height: calc(36px * var(--icons, 1)); flex: none; }
+.t-tiny .art { width: calc(28px * var(--icons, 1)); height: calc(28px * var(--icons, 1)); }
 .tt { flex: 1; min-width: 0; }
 .tt b { display: block; font-size: 15px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .t-tiny .tt b { font-size: 13px; }
