@@ -69,6 +69,20 @@ Before that came about **1,500 device drawings**, people and pets, and **Bambu L
 - Runs entirely on your own network. Device rules stay in Hubitat; Skypane shows, commands and runs your Hubitat scenes.
 - Works on older wall tablets as well as new ones.
 
+## Companion app: Skypane Voice (coming)
+
+<img src="docs/branding/skypane-voice-lockup-horizontal-light.png" alt="Skypane Voice" width="360">
+
+**Skypane Voice** adds private voice control to Skypane. It's a separate install (one Docker container) that talks only to Skypane, so it controls your Hubitat devices with no Home Assistant and no extra hub.
+
+- **Speakers:** ESPHome voice speakers connect directly (reSpeaker XVF3800 tested; Home Assistant Voice Preview Edition planned).
+- **Brain:** built-in instant commands that work offline, plus an optional local AI (with a hardware check, model suggestions and a model check against your own house) and/or an optional cloud AI (Claude, ChatGPT or compatible), with the owner choosing what leaves the house.
+- **Safety:** voice unlock is off by default. When it's on, it needs "Are you sure?" plus a clear spoken yes on the same speaker, never from outside text or outside the house, within the owner's limits. The alarm is never disarmed by voice.
+- **Joining:** like a Skypane panel. Enter a code shown by Skypane Voice in **Skypane Manager → Skypane Voice**.
+- **Status:** in development. The Skypane API it uses is in beta.
+
+Follow progress and share ideas in the Hubitat Community thread: [Skypane Voice: coming soon](https://community.hubitat.com/t/skypane-self-hosted-wall-panel-dashboard-for-hubitat-work-in-progress-live-demo-feedback-wanted/167150/17).
+
 ## Feedback
 
 Ideas, questions and feature requests are very welcome: please
